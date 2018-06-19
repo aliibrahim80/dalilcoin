@@ -417,7 +417,7 @@ Hashtbl.add msgtype_handler GetAsset
 	  seosbf (seo_asset seosb a (seo_hashval seosb h (asb,None)));
 	  let aser = Buffer.contents asb in
 	  ignore (queue_msg cs Asset aser);
-	  cs.sentinv <- (i,h,tm)::List.filter (fun (_,_,tm0) -> tm -. tm0 < 3600.0) cs.sentinv
+	  Hashtbl.replace cs.sentinv (i,h) tm
 	with Not_found -> ());;
 
 Hashtbl.add msgtype_handler Asset
@@ -429,7 +429,7 @@ Hashtbl.add msgtype_handler Asset
 	if recently_requested (i,h) tm cs.invreq then (*** only continue if it was requested ***)
           let (a,r) = sei_asset seis r in
   	  DbAsset.dbput h a;
-	  cs.invreq <- List.filter (fun (j,k,tm0) -> not (i = j && h = k) && tm -. tm0 < 3600.0) cs.invreq
+	  Hashtbl.remove cs.invreq (i,h)
 	else (*** if something unrequested was sent, then seems to be a misbehaving peer ***)
 	  (Utils.log_string (Printf.sprintf "misbehaving peer? [unrequested Asset]\n")));;
 

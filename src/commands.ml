@@ -1930,6 +1930,7 @@ let requestfullledger oc h =
 		Printf.fprintf oc "%d%% through tree traversal.\n" (!topcnt * 100 / 512);
 		flush oc
 	      end;
+	    Printf.printf "checking top ctree %s\n" (hashval_hexstring h);
 	  end;
 	requestfullctree oc h false
     | CLeaf(_,NehHash(h,_)) -> requestfullhlist oc h

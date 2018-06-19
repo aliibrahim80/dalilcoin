@@ -61,10 +61,9 @@ type connstate = {
     mutable addrfrom : string;
     mutable banned : bool;
     mutable lastmsgtm : float;
-    mutable pending : (hashval * (bool * float * float * (msgtype * string -> unit))) list;
-    mutable sentinv : (int * hashval * float) list;
-    mutable rinv : (int * hashval) list;
-    mutable invreq : (int * hashval * float) list;
+    mutable sentinv : (int * hashval,float) Hashtbl.t;
+    mutable rinv : (int * hashval,unit) Hashtbl.t;
+    mutable invreq : (int * hashval,float) Hashtbl.t;
     mutable first_header_height : int64; (*** how much header history is stored at the node ***)
     mutable first_full_height : int64; (*** how much block/ctree history is stored at the node ***)
     mutable last_height : int64; (*** how up to date the node is ***)
@@ -108,5 +107,5 @@ val find_and_send_requestmissingheaders : unit -> unit
 val broadcast_requestdata : msgtype -> hashval -> unit
 val broadcast_inv : (int * hashval) list -> unit
 
-val recently_requested : int * hashval -> float -> (int * hashval * float) list -> bool
-val recently_sent : int * hashval -> float -> (int * hashval * float) list -> bool
+val recently_requested : int * hashval -> float -> (int * hashval,float) Hashtbl.t -> bool
+val recently_sent : int * hashval -> float -> (int * hashval,float) Hashtbl.t -> bool

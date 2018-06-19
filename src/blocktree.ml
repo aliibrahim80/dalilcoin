@@ -1000,7 +1000,7 @@ Hashtbl.add msgtype_handler GetHeader
 	let s = Buffer.create 1000 in
 	log_string (Printf.sprintf "sending header %s to %s upon request at time %f (GetHeader)\n" (hashval_hexstring h) cs.addrfrom (Unix.time()));
 	seosbf (seo_blockheader seosb bh (seo_hashval seosb h (seo_int8 seosb 1 (s,None))));
-	cs.sentinv <- (i,h,tm)::List.filter (fun (_,_,tm0) -> tm -. tm0 < 3600.0) cs.sentinv;
+	Hashtbl.replace cs.sentinv (i,h) tm;
 	let ss = Buffer.contents s in
 	ignore (queue_msg cs Headers ss)
       with Not_found ->
@@ -1033,7 +1033,7 @@ Hashtbl.add msgtype_handler GetHeaders
 	      incr m;
 	      bhl := (h,bh)::!bhl;
 	      log_string (Printf.sprintf "sending header %s to %s upon request at time %f (GetHeaders)\n" (hashval_hexstring h) cs.addrfrom (Unix.time()));
-	      cs.sentinv <- (i,h,tm)::List.filter (fun (_,_,tm0) -> tm -. tm0 < 3600.0) cs.sentinv
+	      Hashtbl.replace cs.sentinv (i,h) tm
 	    end;
 	with
 	| Not_found ->
@@ -1188,7 +1188,7 @@ let rec req_header_batches sout cs m hl nw =
     | h::hr ->
 	let i = int_of_msgtype GetHeader in
 	let tm = Unix.time() in
-	cs.invreq <- (i,h,tm)::List.filter (fun (_,_,tm0) -> tm -. tm0 < 3600.0) cs.invreq;
+	Hashtbl.replace cs.invreq (i,h) tm;
 	req_header_batches sout cs (m+1) hr (h::nw)
     | [] -> req_headers sout cs m nw;;
 
@@ -1202,7 +1202,7 @@ Hashtbl.add msgtype_handler Inv
     for j = 1 to Int32.to_int n do
       let ((i,h),cn) = sei_prod sei_int8 sei_hashval seis !c in
       c := cn;
-      cs.rinv <- (i,h)::cs.rinv;
+      Hashtbl.replace cs.rinv (i,h) ();
       if i = int_of_msgtype Headers then log_string (Printf.sprintf "Headers, dbexists %b, archived %b\n" (DbBlockHeader.dbexists h) (DbArchived.dbexists h));
       log_string (Printf.sprintf "Inv %d %s\n" i (hashval_hexstring h));
       if i = int_of_msgtype Headers && not (DbArchived.dbexists h) then
@@ -1223,7 +1223,7 @@ Hashtbl.add msgtype_handler Inv
 	begin
 	  try
 	    let tm = Unix.time() in
-            cs.invreq <- (int_of_msgtype GetBlockdelta,h,tm)::List.filter (fun (_,_,tm0) -> tm -. tm0 < 3600.0) cs.invreq;
+	    Hashtbl.replace cs.invreq (int_of_msgtype GetBlockdelta,h) tm;
 	    let s = Buffer.create 1000 in
 	    seosbf (seo_hashval seosb h (s,None));
 	    log_string (Printf.sprintf "Immediately requesting blockdelta %s\n" (hashval_hexstring h));
@@ -1235,7 +1235,7 @@ Hashtbl.add msgtype_handler Inv
 	  if not (DbSTx.dbexists h) && not (Hashtbl.mem stxpool h) then
  	    begin
 	      let tm = Unix.time() in
-              cs.invreq <- (int_of_msgtype GetSTx,h,tm)::List.filter (fun (_,_,tm0) -> tm -. tm0 < 3600.0) cs.invreq;
+	      Hashtbl.replace cs.invreq (int_of_msgtype GetSTx,h) tm;
               let s = Buffer.create 1000 in
 	      seosbf (seo_hashval seosb h (s,None));
 	      log_string (Printf.sprintf "Sending GetSTx %s to %s at %f\n" (hashval_hexstring h) cs.realaddr tm);
@@ -1261,7 +1261,7 @@ Hashtbl.add msgtype_handler GetBlockdelta
 	  seosbf (seo_blockdelta seosb blkdel (seo_hashval seosb h (bdsb,None)));
 	  let bdser = Buffer.contents bdsb in
 	  ignore (queue_msg cs Blockdelta bdser);
-	  cs.sentinv <- (i,h,tm)::List.filter (fun (_,_,tm0) -> tm -. tm0 < 3600.0) cs.sentinv
+	  Hashtbl.replace cs.sentinv (i,h) tm
 	with Not_found ->
 	  log_string (Printf.sprintf "Unknown Block Delta %s (Bad Peer or Did I Advertize False Inventory?)\n" (hashval_hexstring h));
 	  ());;
@@ -1281,7 +1281,7 @@ Hashtbl.add msgtype_handler Blockdelta
 	  else
 	    try
 	      let tm = Unix.time() in
-	      cs.invreq <- List.filter (fun (j,k,tm0) -> not (i = j && h = k) && tm -. tm0 < 3600.0) cs.invreq;
+	      Hashtbl.remove cs.invreq (i,h);
 	      let BlocktreeNode(par,_,_,_,_,_,_,_,_,_,_,vs,_,chlr) as newnode =
 		try
 		  Hashtbl.find blkheadernode (Some(h))
@@ -1345,7 +1345,7 @@ Hashtbl.add msgtype_handler GetSTx
 	  let stauser = Buffer.contents stausb in
 	  log_string (Printf.sprintf "Sending Signed Tx (from pool) %s\n" (hashval_hexstring h));
 	  ignore (queue_msg cs STx stauser);
-	  cs.sentinv <- (i,h,tm)::List.filter (fun (_,_,tm0) -> tm -. tm0 < 3600.0) cs.sentinv
+	  Hashtbl.replace cs.sentinv (i,h) tm
 	with Not_found ->
 	  try
 	    let stau = DbSTx.dbget h in
@@ -1354,7 +1354,7 @@ Hashtbl.add msgtype_handler GetSTx
 	    let stauser = Buffer.contents stausb in
 	    log_string (Printf.sprintf "Sending Signed Tx (from db) %s\n" (hashval_hexstring h));
 	    ignore (queue_msg cs STx stauser);
-	    cs.sentinv <- (i,h,tm)::List.filter (fun (_,_,tm0) -> tm -. tm0 < 3600.0) cs.sentinv
+	    Hashtbl.replace cs.sentinv (i,h) tm
 	  with Not_found ->
 	    log_string (Printf.sprintf "Unknown Tx %s\n" (hashval_hexstring h));
 	    ());;

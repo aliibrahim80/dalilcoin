@@ -2519,7 +2519,7 @@ Hashtbl.add msgtype_handler GetHConsElement
 	  seosbf (seo_prod seo_hashval (seo_option (seo_prod seo_hashval seo_int8)) seosb hk (seo_hashval seosb h (hksb,None)));
 	  let hkser = Buffer.contents hksb in
 	  ignore (queue_msg cs HConsElement hkser);
-	  cs.sentinv <- (i,h,tm)::List.filter (fun (_,_,tm0) -> tm -. tm0 < 3600.0) cs.sentinv
+	  Hashtbl.replace cs.sentinv (i,h) tm
 	with Not_found -> ());;
 
 Hashtbl.add msgtype_handler HConsElement
@@ -2538,7 +2538,7 @@ Hashtbl.add msgtype_handler HConsElement
 	  if hkh = h then
 	    begin
   	      DbHConsElt.dbput h hk;
-	      cs.invreq <- List.filter (fun (j,k,tm0) -> not (i = j && h = k) && tm -. tm0 < 3600.0) cs.invreq
+	      Hashtbl.remove cs.invreq (i,h)
 	    end
           else (*** otherwise, it seems to be a misbehaving peer --  ignore for now ***)
 	    Utils.log_string (Printf.sprintf "misbehaving peer? [malformed HConsElement]\n")
@@ -2557,7 +2557,7 @@ Hashtbl.add msgtype_handler GetCTreeElement
 	  seosbf (seo_ctree seosb c (seo_hashval seosb h (csb,None)));
 	  let cser = Buffer.contents csb in
 	  ignore (queue_msg cs CTreeElement cser);
-	  cs.sentinv <- (i,h,tm)::List.filter (fun (_,_,tm0) -> tm -. tm0 < 3600.0) cs.sentinv
+	  Hashtbl.replace cs.sentinv (i,h) tm
 	with Not_found -> ());;
 
 Hashtbl.add msgtype_handler CTreeElement
@@ -2571,7 +2571,7 @@ Hashtbl.add msgtype_handler CTreeElement
 	  if ctree_element_p c && ctree_hashroot c = h then
 	    begin
   	      DbCTreeElt.dbput h c;
-	      cs.invreq <- List.filter (fun (j,k,tm0) -> not (i = j && h = k) && tm -. tm0 < 3600.0) cs.invreq
+	      Hashtbl.remove cs.invreq (i,h)
 	    end
           else (*** otherwise, it seems to be a misbehaving peer --  ignore for now ***)
 	    Utils.log_string (Printf.sprintf "misbehaving peer? [malformed CTreeElement]\n")

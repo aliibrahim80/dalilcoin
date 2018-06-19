@@ -135,25 +135,16 @@ let dumpstate fa =
       | Some(cs) ->
 	  Printf.fprintf sa "-----------\nConnection: %s %f\n" cs.realaddr cs.conntime;
 	  Printf.fprintf sa "peertimeskew %d\nprotvers %ld\nuseragent %s\naddrfrom %s\nbanned %s\nlastmsgtm %f\nfirst_header_height %Ld\nfirst_full_height %Ld\nlast_height %Ld\n" cs.peertimeskew cs.protvers cs.useragent cs.addrfrom (if cs.banned then "true" else "false") cs.lastmsgtm cs.first_header_height cs.first_full_height cs.last_height;
-	  Printf.fprintf sa "- pending %d:\n" (List.length cs.pending);
-	  List.iter
-	    (fun (h,(b,tm1,tm2,f)) ->
-	      Printf.fprintf sa "%s %s %f %f\n" (hashval_hexstring h) (if b then "true" else "false") tm1 tm2
-	    )
-	    cs.pending;
-	  Printf.fprintf sa "sentinv %d:\n" (List.length cs.sentinv);
-	  List.iter
-	    (fun (m,h,tm) ->
+	  Hashtbl.iter
+	    (fun (m,h) tm ->
 	      Printf.fprintf sa "%d %s %f\n" m (hashval_hexstring h) tm)
 	    cs.sentinv;
-	  Printf.fprintf sa "rinv %d:\n" (List.length cs.rinv);
-	  List.iter
-	    (fun (m,h) ->
+	  Hashtbl.iter
+	    (fun (m,h) () ->
 	      Printf.fprintf sa "%d %s\n" m (hashval_hexstring h))
 	    cs.rinv;
-	  Printf.fprintf sa "invreq %d:\n" (List.length cs.invreq);
-	  List.iter
-	    (fun (m,h,tm) ->
+	  Hashtbl.iter
+	    (fun (m,h) tm ->
 	      Printf.fprintf sa "%d %s %f\n" m (hashval_hexstring h) tm)
 	    cs.invreq;
     )

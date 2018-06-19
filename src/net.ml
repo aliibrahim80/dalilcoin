@@ -330,10 +330,9 @@ type connstate = {
     mutable addrfrom : string;
     mutable banned : bool;
     mutable lastmsgtm : float;
-    mutable pending : (hashval * (bool * float * float * (msgtype * string -> unit))) list;
-    mutable sentinv : (int * hashval * float) list;
-    mutable rinv : (int * hashval) list;
-    mutable invreq : (int * hashval * float) list;
+    mutable sentinv : (int * hashval,float) Hashtbl.t;
+    mutable rinv : (int * hashval,unit) Hashtbl.t;
+    mutable invreq : (int * hashval,float) Hashtbl.t;
     mutable first_header_height : int64; (*** how much header history is stored at the node ***)
     mutable first_full_height : int64; (*** how much block/ctree history is stored at the node ***)
     mutable last_height : int64; (*** how up to date the node is ***)
@@ -456,11 +455,7 @@ let handle_msg replyto mt sin sout cs mh m =
   match replyto with
   | Some(h) ->
       begin
-	try
-	  let (b,tm1,tm2,f) = List.assoc h cs.pending in
-	  cs.pending <- List.filter (fun (k,_) -> not (h = k)) cs.pending;
-	  f(mt,m)
-	with Not_found -> () (*** Reply to unknown request, ignore for now ***)
+	log_string (Printf.sprintf "ignoring claimed replyto %s although replies were never supported and are now fully deprecated\n" (hashval_hexstring h));
       end
   | None ->
       if cs.handshakestep < 5 then
@@ -686,7 +681,7 @@ let initialize_conn_accept ra s =
       set_binary_mode_in sin true;
       set_binary_mode_out sout true;
       let tm = Unix.time() in
-      let cs = { conntime = tm; realaddr = ra; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 1; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; pending = []; sentinv = []; rinv = []; invreq = []; first_header_height = 0L; first_full_height = 0L; last_height = 0L } in
+      let cs = { conntime = tm; realaddr = ra; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 1; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; sentinv = Hashtbl.create 100; rinv = Hashtbl.create 1000; invreq = Hashtbl.create 100; first_header_height = 0L; first_full_height = 0L; last_height = 0L } in
       let sgcs = (s,sin,sout,ref (Some(cs))) in
       let clth = Thread.create connlistener sgcs in
       let csth = Thread.create connsender sgcs in
@@ -719,7 +714,7 @@ let initialize_conn_2 n s sin sout =
        ((vers,srvs,Int64.of_float tm,n,myaddr(),!this_nodes_nonce),
 	(Version.useragent,fhh,ffh,lh,relay,lastchkpt))
        (vm,None));
-  let cs = { conntime = tm; realaddr = n; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 2; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; pending = []; sentinv = []; rinv = []; invreq = []; first_header_height = fhh; first_full_height = ffh; last_height = lh } in
+  let cs = { conntime = tm; realaddr = n; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 2; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; sentinv = Hashtbl.create 100; rinv = Hashtbl.create 1000; invreq = Hashtbl.create 100; first_header_height = fhh; first_full_height = ffh; last_height = lh } in
   queue_msg cs Version (Buffer.contents vm);
   let sgcs = (s,sin,sout,ref (Some(cs))) in
   let clth = Thread.create connlistener sgcs in
@@ -788,14 +783,22 @@ let netlistener l =
 
 let recently_requested (i,h) nw ir =
   try
-    ignore (List.find (fun (j,k,tm) -> i = j && h = k && nw -. tm < 991.0) ir);
-    true
+    let tm = Hashtbl.find ir (i,h) in
+    if nw -. tm < 991.0 then
+      true
+    else
+      (Hashtbl.remove ir (i,h);
+       false)
   with Not_found -> false
 
 let recently_sent (i,h) nw isnt =
   try
-    ignore (List.find (fun (j,k,tm) -> i = j && h = k && nw -. tm < 353.0) isnt);
-    true
+    let tm = Hashtbl.find isnt (i,h) in
+    if nw -. tm < 353.0 then
+      true
+    else
+      (Hashtbl.remove isnt (i,h);
+       false)
   with Not_found -> false
   
 let netseeker_loop () =
@@ -845,7 +848,7 @@ let netseeker_loop () =
 	      if cs.handshakestep = 5 && not (recently_requested (i,h0) tm cs.invreq) then
 		begin
 		  ignore (queue_msg cs GetAddr "");
-		  cs.invreq <- (i,h0,tm)::List.filter (fun (j,k,tm0) -> tm -. tm0 < 3600.0) cs.invreq
+		  Hashtbl.replace cs.invreq (i,h0) tm
 		end
 	  )
 	!netconns;
@@ -872,12 +875,12 @@ let broadcast_requestdata mt h =
        match !gcs with
        | Some(cs) ->
            if not (recently_requested (i,h) tm cs.invreq) &&
-	     (List.mem (inv_of_msgtype mt,h) cs.rinv
+	     (Hashtbl.mem cs.rinv (inv_of_msgtype mt,h)
 	    || mt = GetCTreeElement || mt = GetHConsElement || mt = GetAsset)
 	   then
              begin
                queue_msg cs mt ms;
-               cs.invreq <- (i,h,tm)::List.filter (fun (j,k,tm0) -> tm -. tm0 < 3600.0) cs.invreq
+	       Hashtbl.replace cs.invreq (i,h) tm
              end
        | None -> ())
     !netconns;;
@@ -894,7 +897,7 @@ let find_and_send_requestdata mt h =
       (fun (lth,sth,(fd,sin,sout,gcs)) ->
 	match !gcs with
 	| Some(cs) ->
-            if not cs.banned && List.mem (inv_of_msgtype mt,h) cs.rinv then
+            if not cs.banned && Hashtbl.mem cs.rinv (inv_of_msgtype mt,h) then
 	      if recently_requested (i,h) tm cs.invreq then
 		begin
 		  log_string (Printf.sprintf "already recently sent request %s %s from %s\n" (string_of_msgtype mt) (hashval_hexstring h) cs.addrfrom);
@@ -904,7 +907,7 @@ let find_and_send_requestdata mt h =
 		begin
 		  log_string (Printf.sprintf "sending request %s %s to %s\n" (string_of_msgtype mt) (hashval_hexstring h) cs.addrfrom);
 		  let mh = queue_msg cs mt ms in
-		  cs.invreq <- (i,h,tm)::List.filter (fun (j,k,tm0) -> tm -. tm0 < 3600.0) cs.invreq;
+		  Hashtbl.replace cs.invreq (i,h) tm;
 		  raise Exit
 		end
 	| None -> ())
@@ -932,7 +935,7 @@ let find_and_send_requestmissingheaders () =
 		  | [] -> raise Exit (*** impossible ***)
 		  | h::mhr ->
 		      mhl := mhr;
-		      if List.mem (ii,h) cs.rinv && not (recently_requested (i,h) tm cs.invreq) then
+		      if Hashtbl.mem cs.rinv (ii,h) && not (recently_requested (i,h) tm cs.invreq) then
 			begin
 			  incr j;
 			  rhl := h::!rhl
@@ -944,7 +947,7 @@ let find_and_send_requestmissingheaders () =
 		    seosbf (seo_int8 seosb !j (msb,None));
 		    List.iter
 		      (fun h ->
-			cs.invreq <- (i,h,tm)::List.filter (fun (j,k,tm0) -> tm -. tm0 < 3600.0) cs.invreq;
+			Hashtbl.replace cs.invreq (i,h) tm;
 			seosbf (seo_hashval seosb h (msb,None)))
 		      !rhl;
 		    let ms = Buffer.contents msb in
@@ -981,7 +984,7 @@ Hashtbl.add msgtype_handler GetAddr
       if not (recently_sent (i,(0l,0l,0l,0l,0l,0l,0l,0l)) tm cs.sentinv) then (*** ignore GetAddr message if we recently sent addresses ***)
 	begin
 	  let pc = ref 0 in
-	  cs.sentinv <- (i,(0l,0l,0l,0l,0l,0l,0l,0l),tm)::cs.sentinv;
+	  Hashtbl.replace cs.sentinv (i,(0l,0l,0l,0l,0l,0l,0l,0l)) tm;
 	  let tm64 = Int64.of_float tm in
 	  let yesterday = Int64.sub tm64 86400L in
 	  let currpeers = ref [] in
