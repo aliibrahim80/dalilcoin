@@ -147,6 +147,24 @@ let privkey_from_btcwif w =
     in
     (k,true)
 
+let pubkey_hexstring (x,y) c =
+  if c then
+    Printf.sprintf "%s%s" (if evenp y then "02" else "03") (hexstring_of_big_int x 64)
+  else
+    Printf.sprintf "04%s%s" (hexstring_of_big_int x 64) (hexstring_of_big_int y 64)
+
+let hexstring_pubkey p =
+  if String.length p = 130 && p.[0] = '0' && p.[1] = '4' then
+    let x = big_int_of_hexstring (String.sub p 2 64) in
+    let y = big_int_of_hexstring (String.sub p 66 64) in
+    (x,y,false)
+  else if String.length p = 66 && p.[0] = '0' && (p.[1] = '2' || p.[1] = '3') then
+    let x = big_int_of_hexstring (String.sub p 2 64) in
+    let y = curve_y (p.[1] = '2') x in
+    (x,y,true)
+  else
+    raise (Failure("bad pubkey " ^ p))
+
 (* Computation of base 58 address strings *)
 
 let count_int32_bytes x =

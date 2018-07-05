@@ -40,6 +40,12 @@ type msgtype =
   | CTreeElement
   | HConsElement
   | Asset
+  | GetLtcBlock
+  | GetLtcTx
+  | GetLtcRawTx
+  | LtcBlock
+  | LtcTx
+  | LtcRawTx
 
 val msgtype_of_int : int -> msgtype
 val int_of_msgtype : msgtype -> int
@@ -67,6 +73,11 @@ type connstate = {
     mutable first_header_height : int64; (*** how much header history is stored at the node ***)
     mutable first_full_height : int64; (*** how much block/ctree history is stored at the node ***)
     mutable last_height : int64; (*** how up to date the node is ***)
+    mutable trusted : bool;
+    mutable remotepubkeystring : string option;
+    mutable remotepubkey : (big_int * big_int * bool) option;
+    mutable remoteltcaddr : string option;
+    mutable remoteltcrelayfee : int64 option;
   }
 
 val peeraddr : connstate option -> string

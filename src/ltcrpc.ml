@@ -2,10 +2,13 @@
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
+open Utils
 open Ser
 open Hashaux
 open Hash
 open Sha256
+open Cryptocurr
+open Signat
 open Json
 open Net
 open Db
@@ -25,6 +28,10 @@ let ltctestnet () =
 let ltc_bestblock = ref (0l,0l,0l,0l,0l,0l,0l,0l)
 
 let burntx : (hashval,string) Hashtbl.t = Hashtbl.create 100
+
+let offlineunspent = ref []
+let offlineltcblock : (hashval,hashval * int64 * int64 * hashval list) Hashtbl.t = Hashtbl.create 1000
+let offlineltctx : (hashval,int64 * hashval * hashval) Hashtbl.t = Hashtbl.create 1000
 
 type ltcdacstatus = LtcDacStatusPrev of hashval | LtcDacStatusNew of (hashval * hashval * hashval * int64 * int64) list list
 
@@ -144,11 +151,7 @@ let json_assoc_litoshis k al =
 let ltc_getbestblockhash () =
   try
     if !Config.ltcoffline then
-      begin
-	Printf.printf "call getbestblockhash in ltc\n>> "; flush stdout;
-	let h = read_line() in
-	h
-      end
+      hashval_hexstring !ltc_bestblock
     else
       let userpass = !Config.ltcrpcuser ^ ":" ^ !Config.ltcrpcpass in
       let call = "'{\"jsonrpc\": \"1.0\", \"id\":\"gbbh\", \"method\": \"getbestblockhash\", \"params\": [] }'" in
@@ -170,13 +173,13 @@ let dalilcoin_candidate_p h =
 
 let ltc_getblock h =
   try
-    let l =
-      if !Config.ltcoffline then
-	begin
-	  Printf.printf "call getblock %s in ltc\n>> " h; flush stdout;
-	  read_line()
-	end
-      else
+    if !Config.ltcoffline then
+      begin
+	let (prevh,ltm,hght,txhs) = Hashtbl.find offlineltcblock (hexstring_hashval h) in
+	(hashval_hexstring prevh,ltm,hght,List.map hashval_hexstring txhs)
+      end
+    else
+      let l =
 	let userpass = !Config.ltcrpcuser ^ ":" ^ !Config.ltcrpcpass in
 	let call = "'{\"jsonrpc\": \"1.0\", \"id\":\"gb\", \"method\": \"getblock\", \"params\": [\"" ^ h ^ "\"] }'" in
 	let url = "http://127.0.0.1:" ^ (string_of_int !Config.ltcrpcport) ^ "/" in
@@ -185,51 +188,48 @@ let ltc_getblock h =
 	let l = input_line inc in
 	ignore (Unix.close_process_full (inc,outc,errc));
 	l
-    in
-    match parse_jsonval l with
-    | (JsonObj(al),_) ->
-	begin
-	  match List.assoc "result" al with
-	  | JsonObj(bl) ->
-	      begin
-		let pbh = json_assoc_string "previousblockhash" bl in
-		let tm = json_assoc_int64 "mediantime" bl in
-		let hght = json_assoc_int64 "height" bl in
-		let txl = ref [] in
-		match List.assoc "tx" bl with
-		| JsonArr(txs) ->
-		    begin
-		      List.iter
-			(fun jtxh ->
-			  match jtxh with
-			  | JsonStr(txh) when dalilcoin_candidate_p txh -> txl := txh::!txl
-			  | _ -> ())
-			txs;
-		      (pbh,tm,hght,!txl)
-		    end
-		| _ ->
-		    (Utils.log_string (Printf.sprintf "problem return from ltc getblock:\n%s\n" l));
-		    raise Not_found
-	      end
-	  | _ ->
-	      (Utils.log_string (Printf.sprintf "problem return from ltc getblock:\n%s\n" l));
-	      raise Not_found
-	end
-    | _ ->
-	(Utils.log_string (Printf.sprintf "problem return from ltc getblock:\n%s\n" l));
-	raise Not_found
+      in
+      match parse_jsonval l with
+      | (JsonObj(al),_) ->
+	  begin
+	    match List.assoc "result" al with
+	    | JsonObj(bl) ->
+		begin
+		  let pbh = json_assoc_string "previousblockhash" bl in
+		  let tm = json_assoc_int64 "mediantime" bl in
+		  let hght = json_assoc_int64 "height" bl in
+		  let txl = ref [] in
+		  match List.assoc "tx" bl with
+		  | JsonArr(txs) ->
+		      begin
+			List.iter
+			  (fun jtxh ->
+			    match jtxh with
+			    | JsonStr(txh) when dalilcoin_candidate_p txh -> txl := txh::!txl
+			    | _ -> ())
+			  txs;
+			(pbh,tm,hght,!txl)
+		      end
+		  | _ ->
+		      (Utils.log_string (Printf.sprintf "problem return from ltc getblock:\n%s\n" l));
+		      raise Not_found
+		end
+	    | _ ->
+		(Utils.log_string (Printf.sprintf "problem return from ltc getblock:\n%s\n" l));
+		raise Not_found
+	  end
+      | _ ->
+	  (Utils.log_string (Printf.sprintf "problem return from ltc getblock:\n%s\n" l));
+	  raise Not_found
   with _ ->
     raise Not_found
 
 let ltc_listunspent () =
   try
-    let l =
-      if !Config.ltcoffline then
-	begin
-	  Printf.printf "call listunspent in ltc\n>> "; flush stdout;
-	  read_line()
-	end
-      else
+    if !Config.ltcoffline then
+      !offlineunspent
+    else
+      let l =
 	let userpass = !Config.ltcrpcuser ^ ":" ^ !Config.ltcrpcpass in
 	let addrl = Buffer.create 40 in
 	let fstaddr = ref true in
@@ -247,40 +247,40 @@ let ltc_listunspent () =
 	let l = input_line inc in
 	ignore (Unix.close_process_full (inc,outc,errc));
 	l
-    in
-    let utxol = ref [] in
-    match parse_jsonval l with
-    | (JsonObj(al),_) ->
-	begin
-	  match List.assoc "result" al with
-	  | JsonArr(ul) ->
-	      begin
-		List.iter
-		  (fun u ->
-		    match u with
-		    | JsonObj(bl) ->
-			begin
-			  try
-			    let txh = json_assoc_string "txid" bl in
-			    let vout = json_assoc_int "vout" bl in
-			    let rs = json_assoc_string "redeemScript" bl in
-			    let spk = json_assoc_string "scriptPubKey" bl in
-			    let amt = json_assoc_litoshis "amount" bl in
-			    utxol := (txh,vout,rs,spk,amt)::!utxol
-			  with Not_found ->
-			    ()
-			end
-		    | _ -> ())
-		  ul;
-		!utxol
-	      end
-	  | _ ->
-	      (Utils.log_string (Printf.sprintf "problem return from ltc listunspent:\n%s\n" l));
-	      raise Not_found
-	end
-    | _ ->
-	(Utils.log_string (Printf.sprintf "problem return from ltc listunspent:\n%s\n" l));
-	raise Not_found
+      in
+      let utxol = ref [] in
+      match parse_jsonval l with
+      | (JsonObj(al),_) ->
+	  begin
+	    match List.assoc "result" al with
+	    | JsonArr(ul) ->
+		begin
+		  List.iter
+		    (fun u ->
+		      match u with
+		      | JsonObj(bl) ->
+			  begin
+			    try
+			      let txh = json_assoc_string "txid" bl in
+			      let vout = json_assoc_int "vout" bl in
+			      let rs = json_assoc_string "redeemScript" bl in
+			      let spk = json_assoc_string "scriptPubKey" bl in
+			      let amt = json_assoc_litoshis "amount" bl in
+			      utxol := (txh,vout,rs,spk,amt)::!utxol
+			    with Not_found ->
+			      ()
+			  end
+		      | _ -> ())
+		    ul;
+		  !utxol
+		end
+	    | _ ->
+		(Utils.log_string (Printf.sprintf "problem return from ltc listunspent:\n%s\n" l));
+		raise Not_found
+	  end
+      | _ ->
+	  (Utils.log_string (Printf.sprintf "problem return from ltc listunspent:\n%s\n" l));
+	  raise Not_found
   with _ ->
     raise Not_found
       
@@ -431,13 +431,11 @@ let ltc_sendrawtransaction txs =
 
 let ltc_gettransactioninfo h =
   try
-    let l =
-      if !Config.ltcoffline then
-	begin
-	  Printf.printf "call getrawtransaction %s in ltc\n>> " h; flush stdout;
-	  read_line()
-	end
-      else
+    if !Config.ltcoffline then
+      let (burned,lprevtx,dnxt) = Hashtbl.find offlineltctx (hexstring_hashval h) in
+      (burned,lprevtx,dnxt,None,None)
+    else
+      let l =
 	let userpass = !Config.ltcrpcuser ^ ":" ^ !Config.ltcrpcpass in
 	let call = "'{\"jsonrpc\": \"1.0\", \"id\":\"grtx\", \"method\": \"getrawtransaction\", \"params\": [\"" ^ h ^ "\",1] }'" in
 	let url = "http://127.0.0.1:" ^ (string_of_int !Config.ltcrpcport) ^ "/" in
@@ -446,64 +444,64 @@ let ltc_gettransactioninfo h =
 	let l = input_line inc in
 	ignore (Unix.close_process_full (inc,outc,errc));
 	l
-    in
-    match parse_jsonval l with
-    | (JsonObj(al),_) ->
-	begin
-	  match List.assoc "result" al with
-	  | JsonObj(bl) ->
-	      begin
-		match List.assoc "vout" bl with
-		| JsonArr(JsonObj(vout1)::_) ->
-		    let litoshisburned = json_assoc_litoshis "value" vout1 in
-		    begin
-		      match List.assoc "scriptPubKey" vout1 with
-		      | JsonObj(cl) ->
-			  let hex = json_assoc_string "hex" cl in
-			  if String.length hex >= 132 && hex.[0] = '6' && hex.[1] = 'a' then
-			    begin
-			      let lprevtx = hexstring_hashval (String.sub hex 4 64) in
-			      let dnxt = hexstring_hashval (String.sub hex 68 64) in
-			      let lblkh =
-				begin
-				  try
-				    match List.assoc "blockhash" bl with
-				    | JsonStr(lblkh) -> Some(lblkh)
-				    | _ -> None
-				  with Not_found -> None
-				end
-			      in
-			      let confs =
-				begin
-				  try
-				    match List.assoc "confirmations" bl with
-				    | JsonNum(c) -> Some(int_of_string c)
-				    | _ -> None
-				  with _ -> None
-				end
-			      in
-			      (litoshisburned,lprevtx,dnxt,lblkh,confs)
-			    end
-			  else
-			    begin
-			      (Utils.log_string (Printf.sprintf "problem return from ltc getrawtransaction:\n%s\n" l));
-			      raise Not_found
-			    end
-		      | _ ->
-			  (Utils.log_string (Printf.sprintf "problem return from ltc getrawtransaction:\n%s\n" l));
-			  raise Not_found
-		    end
-		| _ ->
-		    (Utils.log_string (Printf.sprintf "problem return from ltc getrawtransaction:\n%s\n" l));
-		    raise Not_found
-	      end
-	  | _ ->
-	      (Utils.log_string (Printf.sprintf "problem return from ltc getrawtransaction:\n%s\n" l));
-	      raise Not_found
-	end
-    | _ ->
-	(Utils.log_string (Printf.sprintf "problem return from ltc getrawtransaction:\n%s\n" l));
-	raise Not_found
+      in
+      match parse_jsonval l with
+      | (JsonObj(al),_) ->
+	  begin
+	    match List.assoc "result" al with
+	    | JsonObj(bl) ->
+		begin
+		  match List.assoc "vout" bl with
+		  | JsonArr(JsonObj(vout1)::_) ->
+		      let litoshisburned = json_assoc_litoshis "value" vout1 in
+		      begin
+			match List.assoc "scriptPubKey" vout1 with
+			| JsonObj(cl) ->
+			    let hex = json_assoc_string "hex" cl in
+			    if String.length hex >= 132 && hex.[0] = '6' && hex.[1] = 'a' then
+			      begin
+				let lprevtx = hexstring_hashval (String.sub hex 4 64) in
+				let dnxt = hexstring_hashval (String.sub hex 68 64) in
+				let lblkh =
+				  begin
+				    try
+				      match List.assoc "blockhash" bl with
+				      | JsonStr(lblkh) -> Some(lblkh)
+				      | _ -> None
+				    with Not_found -> None
+				  end
+				in
+				let confs =
+				  begin
+				    try
+				      match List.assoc "confirmations" bl with
+				      | JsonNum(c) -> Some(int_of_string c)
+				      | _ -> None
+				    with _ -> None
+				  end
+				in
+				(litoshisburned,lprevtx,dnxt,lblkh,confs)
+			      end
+			    else
+			      begin
+				(Utils.log_string (Printf.sprintf "problem return from ltc getrawtransaction:\n%s\n" l));
+				raise Not_found
+			      end
+			| _ ->
+			    (Utils.log_string (Printf.sprintf "problem return from ltc getrawtransaction:\n%s\n" l));
+			    raise Not_found
+		      end
+		  | _ ->
+		      (Utils.log_string (Printf.sprintf "problem return from ltc getrawtransaction:\n%s\n" l));
+		      raise Not_found
+		end
+	    | _ ->
+		(Utils.log_string (Printf.sprintf "problem return from ltc getrawtransaction:\n%s\n" l));
+		raise Not_found
+	  end
+      | _ ->
+	  (Utils.log_string (Printf.sprintf "problem return from ltc getrawtransaction:\n%s\n" l));
+	  raise Not_found
   with _ -> raise Not_found
 
 module DbLtcBurnTx = Dbbasic2 (struct type t = int64 * hashval * hashval let basedir = "ltcburntx" let seival = sei_prod3 sei_int64 sei_hashval sei_hashval seic let seoval = seo_prod3 seo_int64 seo_hashval seo_hashval seoc end)
@@ -551,6 +549,8 @@ let rec ltc_process_block h =
 		begin
 		  (Utils.log_string (Printf.sprintf "Adding burn %s for header %s\n" txh (hashval_hexstring dnxt)));
 		  DbLtcBurnTx.dbput txhh (burned,lprevtx,dnxt);
+		  if !Config.ltcrelay then
+		    broadcast_inv [(int_of_msgtype LtcTx,txhh)];
 		  possibly_request_dalilcoin_block dnxt;
 		  begin
 		    try
@@ -570,6 +570,8 @@ let rec ltc_process_block h =
 		try
 		  let (burned,lprevtx,dnxt,lblkh,confs) = ltc_gettransactioninfo txh in
 		  DbLtcBurnTx.dbput txhh (burned,lprevtx,dnxt);
+		  if !Config.ltcrelay then
+		    broadcast_inv [(int_of_msgtype LtcTx,txhh)];
 		  handle burned lprevtx dnxt
 		with Not_found ->
 		  Utils.log_string (Printf.sprintf "Ignoring tx %s which does not appear to be a Dalilcoin burn tx\n" txh)
@@ -623,7 +625,13 @@ let rec ltc_process_block h =
 	else if not (prevkey = !ltc_oldest_to_consider) then
 	  DbLtcDacStatus.dbput hh (LtcDacStatusPrev(prevkey)) (*** pointer to last ltc block where dalilcoin status changed ***)
       end;
-      DbLtcBlock.dbput hh (prevh,tm,hght,!txhhs)
+      DbLtcBlock.dbput hh (prevh,tm,hght,!txhhs);
+      if !Config.ltcrelay then
+	broadcast_inv [(int_of_msgtype LtcBlock,hh)];
+      try
+	let (_,_,hght2,_) = DbLtcBlock.dbget !ltc_bestblock in
+	if hght2 < hght then ltc_bestblock := hh
+      with Not_found -> ltc_bestblock := hh
     end
 
 let ltc_medtime () =
@@ -711,3 +719,180 @@ let find_dalilcoin_header_ltc_burn h =
 		find_dalilcoin_header_ltc_burn_rec !lbhlr
   in
   find_dalilcoin_header_ltc_burn_rec [!ltc_bestblock]
+
+let check_ltc_relay_fee l la lrf =
+  match parse_jsonval l with
+  | (JsonObj(al),_) ->
+      begin
+	try
+	  match List.assoc "vout" al with
+	  | JsonArr(vol) ->
+	      List.exists
+		(fun vo ->
+		  match vo with
+		  | JsonObj(ol) ->
+		      let va = json_assoc_litoshis "value" ol in
+		      if va >= lrf then
+			begin
+			  try
+			    match List.assoc "scriptPubKey" ol with
+			    | JsonObj(bl) ->
+				begin
+				  match List.assoc "addresses" bl with
+				  | JsonArr([JsonStr(a)]) -> a = la
+				  | _ -> false
+				end
+			    | _ -> false
+			  with Not_found -> false
+			end
+		      else
+			false
+		  | _ -> false)
+		vol
+	  | _ -> false
+	with Not_found -> false
+      end
+  | _ -> false
+
+let init_ltcrelay_handlers () =
+  if !Config.ltcrelay then
+    begin
+      begin
+	if !Config.publtcrelayfee = Some(0L) then (*** offering free relay ***)
+	  Hashtbl.add msgtype_handler LtcRawTx
+	    (fun (sin,sout,cs,ms) ->
+	      let (tx,_) = sei_string seis (ms,String.length ms,None,0,0) in
+	      let userpass = !Config.ltcrpcuser ^ ":" ^ !Config.ltcrpcpass in
+	      let call = "'{\"jsonrpc\": \"1.0\", \"id\":\"sendtx\", \"method\": \"sendrawtransaction\", \"params\": [\"" ^ (string_hexstring tx) ^ "\"] }'" in
+	      let url = "http://127.0.0.1:" ^ (string_of_int !Config.ltcrpcport) ^ "/" in
+	      let fullcall = !Config.curl ^ " --user " ^ userpass ^ " --data-binary " ^ call ^ " -H 'content-type: text/plain;' " ^ url in
+	      let (inc,outc,errc) = Unix.open_process_full fullcall [| |] in
+	      let _ = input_line inc in
+	      ignore (Unix.close_process_full (inc,outc,errc)))
+	else
+	  match !Config.publtcaddr,!Config.publtcrelayfee with
+	  | Some(la),Some(lrf) ->
+	      Hashtbl.add msgtype_handler LtcRawTx
+		(fun (sin,sout,cs,ms) ->
+		  let (tx,_) = sei_string seis (ms,String.length ms,None,0,0) in
+		  let htx = string_hexstring tx in
+		  let userpass = !Config.ltcrpcuser ^ ":" ^ !Config.ltcrpcpass in
+		  let url = "http://127.0.0.1:" ^ (string_of_int !Config.ltcrpcport) ^ "/" in
+		  let call = "'{\"jsonrpc\": \"1.0\", \"id\":\"dectx\", \"method\": \"decoderawtransaction\", \"params\": [\"" ^ htx ^ "\"] }'" in
+		  let fullcall = !Config.curl ^ " --user " ^ userpass ^ " --data-binary " ^ call ^ " -H 'content-type: text/plain;' " ^ url in
+		  let (inc,outc,errc) = Unix.open_process_full fullcall [| |] in
+		  let l = input_line inc in
+		  ignore (Unix.close_process_full (inc,outc,errc));
+		  if check_ltc_relay_fee l la lrf then
+		    let call = "'{\"jsonrpc\": \"1.0\", \"id\":\"sendtx\", \"method\": \"sendrawtransaction\", \"params\": [\"" ^ htx ^ "\"] }'" in
+		    let fullcall = !Config.curl ^ " --user " ^ userpass ^ " --data-binary " ^ call ^ " -H 'content-type: text/plain;' " ^ url in
+		    let (inc,outc,errc) = Unix.open_process_full fullcall [| |] in
+		    let _ = input_line inc in
+		    ignore (Unix.close_process_full (inc,outc,errc)))
+           | _,_ -> ()
+      end;
+      match !Config.nodekey with
+      | Some(k,_,_,_) ->
+	  begin
+	    Hashtbl.add msgtype_handler GetLtcBlock
+	      (fun (sin,sout,cs,ms) -> (*** send the LtcBlock message along with Inv for previous block and for txs (assuming node has them) ***)
+		let (h,_) = sei_hashval seis (ms,String.length ms,None,0,0) in
+		let i = int_of_msgtype GetLtcBlock in
+		let tm = Unix.time() in
+		if recently_sent (i,h) tm cs.sentinv then (*** don't resend ***)
+		  begin
+		    Utils.log_string (Printf.sprintf "recently sent ltcblock %s to %s; not resending\n" (hashval_hexstring h) cs.addrfrom);
+		  end
+		else
+		  try
+		    let (prevh,ltm,hght,txhs) = DbLtcBlock.dbget h in
+		    let invl = ref [] in
+		    if DbLtcBlock.dbexists prevh then invl := [(int_of_msgtype LtcBlock,prevh)];
+		    List.iter
+		      (fun txh -> if DbLtcBurnTx.dbexists txh then invl := (int_of_msgtype LtcTx,txh)::!invl)
+		      txhs;
+		    if not (!invl = []) then
+		      begin
+			let invmsg = Buffer.create 10000 in
+			let c = ref (seo_int32 seosb (Int32.of_int (List.length !invl)) (invmsg,None)) in
+			List.iter
+			  (fun (i,h) ->
+			    c := seo_prod seo_int8 seo_hashval seosb (i,h) !c)
+			  !invl;
+			seosbf !c;
+			let invmsgstr = Buffer.contents invmsg in
+			ignore (queue_msg cs Inv invmsgstr)
+		      end;
+		    let h2 = hashlist [h;prevh;hashint64 ltm;hashint64 hght;hashlist txhs] in
+		    let r = rand_256() in
+		    let sg : signat = signat_hashval h2 k r in
+		    let lblkmsg = Buffer.create 10000 in
+		    seosbf (seo_prod6 seo_hashval seo_hashval seo_int64 seo_int64 (seo_list seo_hashval) seo_signat seosb (h,prevh,ltm,hght,txhs,sg) (lblkmsg,None));
+		    let lblkmsgs = Buffer.contents lblkmsg in
+		    ignore (queue_msg cs LtcBlock lblkmsgs)
+		  with _ -> ());
+	    Hashtbl.add msgtype_handler GetLtcTx
+	      (fun (sin,sout,cs,ms) ->
+		let (h,_) = sei_hashval seis (ms,String.length ms,None,0,0) in
+		let i = int_of_msgtype GetLtcTx in
+		let tm = Unix.time() in
+		if recently_sent (i,h) tm cs.sentinv then (*** don't resend ***)
+		  begin
+		    Utils.log_string (Printf.sprintf "recently sent ltcblock %s to %s; not resending\n" (hashval_hexstring h) cs.addrfrom);
+		  end
+		else
+		  try
+		    let (burned,lprevtx,dnxt) = DbLtcBurnTx.dbget h in
+		    let h2 = hashlist [h;hashint64 burned;lprevtx;dnxt] in
+		    let r = rand_256() in
+		    let sg : signat = signat_hashval h2 k r in
+		    let ltxmsg = Buffer.create 10000 in
+		    seosbf (seo_prod5 seo_hashval seo_int64 seo_hashval seo_hashval seo_signat seosb (h,burned,lprevtx,dnxt,sg) (ltxmsg,None));
+		    let ltxmsgs = Buffer.contents ltxmsg in
+		    ignore (queue_msg cs LtcTx ltxmsgs)
+		  with _ -> ());
+	  end
+      | _ -> ()
+    end;
+  if !Config.ltcoffline then
+    begin
+      Hashtbl.add msgtype_handler LtcBlock
+	(fun (sin,sout,cs,ms) ->
+	  if cs.trusted then
+	    match cs.remotepubkey with
+	    | Some(x,y,compr) ->
+		let ((h,prevh,ltm,hght,txhs,sg),_) = sei_prod6 sei_hashval sei_hashval sei_int64 sei_int64 (sei_list sei_hashval) sei_signat seis (ms,String.length ms,None,0,0) in
+		let h2 = hashlist [h;prevh;hashint64 ltm;hashint64 hght;hashlist txhs] in
+		let a = addr_daliladdrstr (md160_p2pkh_addr (pubkey_md160 (x,y) compr)) in
+		if verify_signed_hashval h2 (Some(x,y)) sg then
+		  begin
+		    log_string (Printf.sprintf "Accepting LtcBlock %s from %s: previous ltc block %s, median time %Ld, height %Ld, %d burn txs:\n" (hashval_hexstring h) a (hashval_hexstring prevh) ltm hght (List.length txhs));
+		    List.iter (fun txh -> log_string (Printf.sprintf "burn tx %s\n" (hashval_hexstring txh))) txhs;
+		    Hashtbl.add offlineltcblock h (prevh,ltm,hght,txhs);
+		    ltc_process_block (hashval_hexstring h) (*** this may fail if we are still syncing ***)
+		  end
+		else
+		  begin
+		    log_string (Printf.sprintf "WARNING: Signature for LtcBlock message for %s from %s was not correct; ignoring the message\n" (hashval_hexstring h) a)
+		  end
+	    | _ -> ());
+      Hashtbl.add msgtype_handler LtcTx
+	(fun (sin,sout,cs,ms) ->
+	  if cs.trusted then
+	    match cs.remotepubkey with
+	    | Some(x,y,compr) ->
+		let ((h,burned,lprevtx,dnxt,sg),_) = sei_prod5 sei_hashval sei_int64 sei_hashval sei_hashval sei_signat seis (ms,String.length ms,None,0,0) in
+		let h2 = hashlist [h;hashint64 burned;lprevtx;dnxt] in
+		let a = addr_daliladdrstr (md160_p2pkh_addr (pubkey_md160 (x,y) compr)) in
+		if verify_signed_hashval h2 (Some(x,y)) sg then
+		  begin
+		    log_string (Printf.sprintf "Accepting LtcTx %s from %s: Burned %Ld litoshis, prev burn tx %s, prev dalilcoin block %s\n" (hashval_hexstring h) a burned (hashval_hexstring lprevtx) (hashval_hexstring dnxt));
+		    Hashtbl.add offlineltctx h (burned,lprevtx,dnxt);
+		  end
+		else
+		  begin
+		    log_string (Printf.sprintf "WARNING: Signature for LtcTx message for %s from %s was not correct; ignoring the message\n" (hashval_hexstring h) a)
+		  end
+	    | _ -> ())
+    end
+

@@ -4,6 +4,6 @@
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
 let clientdescr = "Dalilcoin"
-let clientversion = "0.1.3"
+let clientversion = "0.1.4"
 let useragent = clientdescr ^ " " ^ clientversion
-let protocolversion = 1l
+let protocolversion = 2l

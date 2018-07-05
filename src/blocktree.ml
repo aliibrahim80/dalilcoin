@@ -11,6 +11,7 @@ open Sha256
 open Hash
 open Htree
 open Net
+open Cryptocurr
 open Db
 open Assets
 open Signat
@@ -1192,6 +1193,29 @@ let rec req_header_batches sout cs m hl nw =
 	req_header_batches sout cs (m+1) hr (h::nw)
     | [] -> req_headers sout cs m nw;;
 
+let cs_trusted cs =
+  if cs.trusted then
+    true
+  else
+    match cs.remotepubkeystring with
+    | None -> false
+    | Some(p) ->
+	let (x,y,c) = hexstring_pubkey p in
+	let a = addr_daliladdrstr (md160_p2pkh_addr (pubkey_md160 (x,y) c)) in
+	if List.mem a !Config.trustednodeaddrs then
+	  begin
+	    cs.trusted <- true;
+	    cs.remotepubkey <- Some(x,y,c);
+	    log_string (Printf.sprintf "Connected to trusted node with key for %s\n" a);
+	    true
+	  end
+	else
+	  begin
+	    cs.remotepubkeystring <- None;
+	    log_string (Printf.sprintf "Connected to untrusted node with key for %s; include trustednodeaddrs=%s to dalilcoin.conf to trust this node in the future\n" a a);
+	    false
+	  end;;
+
 Hashtbl.add msgtype_handler Inv
   (fun (sin,sout,cs,ms) ->
     let c = ref (ms,String.length ms,None,0,0) in
@@ -1241,6 +1265,33 @@ Hashtbl.add msgtype_handler Inv
 	      log_string (Printf.sprintf "Sending GetSTx %s to %s at %f\n" (hashval_hexstring h) cs.realaddr tm);
 	      ignore (queue_msg cs GetSTx (Buffer.contents s))
 	    end
+	end
+      else if i = int_of_msgtype LtcBlock && !Config.ltcoffline && cs_trusted cs && not (DbLtcBlock.dbexists h) then
+	begin
+	  let tm = Unix.time() in
+	  Hashtbl.replace cs.invreq (int_of_msgtype GetLtcBlock,h) tm;
+          let s = Buffer.create 1000 in
+	  seosbf (seo_hashval seosb h (s,None));
+	  log_string (Printf.sprintf "Sending GetLtcBlock %s to %s at %f\n" (hashval_hexstring h) cs.realaddr tm);
+	  ignore (queue_msg cs GetLtcBlock (Buffer.contents s))
+	end
+      else if i = int_of_msgtype LtcTx && (!Config.ltcoffline && cs_trusted cs || !Config.ltcrelay) then
+	begin
+	  let tm = Unix.time() in
+	  Hashtbl.replace cs.invreq (int_of_msgtype GetLtcTx,h) tm;
+          let s = Buffer.create 1000 in
+	  seosbf (seo_hashval seosb h (s,None));
+	  log_string (Printf.sprintf "Sending GetLtcTx %s to %s at %f\n" (hashval_hexstring h) cs.realaddr tm);
+	  ignore (queue_msg cs GetLtcTx (Buffer.contents s))
+	end
+      else if i = int_of_msgtype LtcRawTx && !Config.ltcrelay then
+	begin
+	  let tm = Unix.time() in
+	  Hashtbl.replace cs.invreq (int_of_msgtype GetLtcRawTx,h) tm;
+          let s = Buffer.create 1000 in
+	  seosbf (seo_hashval seosb h (s,None));
+	  log_string (Printf.sprintf "Sending GetLtcRawTx %s to %s at %f\n" (hashval_hexstring h) cs.realaddr tm);
+	  ignore (queue_msg cs GetLtcRawTx (Buffer.contents s))
 	end
     done;
     req_header_batches sout cs 0 !hl []);;
@@ -1392,7 +1443,7 @@ Hashtbl.add msgtype_handler STx
 		try
 		  let (n,_) = get_bestnode false in (*** ignore consensus warnings here ***)
 		  let BlocktreeNode(_,_,_,tr,sr,lr,_,_,_,_,blkh,_,_,_) = n in
-		  let unsupportederror alpha k = log_string (Printf.sprintf "Could not find asset %s at address %s in ledger %s; throwing out tx %s\n" (hashval_hexstring k) (Cryptocurr.addr_daliladdrstr alpha) (hashval_hexstring lr) (hashval_hexstring h)) in
+		  let unsupportederror alpha k = log_string (Printf.sprintf "Could not find asset %s at address %s in ledger %s; throwing out tx %s\n" (hashval_hexstring k) (addr_daliladdrstr alpha) (hashval_hexstring lr) (hashval_hexstring h)) in
 		  let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
 		  if tx_signatures_valid blkh al stau then
 		    begin
@@ -1406,7 +1457,7 @@ Hashtbl.add msgtype_handler STx
 			  savetxtopool_real h stau
 			end
 		      else
-			(log_string (Printf.sprintf "ignoring tx %s with low fee of %s fraenks (%Ld cants)\n" (hashval_hexstring h) (Cryptocurr.fraenks_of_cants fee) fee))
+			(log_string (Printf.sprintf "ignoring tx %s with low fee of %s fraenks (%Ld cants)\n" (hashval_hexstring h) (fraenks_of_cants fee) fee))
 		    end
 		  else
 		    (log_string (Printf.sprintf "ignoring tx %s since signatures are not valid at the current block height of %Ld\n" (hashval_hexstring h) blkh))
@@ -1429,13 +1480,13 @@ let dumpblocktreestate sa =
       let c = ref 0 in
       List.iter
 	(fun (alpha,aid) ->
-	  Printf.fprintf sa "%d. %s %s\n" !c (Cryptocurr.addr_daliladdrstr alpha) (hashval_hexstring aid);
+	  Printf.fprintf sa "%d. %s %s\n" !c (addr_daliladdrstr alpha) (hashval_hexstring aid);
 	  incr c)
 	tauin;
       Printf.fprintf sa "outputs %d\n" (List.length tauin);
       c := 0;
       List.iter (fun (alpha,(obl,u)) ->
-	Printf.fprintf sa "%d. %s %s %s\n" !c (Cryptocurr.addr_daliladdrstr alpha) (obligation_string obl) (preasset_string u);
+	Printf.fprintf sa "%d. %s %s %s\n" !c (addr_daliladdrstr alpha) (obligation_string obl) (preasset_string u);
 	incr c)
 	tauout;
       let sb = Buffer.create 100 in
@@ -1465,7 +1516,7 @@ let dumpblocktreestate sa =
     (fun h (BlocktreeNode(_,rs,pbh,tr,sr,lr,csm,tar,tm,cs,blkh,vs,bl,chr)) ->
       Printf.fprintf sa "- blk %s node:\n" (match h with Some(h) -> hashval_hexstring h | None -> "[genesis]");
       Printf.fprintf sa "recentstakers:\n";
-      List.iter (fun k -> Printf.fprintf sa "%s\n" (Cryptocurr.addr_daliladdrstr (p2pkhaddr_addr k))) !rs;
+      List.iter (fun k -> Printf.fprintf sa "%s\n" (addr_daliladdrstr (p2pkhaddr_addr k))) !rs;
       Printf.fprintf sa "prevblockhash: %s\n" (match pbh with Some(h,_) -> hashval_hexstring h | None -> "[genesis]");
       Printf.fprintf sa "theory tree root: %s\n" (match tr with Some(h) -> hashval_hexstring h | None -> "[empty]");
       Printf.fprintf sa "sig tree root: %s\n" (match sr with Some(h) -> hashval_hexstring h | None -> "[empty]");
