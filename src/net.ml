@@ -481,9 +481,9 @@ let json_useragent () =
   let al = ref "" in
   let addfield x y =
     if !al = "" then
-      al := x ^ ":" ^ y
+      al := "\"" ^ x ^ "\":\"" ^ y ^ "\""
     else
-      al := !al ^ "," ^ x ^ ":" ^ y
+      al := !al ^ ",\"" ^ x ^ "\":\"" ^ y ^ "\""
   in
   begin
     match !Config.nodekey with
@@ -531,7 +531,7 @@ let handle_msg replyto mt sin sout cs mh m =
 		  raise DupConnection
 		else
 		  cs.nonce = Some(n); (** remember the nonce to prevent duplicate connections to the same node **)
-		  let minvers = if vers > Version.protocolversion then Version.protocolversion else 0l in
+		  let minvers = if vers > Version.protocolversion then Version.protocolversion else vers in
 		  if minvers >= 2l then
 		    begin
 		      let rec extract_json x i l =
@@ -799,7 +799,7 @@ let initialize_conn_accept ra s =
 
 let initialize_conn_2 n s sin sout =
   (*** initiate handshake ***)
-  let vers = 1l in
+  let vers = Version.protocolversion in
   let srvs = 1L in
   let tm = Unix.time() in
   let fhh = 0L in
