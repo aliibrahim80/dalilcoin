@@ -48,9 +48,11 @@ type msgtype =
   | CTreeElement
   | HConsElement
   | Asset
+  | GetLtcBlocks
   | GetLtcBlock
   | GetLtcTx
   | GetLtcRawTx
+  | LtcBlocks
   | LtcBlock
   | LtcTx
   | LtcRawTx
@@ -61,7 +63,7 @@ let msgtype_of_int i =
       [Version;Verack;Addr;Inv;GetSTx;GetHeaders;GetHeader;GetBlock;GetBlockdelta;
        STx;Block;Headers;Blockdelta;GetAddr;Alert;Ping;Pong;
        GetCTreeElement;GetHConsElement;GetAsset;CTreeElement;HConsElement;Asset;
-       GetLtcBlock;GetLtcTx;GetLtcRawTx;LtcBlock;LtcTx;LtcRawTx]
+       GetLtcBlocks;GetLtcBlock;GetLtcTx;GetLtcRawTx;LtcBlocks;LtcBlock;LtcTx;LtcRawTx]
       i
   with Failure("nth") -> raise Not_found
 
@@ -90,12 +92,14 @@ let int_of_msgtype mt =
   | CTreeElement -> 20
   | HConsElement -> 21
   | Asset -> 22
-  | GetLtcBlock -> 23
-  | GetLtcTx -> 24
-  | GetLtcRawTx -> 25
-  | LtcBlock -> 26
-  | LtcTx -> 27
-  | LtcRawTx -> 28
+  | GetLtcBlocks -> 23
+  | GetLtcBlock -> 24
+  | GetLtcTx -> 25
+  | GetLtcRawTx -> 26
+  | LtcBlocks -> 27
+  | LtcBlock -> 28
+  | LtcTx -> 29
+  | LtcRawTx -> 30
 
 let inv_of_msgtype mt =
   try
@@ -109,6 +113,9 @@ let inv_of_msgtype mt =
       | GetCTreeElement -> CTreeElement
       | GetHConsElement -> HConsElement
       | GetAsset -> Asset
+      | GetLtcBlocks -> LtcBlocks
+      | GetLtcBlock -> LtcBlock
+      | GetLtcTx -> LtcTx
       | _ -> raise Not_found)
   with Not_found -> (-1)
 
@@ -137,9 +144,11 @@ let string_of_msgtype mt =
   | CTreeElement -> "CTreeElement"
   | HConsElement -> "HConsElement"
   | Asset -> "Asset"
+  | GetLtcBlocks -> "GetLtcBlocks"
   | GetLtcBlock -> "GetLtcBlock"
   | GetLtcTx -> "GetLtcTx"
   | GetLtcRawTx -> "GetLtcRawTx"
+  | LtcBlocks -> "LtcBlocks"
   | LtcBlock -> "LtcBlock"
   | LtcTx -> "LtcTx"
   | LtcRawTx -> "LtcRawTx"

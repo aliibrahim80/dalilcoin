@@ -40,9 +40,11 @@ type msgtype =
   | CTreeElement
   | HConsElement
   | Asset
+  | GetLtcBlocks
   | GetLtcBlock
   | GetLtcTx
   | GetLtcRawTx
+  | LtcBlocks
   | LtcBlock
   | LtcTx
   | LtcRawTx
