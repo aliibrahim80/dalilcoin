@@ -48,6 +48,10 @@ type msgtype =
   | LtcBlock
   | LtcTx
   | LtcRawTx
+  | GetLtcCheckpoint
+  | LtcCheckpoint
+  | GetLtcStatus
+  | LtcStatus
 
 val msgtype_of_int : int -> msgtype
 val int_of_msgtype : msgtype -> int
