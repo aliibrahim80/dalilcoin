@@ -26,6 +26,7 @@ let ltctestnet () =
   ltc_oldest_to_consider_height := 477000L
 
 let ltc_bestblock = ref (0l,0l,0l,0l,0l,0l,0l,0l)
+let ltc_bestblock_height = ref 0L
 
 let burntx : (hashval,string) Hashtbl.t = Hashtbl.create 100
 
@@ -626,7 +627,10 @@ let rec ltc_process_block h =
 	  begin
 	    let ltcdacstat = LtcDacStatusPrev(prevkey) in (*** pointer to last ltc block where dalilcoin status changed ***)
 	    DbLtcDacStatus.dbput hh ltcdacstat;
-	    if !Config.ltcrelay then broadcast_inv [(int_of_msgtype LtcStatus,hh)];
+	    if !Config.ltcrelay then
+	      begin 
+		broadcast_inv [(int_of_msgtype LtcStatus,hh);(int_of_msgtype LtcStatus,prevkey)];
+	      end
 	  end
       end;
       DbLtcBlock.dbput hh (prevh,tm,hght,!txhhs);
@@ -827,20 +831,23 @@ let init_ltcrelay_handlers () =
 		  try
 		    let ltcdacstat = DbLtcDacStatus.dbget h in
 		    let (prevh,ltm,hght,txhs) = DbLtcBlock.dbget h in
-		    let bbh = hexstring_hashval (ltc_getbestblockhash()) in
-		    let h2 = hashlist [bbh;hash_ltcdacstatus ltcdacstat;hashlist [prevh;hashint64 ltm;hashint64 hght;hashlist txhs]] in
+		    let h2 = hashlist [hash_ltcdacstatus ltcdacstat;hashlist [prevh;hashint64 ltm;hashint64 hght;hashlist txhs]] in
 		    let r = rand_256() in
 		    let sg : signat = signat_hashval h2 k r in
 		    let lsmsg = Buffer.create 10000 in
 		    seosbf
-		      (seo_prod4
-			 seo_hashval
+		      (seo_prod3
 			 seo_ltcdacstatus
 			 (seo_prod5 seo_hashval seo_hashval seo_int64 seo_int64 (seo_list seo_hashval))
 			 seo_signat
-			 seosb (bbh,ltcdacstat,(h,prevh,ltm,hght,txhs),sg) (lsmsg,None));
+			 seosb (ltcdacstat,(h,prevh,ltm,hght,txhs),sg) (lsmsg,None));
 		    let lsmsgs = Buffer.contents lsmsg in
-		    ignore (queue_msg cs LtcStatus lsmsgs)
+		    ignore (queue_msg cs LtcStatus lsmsgs);
+		    match ltcdacstat with
+		    | LtcDacStatusPrev(h) ->
+			if DbLtcDacStatus.dbexists h && DbLtcBlock.dbexists h then
+			  broadcast_inv [(int_of_msgtype LtcStatus,h)]
+		    | _ -> ()
 		  with _ -> ());
 	    Hashtbl.add msgtype_handler GetLtcTx
 	      (fun (sin,sout,cs,ms) ->
@@ -872,22 +879,26 @@ let init_ltcrelay_handlers () =
 	  if cs.trusted then
 	    match cs.remotepubkey with
 	    | Some(x,y,compr) ->
-		let ((bbh,ltcdacstat,(h,prevh,ltm,hght,txhs),sg),_) =
-		  sei_prod4
-		    sei_hashval
+		let ((ltcdacstat,(h,prevh,ltm,hght,txhs),sg),_) =
+		  sei_prod3
 		    sei_ltcdacstatus
 		    (sei_prod5 sei_hashval sei_hashval sei_int64 sei_int64 (sei_list sei_hashval))
 		    sei_signat
 		    seis (ms,String.length ms,None,0,0)
 		in
-		let h2 = hashlist [bbh;hash_ltcdacstatus ltcdacstat;hashlist [prevh;hashint64 ltm;hashint64 hght;hashlist txhs]] in
+		let h2 = hashlist [hash_ltcdacstatus ltcdacstat;hashlist [prevh;hashint64 ltm;hashint64 hght;hashlist txhs]] in
 		let a = addr_daliladdrstr (md160_p2pkh_addr (pubkey_md160 (x,y) compr)) in
 		if verify_signed_hashval h2 (Some(x,y)) sg then
 		  begin
 		    log_string (Printf.sprintf "Accepting LtcStatus %s from %s: previous ltc block %s, median time %Ld, height %Ld, %d burn txs:\n" (hashval_hexstring h) a (hashval_hexstring prevh) ltm hght (List.length txhs));
 		    DbLtcDacStatus.dbput h ltcdacstat;
 		    DbLtcBlock.dbput h (prevh,ltm,hght,txhs);
-		    ltc_bestblock := bbh;
+		    if !ltc_bestblock_height < hght then (ltc_bestblock := h; ltc_bestblock_height := hght);
+		    match ltcdacstat with
+		    | LtcDacStatusPrev(h) ->
+			if not (DbLtcDacStatus.dbexists h) then
+			  find_and_send_requestdata GetLtcStatus h
+		    | _ -> ()
 		  end
 		else
 		  begin
