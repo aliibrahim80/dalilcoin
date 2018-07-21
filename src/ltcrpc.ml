@@ -686,11 +686,13 @@ let ltc_best_chaintips () =
   List.map (fun ctips -> List.map (fun (h,_,_,_,_) -> h) ctips) ctips2l
 
 let find_dalilcoin_header_ltc_burn h =
+(*  Printf.printf "find_dalilcoin_header_ltc_burn %s\n" (hashval_hexstring h); flush stdout; *)
   let tried : (hashval,unit) Hashtbl.t = Hashtbl.create 100 in
   let rec find_dalilcoin_header_ltc_burn_rec lbhl =
     match lbhl with
     | [] -> raise Not_found
     | lbh::lbhr ->
+(*	Printf.printf "find_dalilcoin_header_ltc_burn_rec %s %s\n" (hashval_hexstring h) (hashval_hexstring lbh); flush stdout; *)
 	if Hashtbl.mem tried lbh then
 	  find_dalilcoin_header_ltc_burn_rec lbhr
 	else
@@ -832,21 +834,23 @@ let init_ltcrelay_handlers () =
 		    let (h1,ltcdacstats) =
 		      match DbLtcDacStatus.dbget h with
 		      | LtcDacStatusPrev(h1) ->
-			  (h,[(h,LtcDacStatusPrev(h1));(h1,DbLtcDacStatus.dbget h1)])
-		      | lds -> (h,[(h,lds)])
+			  (h,[(h,LtcDacStatusPrev(h1),DbLtcBlock.dbget h);(h1,DbLtcDacStatus.dbget h1,DbLtcBlock.dbget h1)])
+		      | lds -> (h,[(h,lds,DbLtcBlock.dbget h)])
 		    in
-		    let (prevh,ltm,hght,txhs) = DbLtcBlock.dbget h1 in
-		    let h2 = hashlist [h;hashfold (fun (h0,lds0) -> hashpair h0 (hash_ltcdacstatus lds0)) ltcdacstats;hashlist [h1;prevh;hashint64 ltm;hashint64 hght;hashlist txhs]] in
+		    let h2 = hashlist [h;hashfold (fun (h0,lds0,(prevh0,ltm0,hght0,txhs0)) -> hashlist [h0;hash_ltcdacstatus lds0;prevh0;hashint64 ltm0;hashint64 hght0;hashlist txhs0]) ltcdacstats] in
 		    let r = rand_256() in
 		    let sg : signat = signat_hashval h2 k r in
 		    let lsmsg = Buffer.create 10000 in
 		    seosbf
-		      (seo_prod4
+		      (seo_prod3
 			 seo_hashval
-			 (seo_list (seo_prod seo_hashval seo_ltcdacstatus))
-			 (seo_prod5 seo_hashval seo_hashval seo_int64 seo_int64 (seo_list seo_hashval))
+			 (seo_list
+			    (seo_prod3
+			       seo_hashval
+			       seo_ltcdacstatus
+			       (seo_prod4 seo_hashval seo_int64 seo_int64 (seo_list seo_hashval))))
 			 seo_signat
-			 seosb (h,ltcdacstats,(h1,prevh,ltm,hght,txhs),sg) (lsmsg,None));
+			 seosb (h,ltcdacstats,sg) (lsmsg,None));
 		    let lsmsgs = Buffer.contents lsmsg in
 		    ignore (queue_msg cs LtcStatus lsmsgs)
 		  with _ -> ());
@@ -880,24 +884,28 @@ let init_ltcrelay_handlers () =
 	  if cs.trusted then
 	    match cs.remotepubkey with
 	    | Some(x,y,compr) ->
-		let ((h,ltcdacstats,(h1,prevh,ltm,hght,txhs),sg),_) =
-		  sei_prod4
+		let ((h,ltcdacstats,sg),_) =
+		  sei_prod3
 		    sei_hashval
-		    (sei_list (sei_prod sei_hashval sei_ltcdacstatus))
-		    (sei_prod5 sei_hashval sei_hashval sei_int64 sei_int64 (sei_list sei_hashval))
+		    (sei_list
+		       (sei_prod3
+			  sei_hashval
+			  sei_ltcdacstatus
+			  (sei_prod4 sei_hashval sei_int64 sei_int64 (sei_list sei_hashval))))
 		    sei_signat
 		    seis (ms,String.length ms,None,0,0)
 		in
-		let h2 = hashlist [h;hashfold (fun (h0,lds0) -> hashpair h0 (hash_ltcdacstatus lds0)) ltcdacstats;hashlist [h1;prevh;hashint64 ltm;hashint64 hght;hashlist txhs]] in
+		let h2 = hashlist [h;hashfold (fun (h0,lds0,(prevh0,ltm0,hght0,txhs0)) -> hashlist [h0;(hash_ltcdacstatus lds0);prevh0;hashint64 ltm0;hashint64 hght0;hashlist txhs0]) ltcdacstats] in
 		let a = addr_daliladdrstr (md160_p2pkh_addr (pubkey_md160 (x,y) compr)) in
 		if verify_signed_hashval h2 (Some(x,y)) sg then
 		  begin
-		    log_string (Printf.sprintf "Accepting LtcStatus %s from %s: previous ltc block %s, median time %Ld, height %Ld, %d burn txs:\n" (hashval_hexstring h) a (hashval_hexstring prevh) ltm hght (List.length txhs));
+		    log_string (Printf.sprintf "Accepting LtcStatus %s from %s:\n" (hashval_hexstring h) a);
 		    List.iter
-		      (fun (h,ltcdacstat) -> DbLtcDacStatus.dbput h ltcdacstat)
+		      (fun (h,ltcdacstat,(prevh,ltm,hght,txhs)) ->
+			DbLtcDacStatus.dbput h ltcdacstat;
+			DbLtcBlock.dbput h (prevh,ltm,hght,txhs);
+			if !ltc_bestblock_height < hght then (ltc_bestblock := h; ltc_bestblock_height := hght))
 		      ltcdacstats;
-		    DbLtcBlock.dbput h1 (prevh,ltm,hght,txhs);
-		    if !ltc_bestblock_height < hght then (ltc_bestblock := h; ltc_bestblock_height := hght);
 		  end
 		else
 		  begin

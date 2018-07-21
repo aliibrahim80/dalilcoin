@@ -1,5 +1,5 @@
 (* Copyright (c) 2015 The Qeditas developers *)
-(* Copyright (c) 2017 The Dalilcoin developers *)
+(* Copyright (c) 2017-2018 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -511,6 +511,7 @@ let hashlist hl =
 
 let hashfold f al =
   let l = List.length al in
+  let al = List.map f al in
   if l >= 8388576 then raise (Failure "hashlist overflow");
   let bl = Int32.of_int (l * 160 + 64) in
   hashinit();
@@ -519,7 +520,7 @@ let hashfold f al =
   let i = ref 2 in
   List.iter
     (fun a ->
-      let (x0,x1,x2,x3,x4,x5,x6,x7) = f a in
+      let (x0,x1,x2,x3,x4,x5,x6,x7) = a in
       currblock.(!i) <- x0;
       incr i;
       if !i = 16 then (i := 0; sha256round());
