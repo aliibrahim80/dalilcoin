@@ -299,21 +299,6 @@ let collect_inv m cnt tosend txinv =
 	      begin
 		Hashtbl.add inclh bh ();
 		tosend := (int_of_msgtype Headers,bh)::!tosend;
-		if !Config.ltcrelay then
-		  begin
-		    let (bhd,_) = DbBlockHeader.dbget bh in
-		    match bhd.prevblockhash with
-		    | Some(_,Poburn(lblkh,ltxh,_,_)) ->
-			if DbLtcBurnTx.dbexists ltxh then
-			  tosend := (int_of_msgtype LtcTx,ltxh)::!tosend;
-			if DbLtcBlock.dbexists lblkh then
-			  begin
-			    tosend := (int_of_msgtype LtcBlock,lblkh)::!tosend;
-			    if DbLtcDacStatus.dbexists lblkh then
-			      tosend := (int_of_msgtype LtcStatus,lblkh)::!tosend;
-			  end
-		    | _ -> ()
-		  end;
 		if DbBlockDelta.dbexists bh then (tosend := (int_of_msgtype Blockdelta,bh)::!tosend)
 	      end;
 	  end)
@@ -709,17 +694,7 @@ and process_new_header_ab h hh blkh1 blkhd1 blkhs1 a initialization knownvalid p
 	    begin
 	      if not (DbBlockHeader.dbexists h) then DbBlockHeader.dbput h (blkhd1,blkhs1);
 	      Hashtbl.add blkheaders h ();
-	      if !Config.ltcrelay then
-		begin
-		  match pob with
-		  | Poburn(lblkh,ltxh,_,_) ->
-		      if DbLtcBurnTx.dbexists ltxh && DbLtcBlock.dbexists lblkh then
-			broadcast_inv [(int_of_msgtype Headers,h);(int_of_msgtype LtcTx,ltxh);(int_of_msgtype LtcBlock,lblkh)]
-		      else
-			broadcast_inv [(int_of_msgtype Headers,h)];
-		end
-	      else
-		broadcast_inv [(int_of_msgtype Headers,h)];
+	      broadcast_inv [(int_of_msgtype Headers,h)];
 	      let validated = ref (if knownvalid then ValidBlock else Waiting(Unix.time(),None)) in
 	      let newcsm = poburn_stakemod pob in
 	      let newnode = BlocktreeNode(Some(prevnode),ref [blkhd1.stakeaddr],Some(h,pob),blkhd1.newtheoryroot,blkhd1.newsignaroot,blkhd1.newledgerroot,newcsm,blkhd1.tinfo,blkhd1.timestamp,zero_big_int,Int64.add blkhght 1L,validated,ref false,ref []) in
@@ -1110,7 +1085,6 @@ Hashtbl.add msgtype_handler Headers
 	    log_string (Printf.sprintf "given id h = %s header with wrong id = %s\n" (hashval_hexstring h) (string_hexstring (Buffer.contents b)));
 	    cs.banned <- true
 	  end
-(***
 	else if !Config.ltcoffline then
 	  begin
 	    log_string (Printf.sprintf "Since ltcoffline is true, just accepting header %s\n" (hashval_hexstring h));
@@ -1123,7 +1097,6 @@ Hashtbl.add msgtype_handler Headers
 		  if not (DbBlockDelta.dbexists pbh) then find_and_send_requestdata GetBlockdelta pbh;
 		with Not_found -> ()
 	  end
-***)
 	else
 	  begin
 	    missingheaders := List.filter (fun mh -> not (mh = h)) !missingheaders; (*** remove from missing list ***)
@@ -1361,14 +1334,13 @@ Hashtbl.add msgtype_handler Blockdelta
       let i = int_of_msgtype GetBlockdelta in
       if not (DbBlockDelta.dbexists h) then (*** if we already have it, abort ***)
 	begin
-(***	  if !Config.ltcoffline then
+	  if !Config.ltcoffline then
 	    begin
 	      log_string (Printf.sprintf "Since ltcoffline is true, just accepting delta %s\n" (hashval_hexstring h));
 	      let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
-	      DbBlockDelta.dbput h blkdel;
+	      DbBlockDelta.dbput h blkdel
 	    end
 	  else
-***)
 	    try
 	      let tm = Unix.time() in
 	      Hashtbl.remove cs.invreq (i,h);

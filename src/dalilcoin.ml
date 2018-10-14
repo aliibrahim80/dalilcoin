@@ -225,25 +225,6 @@ let ltc_listener () =
       Thread.delay 120.0
   done;;
 
-let ltc_offline_listener () =
-  while true do
-    try
-      Printf.printf "ltc_offline_listener %s\n" (hashval_hexstring !ltc_bestblock); flush stdout;
-      let (z,ll) = ltcdacstatus_dbget !ltc_bestblock in
-      Printf.printf "2 ltc_offline_listener %s\n" (hashval_hexstring !ltc_bestblock); flush stdout;
-      match ll with
-      | ((dbh,lbh,txh,ltm,lght)::_)::_ ->
-	  Printf.printf "3 ltc_offline_listener %s %s\n" (hashval_hexstring !ltc_bestblock) (hashval_hexstring dbh); flush stdout;
-	  let (bhd,_) = DbBlockHeader.dbget dbh in
-	  Printf.printf "4 ltc_offline_listener %s %s\n" (hashval_hexstring !ltc_bestblock) (hashval_hexstring dbh); flush stdout;
-	  if not (DbLtcBlock.dbexists lbh) then find_and_send_requestdata LtcBlock lbh;
-	  if not (DbLtcBurnTx.dbexists txh) then find_and_send_requestdata LtcTx txh;
-	  Thread.delay 60.0
-      | _ -> raise Not_found
-    with _ ->
-      Thread.delay 120.0
-  done;;
-
 type nextstakeinfo = NextStake of (int64 * p2pkhaddr * hashval * int64 * obligation * int64 * int64 option * (hashval * hashval) option ref * hashval option * ttree option * hashval option * stree option) | NoStakeUpTo of int64;;
 
 let nextstakechances : (hashval option,nextstakeinfo) Hashtbl.t = Hashtbl.create 100;;
@@ -2600,9 +2581,7 @@ if not !Config.offline then
   begin
     initnetwork();
     if !Config.staking then stkth := Some(Thread.create stakingthread ());
-    if !Config.ltcoffline then
-      ltc_listener_th := Some(Thread.create ltc_offline_listener ())
-    else
+    if not !Config.ltcoffline then
       ltc_listener_th := Some(Thread.create ltc_listener ());
   end;;
 
