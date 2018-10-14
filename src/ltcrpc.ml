@@ -784,7 +784,7 @@ let rec gather_ltc_blocks h i =
   try
     let (prevh,ltm,hght,txhs) = DbLtcBlock.dbget h in
     if i > 0 then
-      let (ltcblks,invl) = gather_ltc_blocks prevh (i-1) in
+      let (ltcblks,invl) = gather_ltc_blocks h (i-1) in
       let invl2 = ref invl in
       List.iter
 	(fun txh ->
@@ -965,8 +965,8 @@ let init_ltcrelay_handlers () =
 		let a = addr_daliladdrstr (md160_p2pkh_addr (pubkey_md160 (x,y) compr)) in
 		if verify_signed_hashval h2 (Some(x,y)) sg then
 		  begin
-		    log_string (Printf.sprintf "Accepting LtcBlocks from %s:\n" a);
-		    List.iter (fun (h,prevh,ltm,hght,txhs) -> log_string (Printf.sprintf "%s %Ld\n" (hashval_hexstring h) hght); Hashtbl.add offlineltcblock h (prevh,ltm,hght,txhs)) ltcblks;
+		    log_string (Printf.sprintf "Accepting LtcBlocks from %s\n" a);
+		    List.iter (fun (h,prevh,ltm,hght,txhs) -> Hashtbl.add offlineltcblock h (prevh,ltm,hght,txhs)) ltcblks;
 		    match ltcblks with
 		    | (h,prevh,_,_,txhs)::_ ->
 			if offline_ltc_synced_blocks prevh && offline_ltc_synced_txs txhs then
