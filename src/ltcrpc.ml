@@ -527,6 +527,11 @@ let rec ltc_process_block h =
   if not (hh = !ltc_oldest_to_consider) && not (DbLtcBlock.dbexists hh) then
     begin
       let (prev,tm,hght,txhs) = ltc_getblock h in
+      if not (txhs = []) then
+	begin
+	  (Utils.log_string (Printf.sprintf "getblock %s had %d candidate txs:\n" h (List.length txhs)));
+	  List.iter (fun txh -> (Utils.log_string (Printf.sprintf "candidate %s\n" txh))) txhs;
+	end; *)
       ltc_process_block prev;
       let prevh = hexstring_hashval prev in
       let genl = ref [] in
