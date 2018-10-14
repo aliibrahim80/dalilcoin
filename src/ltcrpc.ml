@@ -30,6 +30,8 @@ let ltc_bestblock = ref (0l,0l,0l,0l,0l,0l,0l,0l)
 let burntx : (hashval,string) Hashtbl.t = Hashtbl.create 100
 
 let offlineunspent = ref []
+let offlineltcblock : (hashval,hashval * int64 * int64 * hashval list) Hashtbl.t = Hashtbl.create 1000
+let offlineltctx : (hashval,int64 * hashval * hashval) Hashtbl.t = Hashtbl.create 1000
 
 type ltcdacstatus = LtcDacStatusPrev of hashval | LtcDacStatusNew of (hashval * hashval * hashval * int64 * int64) list list
 
@@ -50,11 +52,6 @@ let sei_ltcdacstatus i c =
   else
     let (l,c) = sei_list (sei_list (sei_prod5 sei_hashval sei_hashval sei_hashval sei_int64 sei_int64)) i c in
     (LtcDacStatusNew(l),c)
-
-let hash_ltcdacstatus s =
-  match s with
-  | LtcDacStatusPrev(h) -> hashtag h 8192l
-  | LtcDacStatusNew(ll) -> hashtag (hashfold (fun l -> hashfold (fun (h1,h2,h3,i1,i2) -> hashlist [h1;h2;h3;hashint64 i1;hashint64 i2]) l) ll) 8193l
 
 let ltcdacstatush : (hashval,ltcdacstatus) Hashtbl.t = Hashtbl.create 1000
 
@@ -174,13 +171,11 @@ let ltc_getbestblockhash () =
 let dalilcoin_candidate_p h =
   String.length h = 64 && h.[0] = '4' && h.[1] = '4' && h.[2] = '6' && h.[3] = '1'
 
-module DbLtcBlock = Dbbasic2 (struct type t = hashval * int64 * int64 * hashval list let basedir = "ltcblock" let seival = sei_prod4 sei_hashval sei_int64 sei_int64 (sei_list sei_hashval) seic let seoval = seo_prod4 seo_hashval seo_int64 seo_int64 (seo_list seo_hashval) seoc end)
-
 let ltc_getblock h =
   try
     if !Config.ltcoffline then
       begin
-	let (prevh,ltm,hght,txhs) = DbLtcBlock.dbget (hexstring_hashval h) in
+	let (prevh,ltm,hght,txhs) = Hashtbl.find offlineltcblock (hexstring_hashval h) in
 	(hashval_hexstring prevh,ltm,hght,List.map hashval_hexstring txhs)
       end
     else
@@ -434,12 +429,10 @@ let ltc_sendrawtransaction txs =
 	raise Not_found
   with _ -> raise Not_found
 
-module DbLtcBurnTx = Dbbasic2 (struct type t = int64 * hashval * hashval let basedir = "ltcburntx" let seival = sei_prod3 sei_int64 sei_hashval sei_hashval seic let seoval = seo_prod3 seo_int64 seo_hashval seo_hashval seoc end)
-
 let ltc_gettransactioninfo h =
   try
     if !Config.ltcoffline then
-      let (burned,lprevtx,dnxt) = DbLtcBurnTx.dbget (hexstring_hashval h) in
+      let (burned,lprevtx,dnxt) = Hashtbl.find offlineltctx (hexstring_hashval h) in
       (burned,lprevtx,dnxt,None,None)
     else
       let l =
@@ -511,6 +504,10 @@ let ltc_gettransactioninfo h =
 	  raise Not_found
   with _ -> raise Not_found
 
+module DbLtcBurnTx = Dbbasic2 (struct type t = int64 * hashval * hashval let basedir = "ltcburntx" let seival = sei_prod3 sei_int64 sei_hashval sei_hashval seic let seoval = seo_prod3 seo_int64 seo_hashval seo_hashval seoc end)
+
+module DbLtcBlock = Dbbasic2 (struct type t = hashval * int64 * int64 * hashval list let basedir = "ltcblock" let seival = sei_prod4 sei_hashval sei_int64 sei_int64 (sei_list sei_hashval) seic let seoval = seo_prod4 seo_hashval seo_int64 seo_int64 (seo_list seo_hashval) seoc end)
+
 let possibly_request_dalilcoin_block h =
   try
     (Utils.log_string (Printf.sprintf "possibly request dalilcoin block %s\n" (hashval_hexstring h)));
@@ -531,7 +528,7 @@ let rec ltc_process_block h =
 	begin
 	  (Utils.log_string (Printf.sprintf "getblock %s had %d candidate txs:\n" h (List.length txhs)));
 	  List.iter (fun txh -> (Utils.log_string (Printf.sprintf "candidate %s\n" txh))) txhs;
-	end; *)
+	end;
       ltc_process_block prev;
       let prevh = hexstring_hashval prev in
       let genl = ref [] in
@@ -623,24 +620,18 @@ let rec ltc_process_block h =
 	  (List.rev pbds);
 	if !change then
 	  begin
-	    let ltcdacstat = LtcDacStatusNew(!bds) in
-	    DbLtcDacStatus.dbput hh ltcdacstat;
-	    if !Config.ltcrelay then broadcast_inv [(int_of_msgtype LtcStatus,hh)];
+	    DbLtcDacStatus.dbput hh (LtcDacStatusNew(!bds))
 	  end
 	else if not (prevkey = !ltc_oldest_to_consider) then
-	  begin
-	    let ltcdacstat = LtcDacStatusPrev(prevkey) in (*** pointer to last ltc block where dalilcoin status changed ***)
-	    DbLtcDacStatus.dbput hh ltcdacstat;
-	    if !Config.ltcrelay then broadcast_inv [(int_of_msgtype LtcStatus,hh)];
-	  end
+	  DbLtcDacStatus.dbput hh (LtcDacStatusPrev(prevkey)) (*** pointer to last ltc block where dalilcoin status changed ***)
       end;
       DbLtcBlock.dbput hh (prevh,tm,hght,!txhhs);
-      begin
-	try
-	  let (_,_,hght2,_) = DbLtcBlock.dbget !ltc_bestblock in
-	  if hght2 < hght then ltc_bestblock := hh
-	with Not_found -> ltc_bestblock := hh
-      end;
+      if !Config.ltcrelay then
+	broadcast_inv [(int_of_msgtype LtcBlock,hh)];
+      try
+	let (_,_,hght2,_) = DbLtcBlock.dbget !ltc_bestblock in
+	if hght2 < hght then ltc_bestblock := hh
+      with Not_found -> ltc_bestblock := hh
     end
 
 let ltc_medtime () =
@@ -763,6 +754,32 @@ let check_ltc_relay_fee l la lrf =
       end
   | _ -> false
 
+let rec offline_ltc_synced_txs hl =
+  match hl with
+  | [] -> true
+  | h::hr ->
+      if DbLtcBurnTx.dbexists h then
+	offline_ltc_synced_txs hr
+      else
+	begin
+	  find_and_send_requestdata GetLtcTx h;
+	  ignore (offline_ltc_synced_txs hr);
+	  false
+	end
+	
+let rec offline_ltc_synced_blocks h =
+  if h = !ltc_oldest_to_consider || DbLtcBlock.dbexists h then
+    true
+  else
+    try
+      let (prevh,_,_,txhl) = Hashtbl.find offlineltcblock h in
+      let b1 = offline_ltc_synced_txs txhl in
+      let b2 = offline_ltc_synced_blocks prevh in
+      b1 && b2
+    with Not_found ->
+      find_and_send_requestdata GetLtcBlocks h; (** this indicates we are not synced, so request many blocks at once **)
+      false
+
 let rec gather_ltc_blocks h i =
   try
     let (prevh,ltm,hght,txhs) = DbLtcBlock.dbget h in
@@ -819,33 +836,74 @@ let init_ltcrelay_handlers () =
       match !Config.nodekey with
       | Some(k,_,_,_) ->
 	  begin
-	    Hashtbl.add msgtype_handler GetLtcStatus
-	      (fun (sin,sout,cs,ms) -> (*** send the LtcStatus message ***)
+	    Hashtbl.add msgtype_handler GetLtcBlock
+	      (fun (sin,sout,cs,ms) -> (*** send the LtcBlock message along with Inv for previous block and for txs (assuming node has them) ***)
 		let (h,_) = sei_hashval seis (ms,String.length ms,None,0,0) in
-		let i = int_of_msgtype GetLtcStatus in
+		let i = int_of_msgtype GetLtcBlock in
 		let tm = Unix.time() in
 		if recently_sent (i,h) tm cs.sentinv then (*** don't resend ***)
 		  begin
-		    Utils.log_string (Printf.sprintf "recently sent ltcstatus %s to %s; not resending\n" (hashval_hexstring h) cs.addrfrom);
+		    Utils.log_string (Printf.sprintf "recently sent ltcblock %s to %s; not resending\n" (hashval_hexstring h) cs.addrfrom);
 		  end
 		else
 		  try
-		    let ltcdacstat = DbLtcDacStatus.dbget h in
 		    let (prevh,ltm,hght,txhs) = DbLtcBlock.dbget h in
-		    let bbh = hexstring_hashval (ltc_getbestblockhash()) in
-		    let h2 = hashlist [bbh;hash_ltcdacstatus ltcdacstat;hashlist [prevh;hashint64 ltm;hashint64 hght;hashlist txhs]] in
+		    let invl = ref [] in
+		    if DbLtcBlock.dbexists prevh then invl := [(int_of_msgtype LtcBlock,prevh)];
+		    List.iter
+		      (fun txh -> if DbLtcBurnTx.dbexists txh then invl := (int_of_msgtype LtcTx,txh)::!invl)
+		      txhs;
+		    if not (!invl = []) then
+		      begin
+			let invmsg = Buffer.create 10000 in
+			let c = ref (seo_int32 seosb (Int32.of_int (List.length !invl)) (invmsg,None)) in
+			List.iter
+			  (fun (i,h) ->
+			    c := seo_prod seo_int8 seo_hashval seosb (i,h) !c)
+			  !invl;
+			seosbf !c;
+			let invmsgstr = Buffer.contents invmsg in
+			ignore (queue_msg cs Inv invmsgstr)
+		      end;
+		    let h2 = hashlist [h;prevh;hashint64 ltm;hashint64 hght;hashlist txhs] in
 		    let r = rand_256() in
 		    let sg : signat = signat_hashval h2 k r in
-		    let lsmsg = Buffer.create 10000 in
-		    seosbf
-		      (seo_prod4
-			 seo_hashval
-			 seo_ltcdacstatus
-			 (seo_prod5 seo_hashval seo_hashval seo_int64 seo_int64 (seo_list seo_hashval))
-			 seo_signat
-			 seosb (bbh,ltcdacstat,(h,prevh,ltm,hght,txhs),sg) (lsmsg,None));
-		    let lsmsgs = Buffer.contents lsmsg in
-		    ignore (queue_msg cs LtcStatus lsmsgs)
+		    let lblkmsg = Buffer.create 10000 in
+		    seosbf (seo_prod6 seo_hashval seo_hashval seo_int64 seo_int64 (seo_list seo_hashval) seo_signat seosb (h,prevh,ltm,hght,txhs,sg) (lblkmsg,None));
+		    let lblkmsgs = Buffer.contents lblkmsg in
+		    ignore (queue_msg cs LtcBlock lblkmsgs)
+		  with _ -> ());
+	    Hashtbl.add msgtype_handler GetLtcBlocks
+	      (fun (sin,sout,cs,ms) -> (*** send the LtcBlocks message with 256 blocks back from requested along with Inv for 256th previous block and for burn txs along the way (assuming node has them) ***)
+		let (h,_) = sei_hashval seis (ms,String.length ms,None,0,0) in
+		let i = int_of_msgtype GetLtcBlocks in
+		let tm = Unix.time() in
+		if recently_sent (i,h) tm cs.sentinv then (*** don't resend ***)
+		  begin
+		    Utils.log_string (Printf.sprintf "recently sent ltcblocks back from %s to %s; not resending\n" (hashval_hexstring h) cs.addrfrom);
+		  end
+		else
+		  try
+		    let (ltcblks,invl) = gather_ltc_blocks h 256 in
+		    if not (invl = []) then
+		      begin
+			let invmsg = Buffer.create 10000 in
+			let c = ref (seo_int32 seosb (Int32.of_int (List.length invl)) (invmsg,None)) in
+			List.iter
+			  (fun (i,h) ->
+			    c := seo_prod seo_int8 seo_hashval seosb (i,h) !c)
+			  invl;
+			seosbf !c;
+			let invmsgstr = Buffer.contents invmsg in
+			ignore (queue_msg cs Inv invmsgstr)
+		      end;
+		    let h2 = hashlist (List.map (fun (h,prevh,ltm,hght,txhs) -> hashlist [h;prevh;hashint64 ltm;hashint64 hght;hashlist txhs]) ltcblks) in
+		    let r = rand_256() in
+		    let sg : signat = signat_hashval h2 k r in
+		    let lblkmsg = Buffer.create 10000 in
+		    seosbf (seo_prod (seo_list (seo_prod5 seo_hashval seo_hashval seo_int64 seo_int64 (seo_list seo_hashval))) seo_signat seosb (ltcblks,sg) (lblkmsg,None));
+		    let lblkmsgs = Buffer.contents lblkmsg in
+		    ignore (queue_msg cs LtcBlocks lblkmsgs)
 		  with _ -> ());
 	    Hashtbl.add msgtype_handler GetLtcTx
 	      (fun (sin,sout,cs,ms) ->
@@ -872,31 +930,56 @@ let init_ltcrelay_handlers () =
     end;
   if !Config.ltcoffline then
     begin
-      Hashtbl.add msgtype_handler LtcStatus
+      Hashtbl.add msgtype_handler LtcBlock
 	(fun (sin,sout,cs,ms) ->
 	  if cs.trusted then
 	    match cs.remotepubkey with
 	    | Some(x,y,compr) ->
-		let ((bbh,ltcdacstat,(h,prevh,ltm,hght,txhs),sg),_) =
-		  sei_prod4
-		    sei_hashval
-		    sei_ltcdacstatus
-		    (sei_prod5 sei_hashval sei_hashval sei_int64 sei_int64 (sei_list sei_hashval))
-		    sei_signat
-		    seis (ms,String.length ms,None,0,0)
-		in
-		let h2 = hashlist [bbh;hash_ltcdacstatus ltcdacstat;hashlist [prevh;hashint64 ltm;hashint64 hght;hashlist txhs]] in
+		let ((h,prevh,ltm,hght,txhs,sg),_) = sei_prod6 sei_hashval sei_hashval sei_int64 sei_int64 (sei_list sei_hashval) sei_signat seis (ms,String.length ms,None,0,0) in
+		let h2 = hashlist [h;prevh;hashint64 ltm;hashint64 hght;hashlist txhs] in
 		let a = addr_daliladdrstr (md160_p2pkh_addr (pubkey_md160 (x,y) compr)) in
 		if verify_signed_hashval h2 (Some(x,y)) sg then
 		  begin
-		    log_string (Printf.sprintf "Accepting LtcStatus %s from %s: previous ltc block %s, median time %Ld, height %Ld, %d burn txs:\n" (hashval_hexstring h) a (hashval_hexstring prevh) ltm hght (List.length txhs));
-		    DbLtcDacStatus.dbput h ltcdacstat;
-		    DbLtcBlock.dbput h (prevh,ltm,hght,txhs);
-		    ltc_bestblock := bbh;
+		    log_string (Printf.sprintf "Accepting LtcBlock %s from %s: previous ltc block %s, median time %Ld, height %Ld, %d burn txs:\n" (hashval_hexstring h) a (hashval_hexstring prevh) ltm hght (List.length txhs));
+		    List.iter (fun txh -> log_string (Printf.sprintf "burn tx %s\n" (hashval_hexstring txh))) txhs;
+		    Hashtbl.add offlineltcblock h (prevh,ltm,hght,txhs);
+		    if offline_ltc_synced_blocks prevh && offline_ltc_synced_txs txhs then
+		      begin
+			try
+			  ltc_process_block (hashval_hexstring h) (*** this may fail if we are still syncing ***)
+			with Not_found -> ()
+		      end
 		  end
 		else
 		  begin
 		    log_string (Printf.sprintf "WARNING: Signature for LtcBlock message for %s from %s was not correct; ignoring the message\n" (hashval_hexstring h) a)
+		  end
+	    | _ -> ());
+      Hashtbl.add msgtype_handler LtcBlocks
+	(fun (sin,sout,cs,ms) ->
+	  if cs.trusted then
+	    match cs.remotepubkey with
+	    | Some(x,y,compr) ->
+		let ((ltcblks,sg),_) = sei_prod (sei_list (sei_prod5 sei_hashval sei_hashval sei_int64 sei_int64 (sei_list sei_hashval))) sei_signat seis (ms,String.length ms,None,0,0) in
+		let h2 = hashlist (List.map (fun (h,prevh,ltm,hght,txhs) -> hashlist [h;prevh;hashint64 ltm;hashint64 hght;hashlist txhs]) ltcblks) in
+		let a = addr_daliladdrstr (md160_p2pkh_addr (pubkey_md160 (x,y) compr)) in
+		if verify_signed_hashval h2 (Some(x,y)) sg then
+		  begin
+		    log_string (Printf.sprintf "Accepting LtcBlocks from %s:\n" a);
+		    List.iter (fun (h,prevh,ltm,hght,txhs) -> log_string (Printf.sprintf "%s %Ld\n" (hashval_hexstring h) hght); Hashtbl.add offlineltcblock h (prevh,ltm,hght,txhs)) ltcblks;
+		    match ltcblks with
+		    | (h,prevh,_,_,txhs)::_ ->
+			if offline_ltc_synced_blocks prevh && offline_ltc_synced_txs txhs then
+			  begin
+			    try
+			      ltc_process_block (hashval_hexstring h) (*** this may fail if we are still syncing ***)
+			    with Not_found -> ()
+			  end
+		    | [] -> ()
+		  end
+		else
+		  begin
+		    log_string (Printf.sprintf "WARNING: Signature for LtcBlocks message from %s was not correct; ignoring the message\n" a)
 		  end
 	    | _ -> ());
       Hashtbl.add msgtype_handler LtcTx
@@ -910,7 +993,7 @@ let init_ltcrelay_handlers () =
 		if verify_signed_hashval h2 (Some(x,y)) sg then
 		  begin
 		    log_string (Printf.sprintf "Accepting LtcTx %s from %s: Burned %Ld litoshis, prev burn tx %s, prev dalilcoin block %s\n" (hashval_hexstring h) a burned (hashval_hexstring lprevtx) (hashval_hexstring dnxt));
-		    DbLtcBurnTx.dbput h (burned,lprevtx,dnxt);
+		    Hashtbl.add offlineltctx h (burned,lprevtx,dnxt);
 		  end
 		else
 		  begin

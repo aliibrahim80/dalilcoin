@@ -196,6 +196,7 @@ let missingheadersthread () = (*** every five minutes check if there are headers
 let ltc_listener_th : Thread.t option ref = ref None;;
 
 let ltc_init () =
+  if !Config.testnet then ltctestnet();
   try
     log_string (Printf.sprintf "syncing with ltc\n");
     let lbh = ltc_getbestblockhash () in
@@ -1544,16 +1545,6 @@ let do_command oc l =
 	      let snc1 = sincetime (Int64.of_float cs.conntime) in
 	      let snc2 = sincetime (Int64.of_float cs.lastmsgtm) in
 	      Printf.fprintf oc "Connected for %s; last message %s ago.\n" snc1 snc2;
-	      begin
-		match cs.remotepubkeystring with
-		| None -> ()
-		| Some(p) ->
-		    Printf.fprintf oc "Remote pubkey string %s\n" p;
-		    match cs.remotepubkey with
-		    | None -> ()
-		    | Some(x,y,c) -> Printf.fprintf oc "pubkey calculated\n"
-	      end;
-	      if cs.trusted then Printf.fprintf oc "(trusted for ltc info)\n";
 	      if cs.handshakestep < 5 then Printf.fprintf oc "(Still in handshake phase)\n";
 	  | None -> (*** This could happen if a connection died after remove_dead_conns above. ***)
 	      Printf.fprintf oc "[Dead Connection]\n";
@@ -2536,7 +2527,6 @@ let initialize () =
     Printf.printf "Initializing theory and signature trees.\n"; flush stdout;
     init_thytrees();
     init_sigtrees();
-    if !Config.testnet then ltctestnet();
     if not !Config.offline && not !Config.ltcoffline then
       begin
 	Printf.printf "Syncing with ltc\n"; flush stdout;
@@ -2581,8 +2571,7 @@ if not !Config.offline then
   begin
     initnetwork();
     if !Config.staking then stkth := Some(Thread.create stakingthread ());
-    if not !Config.ltcoffline then
-      ltc_listener_th := Some(Thread.create ltc_listener ());
+    if not !Config.ltcoffline then ltc_listener_th := Some(Thread.create ltc_listener ());
   end;;
 
 let last_failure = ref None;;

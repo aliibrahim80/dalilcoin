@@ -1266,16 +1266,6 @@ Hashtbl.add msgtype_handler Inv
 	      ignore (queue_msg cs GetSTx (Buffer.contents s))
 	    end
 	end
-      else if i = int_of_msgtype LtcStatus && !Config.ltcoffline && cs_trusted cs then
-	begin
-	  let tm = Unix.time() in
-	  Hashtbl.replace cs.invreq (int_of_msgtype GetLtcStatus,h) tm;
-	  let mt = GetLtcStatus in
-          let s = Buffer.create 1000 in
-	  seosbf (seo_hashval seosb h (s,None));
-	  log_string (Printf.sprintf "Sending GetLtcStatus %s to %s at %f\n" (hashval_hexstring h) cs.realaddr tm);
-	  ignore (queue_msg cs mt (Buffer.contents s))
-	end
       else if i = int_of_msgtype LtcBlock && !Config.ltcoffline && cs_trusted cs && not (DbLtcBlock.dbexists h) then
 	begin
 	  let tm = Unix.time() in
@@ -1286,7 +1276,7 @@ Hashtbl.add msgtype_handler Inv
 	  log_string (Printf.sprintf "Sending GetLtcBlock %s to %s at %f\n" (hashval_hexstring h) cs.realaddr tm);
 	  ignore (queue_msg cs mt (Buffer.contents s))
 	end
-      else if i = int_of_msgtype LtcTx && (!Config.ltcoffline && cs_trusted cs) then
+      else if i = int_of_msgtype LtcTx && (!Config.ltcoffline && cs_trusted cs || !Config.ltcrelay) then
 	begin
 	  let tm = Unix.time() in
 	  Hashtbl.replace cs.invreq (int_of_msgtype GetLtcTx,h) tm;

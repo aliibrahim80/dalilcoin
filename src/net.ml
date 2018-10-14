@@ -56,10 +56,6 @@ type msgtype =
   | LtcBlock
   | LtcTx
   | LtcRawTx
-  | GetLtcCheckpoint
-  | LtcCheckpoint
-  | GetLtcStatus
-  | LtcStatus
 
 let msgtype_of_int i =
   try
@@ -67,8 +63,7 @@ let msgtype_of_int i =
       [Version;Verack;Addr;Inv;GetSTx;GetHeaders;GetHeader;GetBlock;GetBlockdelta;
        STx;Block;Headers;Blockdelta;GetAddr;Alert;Ping;Pong;
        GetCTreeElement;GetHConsElement;GetAsset;CTreeElement;HConsElement;Asset;
-       GetLtcBlocks;GetLtcBlock;GetLtcTx;GetLtcRawTx;LtcBlocks;LtcBlock;LtcTx;LtcRawTx;
-       GetLtcCheckpoint;LtcCheckpoint;GetLtcStatus;LtcStatus]
+       GetLtcBlocks;GetLtcBlock;GetLtcTx;GetLtcRawTx;LtcBlocks;LtcBlock;LtcTx;LtcRawTx]
       i
   with Failure("nth") -> raise Not_found
 
@@ -105,10 +100,6 @@ let int_of_msgtype mt =
   | LtcBlock -> 28
   | LtcTx -> 29
   | LtcRawTx -> 30
-  | GetLtcCheckpoint -> 31
-  | LtcCheckpoint -> 32
-  | GetLtcStatus -> 33
-  | LtcStatus -> 34
 
 let inv_of_msgtype mt =
   try
@@ -125,8 +116,6 @@ let inv_of_msgtype mt =
       | GetLtcBlocks -> LtcBlocks
       | GetLtcBlock -> LtcBlock
       | GetLtcTx -> LtcTx
-      | GetLtcCheckpoint -> LtcCheckpoint
-      | GetLtcStatus -> LtcStatus
       | _ -> raise Not_found)
   with Not_found -> (-1)
 
@@ -163,10 +152,6 @@ let string_of_msgtype mt =
   | LtcBlock -> "LtcBlock"
   | LtcTx -> "LtcTx"
   | LtcRawTx -> "LtcRawTx"
-  | GetLtcCheckpoint -> "GetLtcCheckpoint"
-  | LtcCheckpoint -> "LtcCheckpoint"
-  | GetLtcStatus -> "GetLtcStatus"
-  | LtcStatus -> "LtcStatus"
 
 let myaddr () =
   match !Config.ip with
