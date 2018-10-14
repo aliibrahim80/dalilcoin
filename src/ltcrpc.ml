@@ -829,26 +829,25 @@ let init_ltcrelay_handlers () =
 		  end
 		else
 		  try
-		    let (h1,ltcdacstats) =
-		      match DbLtcDacStatus.dbget h with
-		      | LtcDacStatusPrev(h1) ->
-			  (h,[(h,LtcDacStatusPrev(h1));(h1,DbLtcDacStatus.dbget h1)])
-		      | lds -> (h,[(h,lds)])
-		    in
-		    let (prevh,ltm,hght,txhs) = DbLtcBlock.dbget h1 in
-		    let h2 = hashlist [h;hashfold (fun (h0,lds0) -> hashpair h0 (hash_ltcdacstatus lds0)) ltcdacstats;hashlist [h1;prevh;hashint64 ltm;hashint64 hght;hashlist txhs]] in
+		    let ltcdacstat = DbLtcDacStatus.dbget h in
+		    let (prevh,ltm,hght,txhs) = DbLtcBlock.dbget h in
+		    let h2 = hashlist [hash_ltcdacstatus ltcdacstat;hashlist [prevh;hashint64 ltm;hashint64 hght;hashlist txhs]] in
 		    let r = rand_256() in
 		    let sg : signat = signat_hashval h2 k r in
 		    let lsmsg = Buffer.create 10000 in
 		    seosbf
-		      (seo_prod4
-			 seo_hashval
-			 (seo_list (seo_prod seo_hashval seo_ltcdacstatus))
+		      (seo_prod3
+			 seo_ltcdacstatus
 			 (seo_prod5 seo_hashval seo_hashval seo_int64 seo_int64 (seo_list seo_hashval))
 			 seo_signat
-			 seosb (h,ltcdacstats,(h1,prevh,ltm,hght,txhs),sg) (lsmsg,None));
+			 seosb (ltcdacstat,(h,prevh,ltm,hght,txhs),sg) (lsmsg,None));
 		    let lsmsgs = Buffer.contents lsmsg in
-		    ignore (queue_msg cs LtcStatus lsmsgs)
+		    ignore (queue_msg cs LtcStatus lsmsgs);
+		    match ltcdacstat with
+		    | LtcDacStatusPrev(h) ->
+			if DbLtcDacStatus.dbexists h && DbLtcBlock.dbexists h then
+			  broadcast_inv [(int_of_msgtype LtcStatus,h)]
+		    | _ -> ()
 		  with _ -> ());
 	    Hashtbl.add msgtype_handler GetLtcTx
 	      (fun (sin,sout,cs,ms) ->
@@ -880,28 +879,30 @@ let init_ltcrelay_handlers () =
 	  if cs.trusted then
 	    match cs.remotepubkey with
 	    | Some(x,y,compr) ->
-		let ((h,ltcdacstats,(h1,prevh,ltm,hght,txhs),sg),_) =
-		  sei_prod4
-		    sei_hashval
-		    (sei_list (sei_prod sei_hashval sei_ltcdacstatus))
+		let ((ltcdacstat,(h,prevh,ltm,hght,txhs),sg),_) =
+		  sei_prod3
+		    sei_ltcdacstatus
 		    (sei_prod5 sei_hashval sei_hashval sei_int64 sei_int64 (sei_list sei_hashval))
 		    sei_signat
 		    seis (ms,String.length ms,None,0,0)
 		in
-		let h2 = hashlist [h;hashfold (fun (h0,lds0) -> hashpair h0 (hash_ltcdacstatus lds0)) ltcdacstats;hashlist [h1;prevh;hashint64 ltm;hashint64 hght;hashlist txhs]] in
+		let h2 = hashlist [hash_ltcdacstatus ltcdacstat;hashlist [prevh;hashint64 ltm;hashint64 hght;hashlist txhs]] in
 		let a = addr_daliladdrstr (md160_p2pkh_addr (pubkey_md160 (x,y) compr)) in
 		if verify_signed_hashval h2 (Some(x,y)) sg then
 		  begin
 		    log_string (Printf.sprintf "Accepting LtcStatus %s from %s: previous ltc block %s, median time %Ld, height %Ld, %d burn txs:\n" (hashval_hexstring h) a (hashval_hexstring prevh) ltm hght (List.length txhs));
-		    List.iter
-		      (fun (h,ltcdacstat) -> DbLtcDacStatus.dbput h ltcdacstat)
-		      ltcdacstats;
-		    DbLtcBlock.dbput h1 (prevh,ltm,hght,txhs);
+		    DbLtcDacStatus.dbput h ltcdacstat;
+		    DbLtcBlock.dbput h (prevh,ltm,hght,txhs);
 		    if !ltc_bestblock_height < hght then (ltc_bestblock := h; ltc_bestblock_height := hght);
+		    match ltcdacstat with
+		    | LtcDacStatusPrev(h) ->
+			if not (DbLtcDacStatus.dbexists h) then
+			  find_and_send_requestdata GetLtcStatus h
+		    | _ -> ()
 		  end
 		else
 		  begin
-		    log_string (Printf.sprintf "WARNING: Signature for LtcStatus message for %s from %s was not correct; ignoring the message\n" (hashval_hexstring h) a)
+		    log_string (Printf.sprintf "WARNING: Signature for LtcBlock message for %s from %s was not correct; ignoring the message\n" (hashval_hexstring h) a)
 		  end
 	    | _ -> ());
       Hashtbl.add msgtype_handler LtcTx
