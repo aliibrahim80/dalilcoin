@@ -15,13 +15,10 @@ let stringconfigvars = [
 ("rpcpass",fun x -> Config.rpcpass := x);
 ("ltcrpcuser",fun x -> Config.ltcrpcuser := x);
 ("ltcrpcpass",fun x -> Config.ltcrpcpass := x);
-("curl",fun x -> Config.curl := x);
-("publtcrelayfee",fun x -> Config.publtcrelayfee := Some(litoshis_of_ltc x));
-("nodekey",fun w -> let (k,c) = try privkey_from_wif w with _ -> privkey_from_btcwif w in match Secp256k1.smulp k Secp256k1._g with Some(x,y) -> Config.nodekey := Some(k,c,(x,y),pubkey_hexstring (x,y) c) | None -> raise (Failure "invalid privkey for nodekey"))
+("curl",fun x -> Config.curl := x)
 ];;
 let boolconfigvars = [
 ("offline",fun x -> Config.offline := x);
-("ltcrelay",fun x -> Config.ltcrelay := x);
 ("ltcoffline",fun x -> Config.ltcoffline := x);
 ("daemon",fun x -> Config.daemon := x);
 ("staking",fun x -> Config.staking := x);
@@ -58,14 +55,12 @@ let stringoptionconfigvars = [
 ("ip",fun x -> Config.ip := x);
 ("randomseed",fun x -> Config.randomseed := x);
 ("offlinestakerewardslock",fun x -> Config.offlinestakerewardslock := x);
-("publtcaddr",fun x -> Config.publtcaddr := x)
 ];;
 let intoptionconfigvars = [
 ("socks",fun x -> Config.socks := x)
 ];;
 let stringlistconfigvars = [
-("ltcaddress",fun x -> Config.ltcaddresses := x::!Config.ltcaddresses);
-("trustednodeaddrs",fun x -> Config.trustednodeaddrs := x::!Config.trustednodeaddrs)
+("ltcaddress",fun x -> Config.ltcaddresses := x::!Config.ltcaddresses)
 ];;
 
 exception Done

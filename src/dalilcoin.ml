@@ -2532,7 +2532,6 @@ let initialize () =
 	Printf.printf "Syncing with ltc\n"; flush stdout;
 	ltc_init();
       end;
-    init_ltcrelay_handlers();
     Printf.printf "Initializing blocktree\n"; flush stdout;
     initblocktree();
     missingheaders_th := Some(Thread.create missingheadersthread ());

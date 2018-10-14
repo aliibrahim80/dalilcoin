@@ -66,5 +66,3 @@ val ltc_tx_poburn : string -> poburn
 val ltc_best_chaintips : unit -> hashval list list
 
 val find_dalilcoin_header_ltc_burn : hashval -> poburn * hashval option
-
-val init_ltcrelay_handlers : unit -> unit

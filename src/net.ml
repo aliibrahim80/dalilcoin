@@ -9,7 +9,6 @@ open Ser
 open Hashaux
 open Sha256
 open Hash
-open Json
 
 let shutdown_close s =
   try
@@ -48,20 +47,13 @@ type msgtype =
   | CTreeElement
   | HConsElement
   | Asset
-  | GetLtcBlock
-  | GetLtcTx
-  | GetLtcRawTx
-  | LtcBlock
-  | LtcTx
-  | LtcRawTx
 
 let msgtype_of_int i =
   try
     List.nth
       [Version;Verack;Addr;Inv;GetSTx;GetHeaders;GetHeader;GetBlock;GetBlockdelta;
        STx;Block;Headers;Blockdelta;GetAddr;Alert;Ping;Pong;
-       GetCTreeElement;GetHConsElement;GetAsset;CTreeElement;HConsElement;Asset;
-       GetLtcBlock;GetLtcTx;GetLtcRawTx;LtcBlock;LtcTx;LtcRawTx]
+       GetCTreeElement;GetHConsElement;GetAsset;CTreeElement;HConsElement;Asset]
       i
   with Failure("nth") -> raise Not_found
 
@@ -90,12 +82,6 @@ let int_of_msgtype mt =
   | CTreeElement -> 20
   | HConsElement -> 21
   | Asset -> 22
-  | GetLtcBlock -> 23
-  | GetLtcTx -> 24
-  | GetLtcRawTx -> 25
-  | LtcBlock -> 26
-  | LtcTx -> 27
-  | LtcRawTx -> 28
 
 let inv_of_msgtype mt =
   try
@@ -137,12 +123,6 @@ let string_of_msgtype mt =
   | CTreeElement -> "CTreeElement"
   | HConsElement -> "HConsElement"
   | Asset -> "Asset"
-  | GetLtcBlock -> "GetLtcBlock"
-  | GetLtcTx -> "GetLtcTx"
-  | GetLtcRawTx -> "GetLtcRawTx"
-  | LtcBlock -> "LtcBlock"
-  | LtcTx -> "LtcTx"
-  | LtcRawTx -> "LtcRawTx"
 
 let myaddr () =
   match !Config.ip with
@@ -356,11 +336,6 @@ type connstate = {
     mutable first_header_height : int64; (*** how much header history is stored at the node ***)
     mutable first_full_height : int64; (*** how much block/ctree history is stored at the node ***)
     mutable last_height : int64; (*** how up to date the node is ***)
-    mutable trusted : bool;
-    mutable remotepubkeystring : string option;
-    mutable remotepubkey : (big_int * big_int * bool) option;
-    mutable remoteltcaddr : string option;
-    mutable remoteltcrelayfee : int64 option;
   }
 
 let send_inv_fn : (int -> out_channel -> connstate -> unit) ref = ref (fun _ _ _ -> ())
@@ -476,35 +451,6 @@ let network_time () =
     let mskew = List.nth !offsets m in
     (Int64.add mytm (Int64.of_int mskew),mskew)
 
-let json_useragent () =
-  let ua = Version.useragent in
-  let al = ref "" in
-  let addfield x y =
-    if !al = "" then
-      al := x ^ ":" ^ y
-    else
-      al := !al ^ "," ^ x ^ ":" ^ y
-  in
-  begin
-    match !Config.nodekey with
-    | Some(_,_,_,p) -> addfield "key" p
-    | None -> ()
-  end;
-  begin
-    match !Config.publtcaddr with
-    | Some(la) -> addfield "ltcaddr" la
-    | None -> ()
-  end;
-  begin
-    match !Config.publtcrelayfee with
-    | Some(lrf) -> addfield "ltcrelayfee" (Int64.to_string lrf)
-    | None -> ()
-  end;
-  if !al = "" then
-    ua
-  else
-    ua ^ " {" ^ !al ^ "}"
-
 let handle_msg replyto mt sin sout cs mh m =
   match replyto with
   | Some(h) ->
@@ -516,13 +462,11 @@ let handle_msg replyto mt sin sout cs mh m =
 	begin
 	  match mt with
 	  | Version ->
-	      let ml = String.length m in
-	      if ml >= 4096 then raise (ProtocolViolation("Version message in handshake must be smaller than 4K"));
 	      let (((vers,srvs,tm,addr_recv,addr_from,n),(ua,fhh,ffh,lh,relay,lastchkpt)),_) =
 		sei_prod
 		  (sei_prod6 sei_int32 sei_int64 sei_int64 sei_string sei_string sei_int64)
 		  (sei_prod6 sei_string sei_int64 sei_int64 sei_int64 sei_bool (sei_option (sei_prod sei_int64 sei_hashval)))
-		  seis (m,ml,None,0,0)
+		  seis (m,String.length m,None,0,0)
 	      in
 	      begin
 		if n = !this_nodes_nonce then
@@ -532,49 +476,6 @@ let handle_msg replyto mt sin sout cs mh m =
 		else
 		  cs.nonce = Some(n); (** remember the nonce to prevent duplicate connections to the same node **)
 		  let minvers = if vers > Version.protocolversion then Version.protocolversion else 0l in
-		  if minvers >= 2l then
-		    begin
-		      let rec extract_json x i l =
-			if i < l then
-			  if x.[i] = '{' then
-			    let (j,i) = parse_jsonval_start (x,i) in
-			    begin
-			      match j with
-			      | JsonObj(al) ->
-				  begin
-				    begin
-				      try
-					let p = List.assoc "key" al in
-					match p with
-					| JsonStr(p) -> cs.remotepubkeystring <- Some(p) (** do not have access to cryptocurr module to check if trusted address, so save string and wait **)
-					| _ -> raise Not_found
-				      with _ -> ()
-				    end;
-				    begin
-				      try
-					let la = List.assoc "ltcaddr" al in
-					match la with
-					| JsonStr(la) -> cs.remoteltcaddr <- Some(la)
-					| _ -> raise Not_found
-				      with _ -> ()
-				    end;
-				    begin
-				      try
-					let lrf = List.assoc "ltcrelayfee" al in
-					match lrf with
-					| JsonStr(lrf) -> cs.remoteltcrelayfee <- Some(Int64.of_string lrf)
-					| JsonNum(lrf) -> cs.remoteltcrelayfee <- Some(Int64.of_string lrf)
-					| _ -> raise Not_found
-				      with _ -> ()
-				    end
-				  end
-			      | _ -> ()
-			    end
-			  else
-			    extract_json x (i+1) l
-		      in
-		      extract_json ua 0 (String.length ua)
-		    end;
 		  let mytm = Int64.of_float (Unix.time()) in
 		  let tmskew = Int64.sub tm mytm in
 		  if tmskew > 7200L then
@@ -585,18 +486,15 @@ let handle_msg replyto mt sin sout cs mh m =
 		      begin
 			ignore (queue_msg cs Verack "");
 			let vm = Buffer.create 100 in
-			let ua = json_useragent() in
 			seosbf
 			  (seo_prod
 			     (seo_prod6 seo_int32 seo_int64 seo_int64 seo_string seo_string seo_int64)
 			     (seo_prod6 seo_string seo_int64 seo_int64 seo_int64 seo_bool (seo_option (seo_prod seo_int64 seo_hashval)))
 			     seosb
 			     ((minvers,0L,mytm,addr_from,myaddr(),!this_nodes_nonce),
-			      (ua,0L,0L,0L,true,None))
+			      (Version.useragent,0L,0L,0L,true,None))
 			     (vm,None));
-			let vmc = Buffer.contents vm in
-			if String.length vmc >= 4096 then raise (ProtocolViolation("prevented node from sending Version message over 4K; check this node's user agent"));
-			queue_msg cs Version vmc;
+			queue_msg cs Version (Buffer.contents vm);
 			cs.handshakestep <- 3;
 			cs.peertimeskew <- tmskew;
 			cs.useragent <- ua;
@@ -783,7 +681,7 @@ let initialize_conn_accept ra s =
       set_binary_mode_in sin true;
       set_binary_mode_out sout true;
       let tm = Unix.time() in
-      let cs = { conntime = tm; realaddr = ra; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 1; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; sentinv = Hashtbl.create 100; rinv = Hashtbl.create 1000; invreq = Hashtbl.create 100; first_header_height = 0L; first_full_height = 0L; last_height = 0L; trusted = false; remotepubkeystring = None; remotepubkey = None; remoteltcaddr = None; remoteltcrelayfee = None } in
+      let cs = { conntime = tm; realaddr = ra; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 1; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; sentinv = Hashtbl.create 100; rinv = Hashtbl.create 1000; invreq = Hashtbl.create 100; first_header_height = 0L; first_full_height = 0L; last_height = 0L } in
       let sgcs = (s,sin,sout,ref (Some(cs))) in
       let clth = Thread.create connlistener sgcs in
       let csth = Thread.create connsender sgcs in
@@ -807,7 +705,6 @@ let initialize_conn_2 n s sin sout =
   let lh = 0L in
   let relay = true in
   let lastchkpt = None in
-  let ua = json_useragent() in
   let vm = Buffer.create 100 in
   seosbf
     (seo_prod
@@ -815,12 +712,10 @@ let initialize_conn_2 n s sin sout =
        (seo_prod6 seo_string seo_int64 seo_int64 seo_int64 seo_bool (seo_option (seo_prod seo_int64 seo_hashval)))
        seosb
        ((vers,srvs,Int64.of_float tm,n,myaddr(),!this_nodes_nonce),
-	(ua,fhh,ffh,lh,relay,lastchkpt))
+	(Version.useragent,fhh,ffh,lh,relay,lastchkpt))
        (vm,None));
-  let vmc = Buffer.contents vm in
-  if String.length vmc >= 4096 then raise (ProtocolViolation("prevented node from sending Version message over 4K; check this node's user agent"));
-  let cs = { conntime = tm; realaddr = n; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 2; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; sentinv = Hashtbl.create 100; rinv = Hashtbl.create 1000; invreq = Hashtbl.create 100; first_header_height = fhh; first_full_height = ffh; last_height = lh; trusted = false; remotepubkeystring = None; remotepubkey = None; remoteltcaddr = None; remoteltcrelayfee = None } in
-  queue_msg cs Version vmc;
+  let cs = { conntime = tm; realaddr = n; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 2; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; sentinv = Hashtbl.create 100; rinv = Hashtbl.create 1000; invreq = Hashtbl.create 100; first_header_height = fhh; first_full_height = ffh; last_height = lh } in
+  queue_msg cs Version (Buffer.contents vm);
   let sgcs = (s,sin,sout,ref (Some(cs))) in
   let clth = Thread.create connlistener sgcs in
   let csth = Thread.create connsender sgcs in
@@ -1071,7 +966,6 @@ let broadcast_inv tosend =
     (fun (i,h) ->
       c := seo_prod seo_int8 seo_hashval seosb (i,h) !c)
     tosend;
-  seosbf !c;
   let invmsgstr = Buffer.contents invmsg in
   log_string (Printf.sprintf "broadcast_inv Created invmsgstr %s\n" (string_hexstring invmsgstr));
   List.iter

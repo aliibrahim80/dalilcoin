@@ -2,16 +2,9 @@
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
-open Big_int
-
 val datadir : string ref
 val offline : bool ref
 val ltcoffline : bool ref
-val nodekey : (big_int * bool * (big_int * big_int) * string) option ref
-val ltcrelay : bool ref
-val publtcaddr : string option ref
-val publtcrelayfee : int64 option ref
-val trustednodeaddrs : string list ref
 val daemon : bool ref
 val testnet : bool ref
 val staking : bool ref
