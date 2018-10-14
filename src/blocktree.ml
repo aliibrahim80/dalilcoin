@@ -1270,11 +1270,10 @@ Hashtbl.add msgtype_handler Inv
 	begin
 	  let tm = Unix.time() in
 	  Hashtbl.replace cs.invreq (int_of_msgtype GetLtcBlock,h) tm;
-	  let mt = if ltc_synced() then GetLtcBlock else GetLtcBlocks in
           let s = Buffer.create 1000 in
 	  seosbf (seo_hashval seosb h (s,None));
 	  log_string (Printf.sprintf "Sending GetLtcBlock %s to %s at %f\n" (hashval_hexstring h) cs.realaddr tm);
-	  ignore (queue_msg cs mt (Buffer.contents s))
+	  ignore (queue_msg cs GetLtcBlock (Buffer.contents s))
 	end
       else if i = int_of_msgtype LtcTx && (!Config.ltcoffline && cs_trusted cs || !Config.ltcrelay) then
 	begin

@@ -586,7 +586,7 @@ let rec ltc_process_block h =
 	    if tm > Int64.add !Config.genesistimestamp 604800L then
 	      begin
 		(Utils.log_string (Printf.sprintf "Ignoring unexpected genesis blocks burned during what appears to be after the genesis phase:\n"));
-		List.iter (fun (txhh,burned,dnxt) -> Utils.log_string (Printf.sprintf "%s %Ld %s\n" (hashval_hexstring txhh) burned (hashval_hexstring dnxt))) !genl
+		List.iter (fun (txhh,burned,dnxt) -> Printf.printf "%s %Ld %s\n" (hashval_hexstring txhh) burned (hashval_hexstring dnxt)) !genl
 	      end
 	    else (*** there has already been a genesis block created during the genesis phase, but a competing one (or more) was created; include it too ***)
 	      begin
@@ -754,48 +754,6 @@ let check_ltc_relay_fee l la lrf =
       end
   | _ -> false
 
-let rec offline_ltc_synced_txs hl =
-  match hl with
-  | [] -> true
-  | h::hr ->
-      if DbLtcBurnTx.dbexists h then
-	offline_ltc_synced_txs hr
-      else
-	begin
-	  find_and_send_requestdata GetLtcTx h;
-	  ignore (offline_ltc_synced_txs hr);
-	  false
-	end
-	
-let rec offline_ltc_synced_blocks h =
-  if h = !ltc_oldest_to_consider || DbLtcBlock.dbexists h then
-    true
-  else
-    try
-      let (prevh,_,_,txhl) = Hashtbl.find offlineltcblock h in
-      let b1 = offline_ltc_synced_txs txhl in
-      let b2 = offline_ltc_synced_blocks prevh in
-      b1 && b2
-    with Not_found ->
-      find_and_send_requestdata GetLtcBlocks h; (** this indicates we are not synced, so request many blocks at once **)
-      false
-
-let rec gather_ltc_blocks h i =
-  try
-    let (prevh,ltm,hght,txhs) = DbLtcBlock.dbget h in
-    if i > 0 then
-      let (ltcblks,invl) = gather_ltc_blocks h (i-1) in
-      let invl2 = ref invl in
-      List.iter
-	(fun txh ->
-	  if DbLtcBurnTx.dbexists txh then invl2 := (int_of_msgtype LtcTx,txh)::!invl2)
-	txhs;
-      ((h,prevh,ltm,hght,txhs)::ltcblks,!invl2)
-    else
-      ([],[(int_of_msgtype LtcBlock,h)])
-  with Not_found ->
-    ([],[])
-
 let init_ltcrelay_handlers () =
   if !Config.ltcrelay then
     begin
@@ -873,38 +831,6 @@ let init_ltcrelay_handlers () =
 		    let lblkmsgs = Buffer.contents lblkmsg in
 		    ignore (queue_msg cs LtcBlock lblkmsgs)
 		  with _ -> ());
-	    Hashtbl.add msgtype_handler GetLtcBlocks
-	      (fun (sin,sout,cs,ms) -> (*** send the LtcBlocks message with 256 blocks back from requested along with Inv for 256th previous block and for burn txs along the way (assuming node has them) ***)
-		let (h,_) = sei_hashval seis (ms,String.length ms,None,0,0) in
-		let i = int_of_msgtype GetLtcBlocks in
-		let tm = Unix.time() in
-		if recently_sent (i,h) tm cs.sentinv then (*** don't resend ***)
-		  begin
-		    Utils.log_string (Printf.sprintf "recently sent ltcblocks back from %s to %s; not resending\n" (hashval_hexstring h) cs.addrfrom);
-		  end
-		else
-		  try
-		    let (ltcblks,invl) = gather_ltc_blocks h 256 in
-		    if not (invl = []) then
-		      begin
-			let invmsg = Buffer.create 10000 in
-			let c = ref (seo_int32 seosb (Int32.of_int (List.length invl)) (invmsg,None)) in
-			List.iter
-			  (fun (i,h) ->
-			    c := seo_prod seo_int8 seo_hashval seosb (i,h) !c)
-			  invl;
-			seosbf !c;
-			let invmsgstr = Buffer.contents invmsg in
-			ignore (queue_msg cs Inv invmsgstr)
-		      end;
-		    let h2 = hashlist (List.map (fun (h,prevh,ltm,hght,txhs) -> hashlist [h;prevh;hashint64 ltm;hashint64 hght;hashlist txhs]) ltcblks) in
-		    let r = rand_256() in
-		    let sg : signat = signat_hashval h2 k r in
-		    let lblkmsg = Buffer.create 10000 in
-		    seosbf (seo_prod (seo_list (seo_prod5 seo_hashval seo_hashval seo_int64 seo_int64 (seo_list seo_hashval))) seo_signat seosb (ltcblks,sg) (lblkmsg,None));
-		    let lblkmsgs = Buffer.contents lblkmsg in
-		    ignore (queue_msg cs LtcBlocks lblkmsgs)
-		  with _ -> ());
 	    Hashtbl.add msgtype_handler GetLtcTx
 	      (fun (sin,sout,cs,ms) ->
 		let (h,_) = sei_hashval seis (ms,String.length ms,None,0,0) in
@@ -943,43 +869,11 @@ let init_ltcrelay_handlers () =
 		    log_string (Printf.sprintf "Accepting LtcBlock %s from %s: previous ltc block %s, median time %Ld, height %Ld, %d burn txs:\n" (hashval_hexstring h) a (hashval_hexstring prevh) ltm hght (List.length txhs));
 		    List.iter (fun txh -> log_string (Printf.sprintf "burn tx %s\n" (hashval_hexstring txh))) txhs;
 		    Hashtbl.add offlineltcblock h (prevh,ltm,hght,txhs);
-		    if offline_ltc_synced_blocks prevh && offline_ltc_synced_txs txhs then
-		      begin
-			try
-			  ltc_process_block (hashval_hexstring h) (*** this may fail if we are still syncing ***)
-			with Not_found -> ()
-		      end
+		    ltc_process_block (hashval_hexstring h) (*** this may fail if we are still syncing ***)
 		  end
 		else
 		  begin
 		    log_string (Printf.sprintf "WARNING: Signature for LtcBlock message for %s from %s was not correct; ignoring the message\n" (hashval_hexstring h) a)
-		  end
-	    | _ -> ());
-      Hashtbl.add msgtype_handler LtcBlocks
-	(fun (sin,sout,cs,ms) ->
-	  if cs.trusted then
-	    match cs.remotepubkey with
-	    | Some(x,y,compr) ->
-		let ((ltcblks,sg),_) = sei_prod (sei_list (sei_prod5 sei_hashval sei_hashval sei_int64 sei_int64 (sei_list sei_hashval))) sei_signat seis (ms,String.length ms,None,0,0) in
-		let h2 = hashlist (List.map (fun (h,prevh,ltm,hght,txhs) -> hashlist [h;prevh;hashint64 ltm;hashint64 hght;hashlist txhs]) ltcblks) in
-		let a = addr_daliladdrstr (md160_p2pkh_addr (pubkey_md160 (x,y) compr)) in
-		if verify_signed_hashval h2 (Some(x,y)) sg then
-		  begin
-		    log_string (Printf.sprintf "Accepting LtcBlocks from %s\n" a);
-		    List.iter (fun (h,prevh,ltm,hght,txhs) -> Hashtbl.add offlineltcblock h (prevh,ltm,hght,txhs)) ltcblks;
-		    match ltcblks with
-		    | (h,prevh,_,_,txhs)::_ ->
-			if offline_ltc_synced_blocks prevh && offline_ltc_synced_txs txhs then
-			  begin
-			    try
-			      ltc_process_block (hashval_hexstring h) (*** this may fail if we are still syncing ***)
-			    with Not_found -> ()
-			  end
-		    | [] -> ()
-		  end
-		else
-		  begin
-		    log_string (Printf.sprintf "WARNING: Signature for LtcBlocks message from %s was not correct; ignoring the message\n" a)
 		  end
 	    | _ -> ());
       Hashtbl.add msgtype_handler LtcTx
