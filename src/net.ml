@@ -475,7 +475,7 @@ let handle_msg replyto mt sin sout cs mh m =
 		  raise DupConnection
 		else
 		  cs.nonce = Some(n); (** remember the nonce to prevent duplicate connections to the same node **)
-		  let minvers = if vers > Version.protocolversion then Version.protocolversion else 0l in
+		  let minvers = if vers > Version.protocolversion then Version.protocolversion else vers in
 		  let mytm = Int64.of_float (Unix.time()) in
 		  let tmskew = Int64.sub tm mytm in
 		  if tmskew > 7200L then
@@ -697,7 +697,7 @@ let initialize_conn_accept ra s =
 
 let initialize_conn_2 n s sin sout =
   (*** initiate handshake ***)
-  let vers = 1l in
+  let vers = Version.protocolversion in
   let srvs = 1L in
   let tm = Unix.time() in
   let fhh = 0L in
