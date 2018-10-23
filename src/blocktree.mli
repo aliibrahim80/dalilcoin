@@ -12,6 +12,7 @@ open Tx
 open Ctre
 open Block
 
+val stxpooltm : (hashval,int64) Hashtbl.t
 val stxpool : (hashval,stx) Hashtbl.t
 val unconfirmed_spent_assets : (hashval,hashval) Hashtbl.t
 

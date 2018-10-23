@@ -19,6 +19,7 @@ open Ctre
 open Block
 open Ltcrpc
 
+let stxpooltm : (hashval,int64) Hashtbl.t = Hashtbl.create 1000;;
 let stxpool : (hashval,stx) Hashtbl.t = Hashtbl.create 1000;;
 let published_stx : (hashval,unit) Hashtbl.t = Hashtbl.create 1000;;
 let unconfirmed_spent_assets : (hashval,hashval) Hashtbl.t = Hashtbl.create 100;;
@@ -1375,6 +1376,9 @@ let remove_from_txpool txid =
 let savetxtopool_real txid stau =
   let ch = open_out_gen [Open_creat;Open_append;Open_wronly;Open_binary] 0o660 (Filename.concat (datadir()) "txpool") in
   seocf (seo_prod seo_hashval seo_stx seoc (txid,stau) (ch,None));
+  close_out ch;
+  let ch = open_out_gen [Open_creat;Open_append;Open_wronly;Open_binary] 0o660 (Filename.concat (datadir()) "txpooltm") in
+  seocf (seo_prod seo_int64 seo_hashval seoc (Int64.of_float (Unix.time()),txid) (ch,None));
   close_out ch;;
 
 Hashtbl.add msgtype_handler STx

@@ -158,7 +158,7 @@ let lock datadir =
   let lf = Filename.concat datadir "lock" in
   let c = open_out lf in
   close_out c;
-  exitfn := (fun n -> Commands.save_wallet(); saveknownpeers(); save_processing_deltas(); Sys.remove lf; exit n);;
+  exitfn := (fun n -> Commands.save_wallet(); Commands.save_txpool(); saveknownpeers(); save_processing_deltas(); Sys.remove lf; exit n);;
 
 let stkth : Thread.t option ref = ref None;;
 
