@@ -66,6 +66,7 @@ type connstate = {
     mutable rinv : (int * hashval,unit) Hashtbl.t;
     mutable invreq : (int * hashval,float) Hashtbl.t;
     mutable invreqhooks : (int * hashval,unit -> unit) Hashtbl.t;
+    mutable itemhooks : (int * hashval,unit -> unit) Hashtbl.t;
     mutable first_header_height : int64; (*** how much header history is stored at the node ***)
     mutable first_full_height : int64; (*** how much block/ctree history is stored at the node ***)
     mutable last_height : int64; (*** how up to date the node is ***)

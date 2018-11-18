@@ -1939,13 +1939,23 @@ let requestfullledger oc h =
 	else
 	  false
       in
-      let rec rec_req_conn stk cs =
+      let rec rec_req_conn stk cs ohk =
 	match stk with
 	| [(i,gi,h)] ->
 	    if gi = gini || not (check_if_have i h) then
 	      let tm = Unix.time() in
 	      if not (recently_requested (gi,h) tm cs.invreq) && (Hashtbl.mem cs.rinv (i,h)) then
 		begin
+		  begin
+		    match ohk with
+		    | None -> ()
+		    | Some(nwhk) ->
+			try
+			  let hk = Hashtbl.find cs.itemhooks (i,h) in
+			  Hashtbl.replace cs.itemhooks (i,h) (fun () -> hk(); nwhk())
+			with Not_found ->
+			  Hashtbl.add cs.itemhooks (i,h) nwhk
+		  end;
 		  let msb = Buffer.create 20 in
 		  if gi = gini then (*** probably should not happen, but handle it reasonably just in case ***)
 		    seosbf (seo_prod seo_int8 seo_hashval seosb (i,h) (msb,None))
@@ -1962,27 +1972,27 @@ let requestfullledger oc h =
 		seosbf (seo_prod seo_int8 seo_hashval seosb (i,h) (msb,None));
 		let ms = Buffer.contents msb in
 		ignore (queue_msg cs GetInvNbhd ms);
-		let nwhk () = rec_req_conn ((j,gj,k)::r) cs in
+		let nwhk () = rec_req_conn ((j,gj,k)::r) cs ohk in
 		try
 		  let hk = Hashtbl.find cs.invreqhooks (j,k) in
-		  Hashtbl.add cs.invreqhooks (j,k) (fun () -> hk(); nwhk());
+		  Hashtbl.replace cs.invreqhooks (j,k) (fun () -> hk(); nwhk());
 		with Not_found ->
 		  Hashtbl.add cs.invreqhooks (j,k) nwhk
 	      end
 	| _ -> () (*** ignore any other possibility since it should not happen ***)
       in
-      let rec_req stk =
+      let rec_req stk ohk =
 	List.iter
 	  (fun (_,_,gcs) ->
 	    match !gcs with
-	    | Some(cs) -> rec_req_conn stk cs
+	    | Some(cs) -> rec_req_conn stk cs ohk
 	    | None -> ())
 	  !source_peers
       in
       let rec requestasset oc h pars =
 	if not (DbAsset.dbexists h) then
 	  begin
-	    rec_req (List.rev ((ai,gai,h)::pars));
+	    rec_req (List.rev ((ai,gai,h)::pars)) None;
 	    incr cnt
 	  end
       in
@@ -1996,7 +2006,7 @@ let requestfullledger oc h =
 	try
 	  requestfullhlist_1 oc h pars
 	with Not_found ->
-	  rec_req (List.rev ((hei,ghei,h)::pars));
+	  rec_req (List.rev ((hei,ghei,h)::pars)) (Some(fun () -> requestfullhlist_1 oc h [(cei,gini,h)]));
 	  incr cnt
       in
       let rec requestfullctree oc h top pars =
@@ -2004,7 +2014,7 @@ let requestfullledger oc h =
 	  let e = DbCTreeElt.dbget h in
 	  requestfullctree_2 oc e top ((cei,gini,h)::pars)
 	with Not_found ->
-	  rec_req (List.rev ((cei,gcei,h)::pars));
+	  rec_req (List.rev ((cei,gcei,h)::pars)) (Some(fun () -> requestfullctree oc h top [(cei,gini,h)]));
 	  incr cnt
       and requestfullctree_2 oc c top pars =
 	match c with

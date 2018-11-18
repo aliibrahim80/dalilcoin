@@ -2570,6 +2570,11 @@ Hashtbl.add msgtype_handler HConsElement
 	    begin
   	      DbHConsElt.dbput h hk;
 	      Hashtbl.remove cs.invreq (i,h);
+	      let hei = int_of_msgtype HConsElement in
+	      try
+		Hashtbl.find cs.itemhooks (hei,h) ();
+		Hashtbl.remove cs.itemhooks (hei,h)
+	      with Not_found -> ()
 	    end
           else (*** otherwise, it seems to be a misbehaving peer --  ignore for now ***)
 	    Utils.log_string (Printf.sprintf "misbehaving peer? [malformed HConsElement]\n")
@@ -2603,6 +2608,11 @@ Hashtbl.add msgtype_handler CTreeElement
 	    begin
   	      DbCTreeElt.dbput h c;
 	      Hashtbl.remove cs.invreq (i,h);
+	      let cei = int_of_msgtype CTreeElement in
+	      try
+		Hashtbl.find cs.itemhooks (cei,h) ();
+		Hashtbl.remove cs.itemhooks (cei,h)
+	      with Not_found -> ()
 	    end
           else (*** otherwise, it seems to be a misbehaving peer --  ignore for now ***)
 	    Utils.log_string (Printf.sprintf "misbehaving peer? [malformed CTreeElement]\n")
