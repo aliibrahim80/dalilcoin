@@ -1902,6 +1902,22 @@ let preassetinfo_report oc u =
 	    createsnegprops
 	end
 
+let requestfullledger_pending : (unit -> unit) list ref = ref []
+
+let requestfullledger_th : Thread.t option ref = ref None
+
+let requestfullledger_continue () =
+  while true do
+    Thread.delay 600.0;
+    try
+      for i = 1 to 1024 do
+	match !requestfullledger_pending with
+	| [] -> raise Exit
+	| h::r -> h(); requestfullledger_pending := r
+      done
+    with Exit -> ()
+  done
+
 let requestfullledger oc h =
   let cnt = ref 0 in
   let topcnt = ref 0 in
@@ -1962,16 +1978,29 @@ let requestfullledger oc h =
 		  else
 		    seosbf (seo_hashval seosb h (msb,None));
 		  let ms = Buffer.contents msb in
-		  ignore (queue_msg cs (msgtype_of_int gi) ms)
+		  ignore (queue_msg cs (msgtype_of_int gi) ms);
+		  Hashtbl.add cs.invreq (gi,h) tm
 		end
 	| ((i,gi,h)::(j,gj,k)::r) when gi = gini ->
 	    let tm = Unix.time() in
-	    if not (recently_requested (gi,h) tm cs.invreq) && (Hashtbl.mem cs.rinv (i,h)) then
+	    if recently_requested (gj,k) tm cs.invreq then
+	      rec_req_conn ((j,gj,k)::r) cs ohk
+	    else if recently_requested (gi,h) tm cs.invreq then
+	      begin
+		let nwhk () = rec_req_conn ((j,gj,k)::r) cs ohk in
+		try
+		  let hk = Hashtbl.find cs.invreqhooks (j,k) in
+		  Hashtbl.replace cs.invreqhooks (j,k) (fun () -> hk(); nwhk());
+		with Not_found ->
+		  Hashtbl.add cs.invreqhooks (j,k) nwhk
+	      end
+	    else if Hashtbl.mem cs.rinv (i,h) then
 	      begin
 		let msb = Buffer.create 20 in
 		seosbf (seo_prod seo_int8 seo_hashval seosb (i,h) (msb,None));
 		let ms = Buffer.contents msb in
 		ignore (queue_msg cs GetInvNbhd ms);
+		Hashtbl.add cs.invreq (gi,h) tm;
 		let nwhk () = rec_req_conn ((j,gj,k)::r) cs ohk in
 		try
 		  let hk = Hashtbl.find cs.invreqhooks (j,k) in
@@ -1992,8 +2021,13 @@ let requestfullledger oc h =
       let rec requestasset oc h pars =
 	if not (DbAsset.dbexists h) then
 	  begin
-	    rec_req (List.rev ((ai,gai,h)::pars)) None;
-	    incr cnt
+	    if !cnt < 4096 then
+	      begin
+		rec_req (List.rev ((ai,gai,h)::pars)) None;
+		incr cnt
+	      end
+	    else
+	      requestfullledger_pending := (fun () -> rec_req (List.rev ((ai,gai,h)::pars)) None)::!requestfullledger_pending
 	  end
       in
       let rec requestfullhlist_1 oc h pars =
@@ -2006,16 +2040,26 @@ let requestfullledger oc h =
 	try
 	  requestfullhlist_1 oc h pars
 	with Not_found ->
-	  rec_req (List.rev ((hei,ghei,h)::pars)) (Some(fun () -> requestfullhlist_1 oc h [(cei,gini,h)]));
-	  incr cnt
+	  if !cnt < 4096 then
+	    begin
+	      rec_req (List.rev ((hei,ghei,h)::pars)) (Some(fun () -> requestfullhlist_1 oc h [(cei,gini,h)]));
+	      incr cnt
+	    end
+	  else
+	    requestfullledger_pending := (fun () -> rec_req (List.rev ((hei,ghei,h)::pars)) (Some(fun () -> requestfullhlist_1 oc h [(cei,gini,h)])))::!requestfullledger_pending
       in
       let rec requestfullctree oc h top pars =
 	try
 	  let e = DbCTreeElt.dbget h in
 	  requestfullctree_2 oc e top ((cei,gini,h)::pars)
 	with Not_found ->
-	  rec_req (List.rev ((cei,gcei,h)::pars)) (Some(fun () -> requestfullctree oc h top [(cei,gini,h)]));
-	  incr cnt
+	  if !cnt < 4096 then
+	    begin
+	      rec_req (List.rev ((cei,gcei,h)::pars)) (Some(fun () -> requestfullctree oc h top [(cei,gini,h)]));
+	      incr cnt
+	    end
+	  else
+	    requestfullledger_pending := (fun () -> rec_req (List.rev ((cei,gcei,h)::pars)) (Some(fun () -> requestfullctree oc h top [(cei,gini,h)])))::!requestfullledger_pending
       and requestfullctree_2 oc c top pars =
 	match c with
 	| CHash(h) ->
@@ -2035,10 +2079,17 @@ let requestfullledger oc h =
 	| CRight(c1) -> requestfullctree_2 oc c1 top pars
 	| CBin(c0,c1) -> requestfullctree_2 oc c0 top pars; requestfullctree_2 oc c1 top pars
       in
+      requestfullledger_pending := [];
       requestfullctree oc h true [];
       if !cnt = 0 then
 	Printf.fprintf oc "Verified node already has full ledger.\n"
       else
 	Printf.fprintf oc "Made %d requests and will continue requesting missing elements in the background.\n" !cnt;
       flush oc;
+      if not (!requestfullledger_pending = []) then 
+	begin
+	  match !requestfullledger_th with
+	  | None -> requestfullledger_th := Some(Thread.create requestfullledger_continue ())
+	  | Some(_) -> ()
+	end;
     end
