@@ -289,21 +289,24 @@ let init_sigtrees () =
 let collect_inv m cnt tosend txinv =
   let (lastchangekey,ctips0l) = ltcdacstatus_dbget !ltc_bestblock in
   let inclh : (hashval,unit) Hashtbl.t = Hashtbl.create 5000 in
-  let rec collect_inv_chain tosend n =
+  let collect_inv_rec_blocks tosend =
+    let (lastchangekey,ctips0l) = ltcdacstatus_dbget !ltc_bestblock in
     List.iter
-      (fun (bh,nch) ->
-	collect_inv_chain tosend nch;
-	if not (Hashtbl.mem inclh bh) then
-	  begin
-	    try
-	      let (bhd,_) = DbBlockHeader.dbget bh in
-	      Hashtbl.add inclh bh ();
-	      tosend := (int_of_msgtype Headers,bh)::!tosend;
-	      if DbCTreeElt.dbexists bhd.newledgerroot then tosend := (int_of_msgtype CTreeElement,bhd.newledgerroot)::!tosend;
-	      if DbBlockDelta.dbexists bh then (tosend := (int_of_msgtype Blockdelta,bh)::!tosend);
-	    with Not_found -> ()
-	  end)
-      !(node_children_ref n)
+      (fun ctips ->
+	List.iter
+	  (fun (bh,_,_,_,_) ->
+	    if not (Hashtbl.mem inclh bh) then
+	      begin
+		try
+		  let (bhd,_) = DbBlockHeader.dbget bh in
+		  Hashtbl.add inclh bh ();
+		  tosend := (int_of_msgtype Headers,bh)::!tosend;
+		  if DbCTreeElt.dbexists bhd.newledgerroot then tosend := (int_of_msgtype CTreeElement,bhd.newledgerroot)::!tosend;
+		  if DbBlockDelta.dbexists bh then (tosend := (int_of_msgtype Blockdelta,bh)::!tosend);
+		with Not_found -> ()
+	      end)
+	  ctips)
+      ctips0l
   in
   let rec collect_inv_r3 m cnt tosend ctips ctipsr txinv =
     if !cnt < m then
@@ -342,7 +345,7 @@ let collect_inv m cnt tosend txinv =
 	      collect_inv_r2 m cnt tosend ctipsl txinv
       end
   in
-  collect_inv_chain tosend !genesisblocktreenode;
+  collect_inv_rec_blocks tosend;
   collect_inv_r1 m cnt tosend ctips0l txinv
 
 let send_inv m sout cs =
