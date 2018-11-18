@@ -47,13 +47,14 @@ type msgtype =
   | CTreeElement
   | HConsElement
   | Asset
+  | GetInvNbhd
 
 let msgtype_of_int i =
   try
     List.nth
       [Version;Verack;Addr;Inv;GetSTx;GetHeaders;GetHeader;GetBlock;GetBlockdelta;
        STx;Block;Headers;Blockdelta;GetAddr;Alert;Ping;Pong;
-       GetCTreeElement;GetHConsElement;GetAsset;CTreeElement;HConsElement;Asset]
+       GetCTreeElement;GetHConsElement;GetAsset;CTreeElement;HConsElement;Asset;GetInvNbhd]
       i
   with Failure("nth") -> raise Not_found
 
@@ -82,6 +83,7 @@ let int_of_msgtype mt =
   | CTreeElement -> 20
   | HConsElement -> 21
   | Asset -> 22
+  | GetInvNbhd -> 23
 
 let inv_of_msgtype mt =
   try
@@ -123,6 +125,7 @@ let string_of_msgtype mt =
   | CTreeElement -> "CTreeElement"
   | HConsElement -> "HConsElement"
   | Asset -> "Asset"
+  | GetInvNbhd -> "GetInvNbhd"
 
 let myaddr () =
   match !Config.ip with
@@ -333,6 +336,7 @@ type connstate = {
     mutable sentinv : (int * hashval,float) Hashtbl.t;
     mutable rinv : (int * hashval,unit) Hashtbl.t;
     mutable invreq : (int * hashval,float) Hashtbl.t;
+    mutable invreqhooks : (int * hashval,unit -> unit) Hashtbl.t;
     mutable first_header_height : int64; (*** how much header history is stored at the node ***)
     mutable first_full_height : int64; (*** how much block/ctree history is stored at the node ***)
     mutable last_height : int64; (*** how up to date the node is ***)
@@ -516,7 +520,7 @@ let handle_msg replyto mt sin sout cs mh m =
 			cs.first_full_height <- ffh;
 			cs.last_height <- lh;
 			addknownpeer mytm addr_from;
-			!send_inv_fn 5000 sout cs
+			!send_inv_fn 128 sout cs
 		      end
 		    else
 		      raise (ProtocolViolation "Handshake failed")
@@ -530,7 +534,7 @@ let handle_msg replyto mt sin sout cs mh m =
 		    let mytm = Int64.of_float (Unix.time()) in
 		    cs.handshakestep <- 5;
 		    addknownpeer mytm cs.addrfrom;
-		    !send_inv_fn 5000 sout cs
+		    !send_inv_fn 128 sout cs
 		  end
 		else
 		  raise (ProtocolViolation("Unexpected Verack"))
@@ -681,7 +685,7 @@ let initialize_conn_accept ra s =
       set_binary_mode_in sin true;
       set_binary_mode_out sout true;
       let tm = Unix.time() in
-      let cs = { conntime = tm; realaddr = ra; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 1; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; sentinv = Hashtbl.create 100; rinv = Hashtbl.create 1000; invreq = Hashtbl.create 100; first_header_height = 0L; first_full_height = 0L; last_height = 0L } in
+      let cs = { conntime = tm; realaddr = ra; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 1; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; sentinv = Hashtbl.create 100; rinv = Hashtbl.create 1000; invreq = Hashtbl.create 100; invreqhooks = Hashtbl.create 100; first_header_height = 0L; first_full_height = 0L; last_height = 0L } in
       let sgcs = (s,sin,sout,ref (Some(cs))) in
       let clth = Thread.create connlistener sgcs in
       let csth = Thread.create connsender sgcs in
@@ -714,7 +718,7 @@ let initialize_conn_2 n s sin sout =
        ((vers,srvs,Int64.of_float tm,n,myaddr(),!this_nodes_nonce),
 	(Version.useragent,fhh,ffh,lh,relay,lastchkpt))
        (vm,None));
-  let cs = { conntime = tm; realaddr = n; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 2; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; sentinv = Hashtbl.create 100; rinv = Hashtbl.create 1000; invreq = Hashtbl.create 100; first_header_height = fhh; first_full_height = ffh; last_height = lh } in
+  let cs = { conntime = tm; realaddr = n; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 2; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; sentinv = Hashtbl.create 100; rinv = Hashtbl.create 1000; invreq = Hashtbl.create 100; invreqhooks = Hashtbl.create 100; first_header_height = fhh; first_full_height = ffh; last_height = lh } in
   queue_msg cs Version (Buffer.contents vm);
   let sgcs = (s,sin,sout,ref (Some(cs))) in
   let clth = Thread.create connlistener sgcs in
@@ -875,11 +879,32 @@ let broadcast_requestdata mt h =
        match !gcs with
        | Some(cs) ->
            if not (recently_requested (i,h) tm cs.invreq) &&
-	     (Hashtbl.mem cs.rinv (inv_of_msgtype mt,h)
-	    || mt = GetCTreeElement || mt = GetHConsElement || mt = GetAsset)
+	     (Hashtbl.mem cs.rinv (inv_of_msgtype mt,h))
+(*	    || mt = GetCTreeElement || mt = GetHConsElement || mt = GetAsset *)
 	   then
              begin
                queue_msg cs mt ms;
+	       Hashtbl.replace cs.invreq (i,h) tm
+             end
+       | None -> ())
+    !netconns;;
+
+let broadcast_requestinv mt h =
+  let i = int_of_msgtype mt in
+  let msb = Buffer.create 20 in
+  seosbf (seo_prod seo_int8 seo_hashval seosb (i,h) (msb,None));
+  let ms = Buffer.contents msb in
+  let tm = Unix.time() in
+  List.iter
+    (fun (lth,sth,(fd,sin,sout,gcs)) ->
+       match !gcs with
+       | Some(cs) ->
+           if not (recently_requested (i,h) tm cs.invreq) &&
+	     (Hashtbl.mem cs.rinv (inv_of_msgtype mt,h))
+(*	    || mt = GetCTreeElement || mt = GetHConsElement || mt = GetAsset *)
+	   then
+             begin
+               queue_msg cs GetInvNbhd ms;
 	       Hashtbl.replace cs.invreq (i,h) tm
              end
        | None -> ())
@@ -1052,3 +1077,13 @@ Hashtbl.add msgtype_handler Ping
       ignore (queue_msg cs Pong ""));;
 
 Hashtbl.add msgtype_handler Pong (fun _ -> ());;
+
+let send_inv_to_one tosend cs =
+  let invmsg = Buffer.create 10000 in
+  let c = ref (seo_int32 seosb (Int32.of_int (List.length tosend)) (invmsg,None)) in
+  List.iter
+    (fun (i,h) ->
+      let cn = seo_prod seo_int8 seo_hashval seosb (i,h) !c in
+      c := cn)
+    tosend;
+  ignore (queue_msg cs Inv (Buffer.contents invmsg));;

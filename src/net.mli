@@ -40,6 +40,7 @@ type msgtype =
   | CTreeElement
   | HConsElement
   | Asset
+  | GetInvNbhd
 
 val msgtype_of_int : int -> msgtype
 val int_of_msgtype : msgtype -> int
@@ -64,6 +65,7 @@ type connstate = {
     mutable sentinv : (int * hashval,float) Hashtbl.t;
     mutable rinv : (int * hashval,unit) Hashtbl.t;
     mutable invreq : (int * hashval,float) Hashtbl.t;
+    mutable invreqhooks : (int * hashval,unit -> unit) Hashtbl.t;
     mutable first_header_height : int64; (*** how much header history is stored at the node ***)
     mutable first_full_height : int64; (*** how much block/ctree history is stored at the node ***)
     mutable last_height : int64; (*** how up to date the node is ***)
@@ -105,7 +107,10 @@ val queue_reply : connstate -> hashval -> msgtype -> string -> hashval
 val find_and_send_requestdata : msgtype -> hashval -> unit
 val find_and_send_requestmissingheaders : unit -> unit
 val broadcast_requestdata : msgtype -> hashval -> unit
+val broadcast_requestinv : msgtype -> hashval -> unit
 val broadcast_inv : (int * hashval) list -> unit
+val send_inv_to_one : (int * hashval) list -> connstate -> unit
 
 val recently_requested : int * hashval -> float -> (int * hashval,float) Hashtbl.t -> bool
 val recently_sent : int * hashval -> float -> (int * hashval,float) Hashtbl.t -> bool
+

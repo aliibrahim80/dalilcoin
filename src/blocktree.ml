@@ -295,12 +295,13 @@ let collect_inv m cnt tosend txinv =
 	collect_inv_chain tosend nch;
 	if not (Hashtbl.mem inclh bh) then
 	  begin
-	    if DbBlockHeader.dbexists bh then
-	      begin
-		Hashtbl.add inclh bh ();
-		tosend := (int_of_msgtype Headers,bh)::!tosend;
-		if DbBlockDelta.dbexists bh then (tosend := (int_of_msgtype Blockdelta,bh)::!tosend)
-	      end;
+	    try
+	      let (bhd,_) = DbBlockHeader.dbget bh in
+	      Hashtbl.add inclh bh ();
+	      tosend := (int_of_msgtype Headers,bh)::!tosend;
+	      if DbCTreeElt.dbexists bhd.newledgerroot then tosend := (int_of_msgtype CTreeElement,bhd.newledgerroot)::!tosend;
+	      if DbBlockDelta.dbexists bh then (tosend := (int_of_msgtype Blockdelta,bh)::!tosend);
+	    with Not_found -> ()
 	  end)
       !(node_children_ref n)
   in
@@ -350,14 +351,7 @@ let send_inv m sout cs =
   let txinv = ref [] in
   Hashtbl.iter (fun k _ -> txinv := k::!txinv) stxpool;
   collect_inv m cnt tosend !txinv;
-  let invmsg = Buffer.create 10000 in
-  let c = ref (seo_int32 seosb (Int32.of_int (List.length !tosend)) (invmsg,None)) in
-  List.iter
-    (fun (i,h) ->
-      let cn = seo_prod seo_int8 seo_hashval seosb (i,h) !c in
-      c := cn)
-    !tosend;
-  ignore (queue_msg cs Inv (Buffer.contents invmsg));;
+  send_inv_to_one !tosend cs;;
 
 send_inv_fn := send_inv;;
 
@@ -1193,6 +1187,36 @@ let rec req_header_batches sout cs m hl nw =
 	req_header_batches sout cs (m+1) hr (h::nw)
     | [] -> req_headers sout cs m nw;;
 
+Hashtbl.add msgtype_handler GetInvNbhd
+  (fun (sin,sout,cs,ms) ->
+    let c = ref (ms,String.length ms,None,0,0) in
+    let ((i,h),cn) = sei_prod sei_int8 sei_hashval seis !c in
+    c := cn;
+    match msgtype_of_int i with
+    | Headers ->
+	begin
+	  let tosend = ref [] in
+	  collect_header_inv_nbhd 8 h tosend;
+	  if not (!tosend = []) then send_inv_to_one !tosend cs
+	end
+    | CTreeElement ->
+	begin
+	  try
+	    let c = DbCTreeElt.dbget h in
+	    let tosend = ref [] in
+	    collect_ctree_inv_nbhd c tosend;
+	    if not (!tosend = []) then send_inv_to_one !tosend cs
+	  with Not_found ->
+	    ()
+	end
+    | HConsElement ->
+	begin
+	  let tosend = ref [] in
+	  collect_hcons_inv_nbhd 8 h tosend;
+	  if not (!tosend = []) then send_inv_to_one !tosend cs
+	end
+    | _ -> ());;
+
 Hashtbl.add msgtype_handler Inv
   (fun (sin,sout,cs,ms) ->
     let c = ref (ms,String.length ms,None,0,0) in
@@ -1204,6 +1228,13 @@ Hashtbl.add msgtype_handler Inv
       let ((i,h),cn) = sei_prod sei_int8 sei_hashval seis !c in
       c := cn;
       Hashtbl.replace cs.rinv (i,h) ();
+      begin
+	try
+	  Hashtbl.find cs.invreqhooks (i,h) (); (*** execute any hook functions waiting on this inventory message ***)
+	  Hashtbl.remove cs.invreqhooks (i,h)
+	with Not_found ->
+	  ()
+      end;
       if i = int_of_msgtype Headers then log_string (Printf.sprintf "Headers, dbexists %b, archived %b\n" (DbBlockHeader.dbexists h) (DbArchived.dbexists h));
       log_string (Printf.sprintf "Inv %d %s\n" i (hashval_hexstring h));
       if i = int_of_msgtype Headers && not (DbArchived.dbexists h) then

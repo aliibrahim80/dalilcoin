@@ -158,3 +158,5 @@ val ledgerroot_of_blockchain : blockchain -> hashval
 val valid_blockchain : int64 -> blockchain -> int64 -> int64 -> bool
 
 val valid_blockheaderchain : int64 -> blockheaderchain -> int64 -> int64 -> bool
+
+val collect_header_inv_nbhd : int -> hashval -> (int * hashval) list ref -> unit

@@ -137,3 +137,7 @@ val hashctree : ctree -> hashval
 
 val json_ctree : ctree -> jsonval
 val ctree_from_json : jsonval -> ctree
+
+val collect_hcons_inv_nbhd : int -> hashval -> (int * hashval) list ref -> unit
+val collect_hlist_inv_nbhd : hlist -> (int * hashval) list ref -> unit
+val collect_ctree_inv_nbhd : ctree -> (int * hashval) list ref -> unit

@@ -789,3 +789,22 @@ let rec valid_blockheaderchain_aux blkh bhl lmedtm burned =
 let valid_blockheaderchain blkh bhc burned =
   match bhc with
   | (bh,bhr) -> valid_blockheaderchain_aux blkh (bh::bhr) burned
+
+let rec collect_header_inv_nbhd m h tosend =
+  if m > 0 then
+    begin
+      try
+	let (bhd,_) as bh = DbBlockHeader.dbget h in
+	collect_header_inv_nbhd_2 m h bhd tosend
+      with Not_found -> ()
+    end
+and collect_header_inv_nbhd_2 m h bhd tosend =
+  tosend := (int_of_msgtype Headers,h)::!tosend;
+  if DbCTreeElt.dbexists bhd.newledgerroot then tosend := (int_of_msgtype CTreeElement,bhd.newledgerroot)::!tosend;
+  if DbBlockDelta.dbexists h then tosend := (int_of_msgtype Blockdelta,bhd.newledgerroot)::!tosend;
+  begin
+    match bhd.prevblockhash with
+    | Some(k,_) -> collect_header_inv_nbhd (m-1) k tosend
+    | _ -> ()
+  end
+

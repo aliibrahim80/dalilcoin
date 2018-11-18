@@ -2507,6 +2507,37 @@ let rec minimal_asset_supporting_ctree tr bl aid n =
       end
   | _ -> false;;
 
+let rec collect_hcons_inv_nbhd m h tosend =
+  if m > 0 then
+    begin
+      try
+	match DbHConsElt.dbget h with
+	| (ah,None) ->
+	    if DbAsset.dbexists ah then tosend := (int_of_msgtype Asset,ah)::!tosend
+	| (ah,Some(k,_)) ->
+	    if DbAsset.dbexists ah then tosend := (int_of_msgtype Asset,ah)::!tosend;
+	    collect_hcons_inv_nbhd (m-1) k tosend
+      with Not_found -> ()
+    end
+
+let rec collect_hlist_inv_nbhd hl tosend =
+  match hl with
+  | HHash(h,_) -> collect_hcons_inv_nbhd 1 h tosend
+  | HNil -> ()
+  | HCons(_,hr) -> collect_hlist_inv_nbhd hr tosend
+  | HConsH(ah,hr) ->
+      if DbAsset.dbexists ah then tosend := (int_of_msgtype Asset,ah)::!tosend;
+      collect_hlist_inv_nbhd hr tosend
+
+let rec collect_ctree_inv_nbhd c tosend =
+  match c with
+  | CHash(h) -> if DbCTreeElt.dbexists h then tosend := (int_of_msgtype CTreeElement,h)::!tosend
+  | CLeft(c0) -> collect_ctree_inv_nbhd c0 tosend
+  | CRight(c1) -> collect_ctree_inv_nbhd c1 tosend
+  | CBin(c0,c1) -> collect_ctree_inv_nbhd c0 tosend; collect_ctree_inv_nbhd c1 tosend
+  | CLeaf(_,hl) -> collect_hlist_inv_nbhd (nehlist_hlist hl) tosend
+  | _ -> ();;
+
 Hashtbl.add msgtype_handler GetHConsElement
     (fun (sin,sout,cs,ms) ->
       let (h,_) = sei_hashval seis (ms,String.length ms,None,0,0) in
@@ -2538,7 +2569,7 @@ Hashtbl.add msgtype_handler HConsElement
 	  if hkh = h then
 	    begin
   	      DbHConsElt.dbput h hk;
-	      Hashtbl.remove cs.invreq (i,h)
+	      Hashtbl.remove cs.invreq (i,h);
 	    end
           else (*** otherwise, it seems to be a misbehaving peer --  ignore for now ***)
 	    Utils.log_string (Printf.sprintf "misbehaving peer? [malformed HConsElement]\n")
@@ -2571,7 +2602,7 @@ Hashtbl.add msgtype_handler CTreeElement
 	  if ctree_element_p c && ctree_hashroot c = h then
 	    begin
   	      DbCTreeElt.dbput h c;
-	      Hashtbl.remove cs.invreq (i,h)
+	      Hashtbl.remove cs.invreq (i,h);
 	    end
           else (*** otherwise, it seems to be a misbehaving peer --  ignore for now ***)
 	    Utils.log_string (Printf.sprintf "misbehaving peer? [malformed CTreeElement]\n")
