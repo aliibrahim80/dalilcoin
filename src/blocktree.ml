@@ -1226,6 +1226,7 @@ Hashtbl.add msgtype_handler Inv
     let hl = ref [] in
     let (n,cn) = sei_int32 seis !c in
     log_string (Printf.sprintf "Inv msg %ld entries\n" n);
+    log_string (Printf.sprintf "Inv msg %ld entries %f\n" n (Unix.time()));
     c := cn;
     for j = 1 to Int32.to_int n do
       let ((i,h),cn) = sei_prod sei_int8 sei_hashval seis !c in
@@ -1239,7 +1240,7 @@ Hashtbl.add msgtype_handler Inv
 	  ()
       end;
       if i = int_of_msgtype Headers then log_string (Printf.sprintf "Headers, dbexists %b, archived %b\n" (DbBlockHeader.dbexists h) (DbArchived.dbexists h));
-      log_string (Printf.sprintf "Inv %d %s\n" i (hashval_hexstring h));
+(*      log_string (Printf.sprintf "Inv %d %s\n" i (hashval_hexstring h)); *)
       if i = int_of_msgtype Headers && not (DbArchived.dbexists h) then
 	begin
 	  try

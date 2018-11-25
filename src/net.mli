@@ -41,6 +41,7 @@ type msgtype =
   | HConsElement
   | Asset
   | GetInvNbhd
+  | GetElementsBelow
 
 val msgtype_of_int : int -> msgtype
 val int_of_msgtype : msgtype -> int
@@ -115,3 +116,5 @@ val send_inv_to_one : (int * hashval) list -> connstate -> unit
 val recently_requested : int * hashval -> float -> (int * hashval,float) Hashtbl.t -> bool
 val recently_sent : int * hashval -> float -> (int * hashval,float) Hashtbl.t -> bool
 
+val liberally_accept_elements_until : float -> unit
+val liberally_accept_elements_p : float -> bool

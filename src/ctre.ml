@@ -2556,10 +2556,11 @@ Hashtbl.add msgtype_handler GetHConsElement
 Hashtbl.add msgtype_handler HConsElement
     (fun (sin,sout,cs,ms) ->
       let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
+      Utils.log_string (Printf.sprintf "HConsElement %s %f\n" (hashval_hexstring h) (Unix.time()));
       let i = int_of_msgtype GetHConsElement in
       if not (DbHConsElt.dbexists h) then (*** if we already have it, abort ***)
 	let tm = Unix.time() in
-	if recently_requested (i,h) tm cs.invreq then (*** only continue if it was requested ***)
+	if liberally_accept_elements_p tm || recently_requested (i,h) tm cs.invreq then (*** only continue if it was requested or we're liberally accepting elements to get the full ledger ***)
           let (hk,_) = sei_prod sei_hashval (sei_option (sei_prod sei_hashval sei_int8)) seis r in
 	  let hkh =
 	    match hk with
@@ -2599,10 +2600,11 @@ Hashtbl.add msgtype_handler GetCTreeElement
 Hashtbl.add msgtype_handler CTreeElement
     (fun (sin,sout,cs,ms) ->
       let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
+      Utils.log_string (Printf.sprintf "CTreeElement %s %f\n" (hashval_hexstring h) (Unix.time()));
       let i = int_of_msgtype GetCTreeElement in
       if not (DbCTreeElt.dbexists h) then (*** if we already have it, abort ***)
 	let tm = Unix.time () in
-	if recently_requested (i,h) tm cs.invreq then (*** only continue if it was requested ***)
+	if liberally_accept_elements_p tm || recently_requested (i,h) tm cs.invreq then (*** only continue if it was requested or we're liberally accepting to get the full ledger ***)
           let (c,_) = sei_ctree seis r in
 	  if ctree_element_p c && ctree_hashroot c = h then
 	    begin
@@ -2618,6 +2620,69 @@ Hashtbl.add msgtype_handler CTreeElement
 	    Utils.log_string (Printf.sprintf "misbehaving peer? [malformed CTreeElement]\n")
 	else (*** if something unrequested was sent, then seems to be a misbehaving peer ***)
 	  Utils.log_string (Printf.sprintf "misbehaving peer? [unrequested CTreeElement]\n"));;
+
+let rec send_elements_below_hconselt tm cs h =
+  try
+    let i = int_of_msgtype GetHConsElement in
+    let hk = DbHConsElt.dbget h in
+    if not (recently_sent (i,h) tm cs.sentinv) then (*** don't resend ***)
+      begin
+	let hksb = Buffer.create 100 in
+	seosbf (seo_prod seo_hashval (seo_option (seo_prod seo_hashval seo_int8)) seosb hk (seo_hashval seosb h (hksb,None)));
+	let hkser = Buffer.contents hksb in
+	ignore (queue_msg cs HConsElement hkser);
+	Hashtbl.replace cs.sentinv (i,h) tm
+      end;
+    match hk with
+    | (ah,r) ->
+	let i = int_of_msgtype GetAsset in
+	if not (recently_sent (i,h) tm cs.sentinv) then (*** don't resend ***)
+	  begin
+	    try
+	      let a = DbAsset.dbget h in
+	      let asb = Buffer.create 100 in
+	      seosbf (seo_asset seosb a (seo_hashval seosb h (asb,None)));
+	      let aser = Buffer.contents asb in
+	      ignore (queue_msg cs Asset aser);
+	      Hashtbl.replace cs.sentinv (i,h) tm
+	    with Not_found -> ();
+	  end;
+	match r with
+	| None -> ()
+	| Some(hr,l) -> send_elements_below_hconselt tm cs hr
+  with Not_found -> ();;
+
+let rec send_elements_below_ctreeelt tm cs h =
+  try
+    let c = DbCTreeElt.dbget h in
+    begin
+      let i = int_of_msgtype GetCTreeElement in
+      if not (recently_sent (i,h) tm cs.sentinv) then (*** don't resend ***)
+	let csb = Buffer.create 100 in
+	seosbf (seo_ctree seosb c (seo_hashval seosb h (csb,None)));
+	let cser = Buffer.contents csb in
+	ignore (queue_msg cs CTreeElement cser);
+	Hashtbl.replace cs.sentinv (i,h) tm
+    end;
+    send_elements_below_ctree tm cs c
+  with Not_found -> ()
+and send_elements_below_ctree tm cs c =
+  match c with
+  | CHash(h) -> send_elements_below_ctreeelt tm cs h
+  | CLeaf(_,NehHash(h,_)) -> send_elements_below_hconselt tm cs h
+  | CLeaf(_,_) -> () (*** should not happen ***)
+  | CLeft(c0) -> send_elements_below_ctree tm cs c0
+  | CRight(c1) -> send_elements_below_ctree tm cs c1
+  | CBin(c0,c1) -> send_elements_below_ctree tm cs c0; send_elements_below_ctree tm cs c1
+;;
+
+Hashtbl.add msgtype_handler GetElementsBelow
+(fun (sin,sout,cs,ms) ->
+  let ((j,h),_) = sei_prod sei_int8 sei_hashval seis (ms,String.length ms,None,0,0) in
+  if j = int_of_msgtype CTreeElement then
+    send_elements_below_ctreeelt (Unix.time()) cs h
+  else if j = int_of_msgtype HConsElement then
+    send_elements_below_hconselt (Unix.time()) cs h);;
 
 let hashctree c =
   let s = Buffer.create 1000 in

@@ -423,10 +423,11 @@ Hashtbl.add msgtype_handler GetAsset
 Hashtbl.add msgtype_handler Asset
     (fun (sin,sout,cs,ms) ->
       let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
+      Utils.log_string (Printf.sprintf "Asset %s %f\n" (hashval_hexstring h) (Unix.time()));
       let i = int_of_msgtype GetAsset in
       if not (DbAsset.dbexists h) then (*** if we already have it, abort ***)
 	let tm = Unix.time() in
-	if recently_requested (i,h) tm cs.invreq then (*** only continue if it was requested ***)
+	if liberally_accept_elements_p tm || recently_requested (i,h) tm cs.invreq then (*** only continue if it was requested or we're liberally accepting elements to get the full ledger ***)
           let (a,r) = sei_asset seis r in
   	  DbAsset.dbput h a;
 	  Hashtbl.remove cs.invreq (i,h)

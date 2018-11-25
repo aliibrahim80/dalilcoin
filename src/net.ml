@@ -48,13 +48,15 @@ type msgtype =
   | HConsElement
   | Asset
   | GetInvNbhd
+  | GetElementsBelow
 
 let msgtype_of_int i =
   try
     List.nth
       [Version;Verack;Addr;Inv;GetSTx;GetHeaders;GetHeader;GetBlock;GetBlockdelta;
        STx;Block;Headers;Blockdelta;GetAddr;Alert;Ping;Pong;
-       GetCTreeElement;GetHConsElement;GetAsset;CTreeElement;HConsElement;Asset;GetInvNbhd]
+       GetCTreeElement;GetHConsElement;GetAsset;CTreeElement;HConsElement;Asset;GetInvNbhd;
+       GetElementsBelow]
       i
   with Failure("nth") -> raise Not_found
 
@@ -84,6 +86,7 @@ let int_of_msgtype mt =
   | HConsElement -> 21
   | Asset -> 22
   | GetInvNbhd -> 23
+  | GetElementsBelow -> 24
 
 let inv_of_msgtype mt =
   try
@@ -1088,3 +1091,12 @@ let send_inv_to_one tosend cs =
       c := cn)
     tosend;
   ignore (queue_msg cs Inv (Buffer.contents invmsg));;
+
+let liberally_accept_elements_tm = ref None;;
+
+let liberally_accept_elements_until tm = liberally_accept_elements_tm := Some(tm);;
+
+let liberally_accept_elements_p tm =
+  match !liberally_accept_elements_tm with
+  | Some(ltm) -> if tm < ltm then true else (liberally_accept_elements_tm := None; false)
+  | None -> false;;
