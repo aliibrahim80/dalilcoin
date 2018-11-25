@@ -1948,8 +1948,6 @@ let requestfullledger oc h =
     end
   else
     begin
-      Printf.fprintf oc "Checking for missing elements of %s to request from peers. This may take a long time.\n" (hashval_hexstring h);
-      flush oc;
       let rec requestfullctree_top oc c =
 	match c with
 	| CHash(h) ->
@@ -2011,6 +2009,8 @@ let requestfullledger oc h =
 	try
 	  let c = DbCTreeElt.dbget h in
 	  (** have the root at least, request its nbhd in case we need it **)
+	  Printf.fprintf oc "Checking for missing elements of %s to request from peers. This may take a long time.\n" (hashval_hexstring h);
+	  flush oc;
 	  let tm = Unix.time() in
 	  List.iter
 	    (fun (_,_,gcs) ->
@@ -2035,6 +2035,8 @@ let requestfullledger oc h =
 	  flush oc;
 	with Not_found ->
 	  (** do not have the root, request its nbhd and it with a hook to continue, if we haven't already **)
+	  Printf.fprintf oc "Requesting the ledger root first, and then will request the rest of the ledger in the background.\n";
+	  flush oc;
 	  let tm = Unix.time() in
 	  List.iter
 	    (fun (_,_,gcs) ->
