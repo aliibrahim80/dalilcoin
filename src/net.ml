@@ -129,6 +129,7 @@ let string_of_msgtype mt =
   | HConsElement -> "HConsElement"
   | Asset -> "Asset"
   | GetInvNbhd -> "GetInvNbhd"
+  | GetElementsBelow -> "GetElementsBelow"
 
 let myaddr () =
   match !Config.ip with
