@@ -2556,7 +2556,7 @@ Hashtbl.add msgtype_handler GetHConsElement
 Hashtbl.add msgtype_handler HConsElement
     (fun (sin,sout,cs,ms) ->
       let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
-      Utils.log_string (Printf.sprintf "HConsElement %s %f\n" (hashval_hexstring h) (Unix.time()));
+(*      Utils.log_string (Printf.sprintf "HConsElement %s %f\n" (hashval_hexstring h) (Unix.time())); *)
       let i = int_of_msgtype GetHConsElement in
       if not (DbHConsElt.dbexists h) then (*** if we already have it, abort ***)
 	let tm = Unix.time() in
@@ -2600,7 +2600,7 @@ Hashtbl.add msgtype_handler GetCTreeElement
 Hashtbl.add msgtype_handler CTreeElement
     (fun (sin,sout,cs,ms) ->
       let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
-      Utils.log_string (Printf.sprintf "CTreeElement %s %f\n" (hashval_hexstring h) (Unix.time()));
+(*      Utils.log_string (Printf.sprintf "CTreeElement %s %f\n" (hashval_hexstring h) (Unix.time())); *)
       let i = int_of_msgtype GetCTreeElement in
       if not (DbCTreeElt.dbexists h) then (*** if we already have it, abort ***)
 	let tm = Unix.time () in

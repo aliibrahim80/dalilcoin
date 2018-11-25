@@ -1225,8 +1225,7 @@ Hashtbl.add msgtype_handler Inv
     let c = ref (ms,String.length ms,None,0,0) in
     let hl = ref [] in
     let (n,cn) = sei_int32 seis !c in
-    log_string (Printf.sprintf "Inv msg %ld entries\n" n);
-    log_string (Printf.sprintf "Inv msg %ld entries %f\n" n (Unix.time()));
+(*    log_string (Printf.sprintf "Inv msg %ld entries\n" n); *)
     c := cn;
     for j = 1 to Int32.to_int n do
       let ((i,h),cn) = sei_prod sei_int8 sei_hashval seis !c in

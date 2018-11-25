@@ -423,7 +423,7 @@ Hashtbl.add msgtype_handler GetAsset
 Hashtbl.add msgtype_handler Asset
     (fun (sin,sout,cs,ms) ->
       let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
-      Utils.log_string (Printf.sprintf "Asset %s %f\n" (hashval_hexstring h) (Unix.time()));
+(*      Utils.log_string (Printf.sprintf "Asset %s %f\n" (hashval_hexstring h) (Unix.time())); *)
       let i = int_of_msgtype GetAsset in
       if not (DbAsset.dbexists h) then (*** if we already have it, abort ***)
 	let tm = Unix.time() in
