@@ -1965,7 +1965,7 @@ let requestfullledger oc h =
 	      begin
 		incr cnt;
 		let tm = Unix.time() in
-		liberally_accept_elements_until (tm +. 3600.0);
+		liberally_accept_elements_until (tm +. (7200.0 *. (float_of_int !cnt)));
 		List.iter
 		  (fun (_,_,gcs) ->
 		    match !gcs with
@@ -1986,7 +1986,7 @@ let requestfullledger oc h =
 	      begin
 		incr cnt;
 		let tm = Unix.time() in
-		liberally_accept_elements_until (tm +. 3600.0);
+		liberally_accept_elements_until (tm +. (7200.0 *. (float_of_int !cnt)));
 		List.iter
 		  (fun (_,_,gcs) ->
 		    match !gcs with

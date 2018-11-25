@@ -2636,15 +2636,15 @@ let rec send_elements_below_hconselt tm cs h =
     match hk with
     | (ah,r) ->
 	let i = int_of_msgtype GetAsset in
-	if not (recently_sent (i,h) tm cs.sentinv) then (*** don't resend ***)
+	if not (recently_sent (i,ah) tm cs.sentinv) then (*** don't resend ***)
 	  begin
 	    try
-	      let a = DbAsset.dbget h in
+	      let a = DbAsset.dbget ah in
 	      let asb = Buffer.create 100 in
-	      seosbf (seo_asset seosb a (seo_hashval seosb h (asb,None)));
+	      seosbf (seo_asset seosb a (seo_hashval seosb ah (asb,None)));
 	      let aser = Buffer.contents asb in
 	      ignore (queue_msg cs Asset aser);
-	      Hashtbl.replace cs.sentinv (i,h) tm
+	      Hashtbl.replace cs.sentinv (i,ah) tm
 	    with Not_found -> ();
 	  end;
 	match r with
