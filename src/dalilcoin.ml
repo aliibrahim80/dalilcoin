@@ -2159,9 +2159,6 @@ let do_command oc l =
 
 let initialize () =
   begin
-    datadir_from_command_line(); (*** if -datadir=... is on the command line, then set Config.datadir so we can find the config file ***)
-    process_config_file();
-    process_config_args(); (*** settings on the command line shadow those in the config file ***)
     let datadir = if !Config.testnet then (Filename.concat !Config.datadir "testnet") else !Config.datadir in
     if !Config.testnet then
       begin
@@ -2175,7 +2172,7 @@ let initialize () =
 	exit 1;
       end;
     lock datadir;
-    Printf.printf "Initializing the database..."; flush stdout;
+    if not !Config.daemon then (Printf.printf "Initializing the database..."; flush stdout);
     let dbdir = Filename.concat datadir "db" in
     dbconfig dbdir; (*** configure the database ***)
     DbTheory.dbinit();
@@ -2193,16 +2190,17 @@ let initialize () =
     DbLtcDacStatus.dbinit();
     DbLtcBurnTx.dbinit();
     DbLtcBlock.dbinit();
-    Printf.printf "Initialized.\n"; flush stdout;
+    if not !Config.daemon then (Printf.printf "Initialized.\n"; flush stdout);
     openlog(); (*** Don't open the log until the config vars are set, so if we know whether or not it's testnet. ***)
+    let sout = if !Config.daemon then !Utils.log else stdout in
     if !createsnapshot then
       begin
 	match !snapshot_dir with
 	| None ->
-	    Printf.printf "No snapshot directory given.\n";
+	    Printf.fprintf sout "No snapshot directory given.\n";
 	    !exitfn 1
 	| Some(dir) -> (*** then creating a snapshot ***)
-	    Printf.printf "Creating snapshot.\n"; flush stdout;
+	    Printf.fprintf sout "Creating snapshot.\n"; flush stdout;
 	    let fin : (hashval,unit) Hashtbl.t = Hashtbl.create 10000 in
 	    begin
 	      if Sys.file_exists dir then
@@ -2230,7 +2228,7 @@ let initialize () =
 		      let bd = DbBlockDelta.dbget h in
 		      seocf (seo_block seoc (bh,bd) (blockfile,None))
 		    with e ->
-		      Printf.printf "WARNING: Exception called when trying to save block %s: %s\n" (hashval_hexstring h) (Printexc.to_string e)
+		      Printf.fprintf sout "WARNING: Exception called when trying to save block %s: %s\n" (hashval_hexstring h) (Printexc.to_string e)
 		  end)
 	      !snapshot_blocks;
 	    List.iter
@@ -2242,7 +2240,7 @@ let initialize () =
 		      let bh = DbBlockHeader.dbget h in
 		      seocf (seo_blockheader seoc bh (headerfile,None));
 		    with e ->
-		      Printf.printf "WARNING: Exception called when trying to save header %s: %s\n" (hashval_hexstring h) (Printexc.to_string e)
+		      Printf.fprintf sout "WARNING: Exception called when trying to save header %s: %s\n" (hashval_hexstring h) (Printexc.to_string e)
 		  end)
 	      !snapshot_headers;
 	    let supp = List.map addr_bitseq !snapshot_addresses in
@@ -2261,10 +2259,10 @@ let initialize () =
       begin
 	match !snapshot_dir with
 	| None ->
-	    Printf.printf "No snapshot directory given.\n";
+	    Printf.fprintf sout "No snapshot directory given.\n";
 	    !exitfn 1
 	| Some(dir) -> (*** then creating a snapshot ***)
-	    Printf.printf "Importing snapshot.\n"; flush stdout;
+	    Printf.fprintf sout "Importing snapshot.\n"; flush stdout;
 	    let headerfile = open_in_bin (Filename.concat dir "headers") in
 	    let blockfile = open_in_bin (Filename.concat dir "blocks") in
 	    let ctreeeltfile = open_in_bin (Filename.concat dir "ctreeelts") in
@@ -2339,7 +2337,7 @@ let initialize () =
 	      | (_,_,_,Bounty(v)) -> totbounties := Int64.add v !totbounties
 	      | _ -> ()
 	    with Not_found ->
-	      Printf.printf "WARNING: asset %s is not in database\n" (hashval_hexstring h)
+	      Printf.fprintf sout "WARNING: asset %s is not in database\n" (hashval_hexstring h)
 	  in
 	  let rec check_hconselt h =
 	    try
@@ -2349,14 +2347,14 @@ let initialize () =
 	      | Some(h,_) -> check_hconselt h
 	      | None -> ()
 	    with Not_found ->
-	      Printf.printf "WARNING: hconselt %s is not in database\n" (hashval_hexstring h)
+	      Printf.fprintf sout "WARNING: hconselt %s is not in database\n" (hashval_hexstring h)
 	  in
 	  let rec check_ledger_rec h =
 	    try
 	      let c = DbCTreeElt.dbget h in
 	      check_ctree_rec c 9
 	    with Not_found ->
-	      Printf.printf "WARNING: ctreeelt %s is not in database\n" (hashval_hexstring h)
+	      Printf.fprintf sout "WARNING: ctreeelt %s is not in database\n" (hashval_hexstring h)
 	  and check_ctree_rec c i =
 	    match c with
 	    | CHash(h) -> check_ledger_rec h
@@ -2367,12 +2365,12 @@ let initialize () =
 		check_ctree_rec c0 (i-1);
 		check_ctree_rec c1 (i-1)
 	    | _ ->
-		Printf.printf "WARNING: unexpected non-element ctree at level %d:\n" i;
+		Printf.fprintf sout "WARNING: unexpected non-element ctree at level %d:\n" i;
 		print_ctree c
 	  in
 	  check_ledger_rec lr;
-	  Printf.printf "Total Currency Assets: %Ld cants (%s fraenks)\n" !totcants (fraenks_of_cants !totcants);
-	  Printf.printf "Total Bounties: %Ld cants (%s fraenks)\n" !totbounties (fraenks_of_cants !totbounties);
+	  Printf.fprintf sout "Total Currency Assets: %Ld cants (%s fraenks)\n" !totcants (fraenks_of_cants !totcants);
+	  Printf.fprintf sout "Total Bounties: %Ld cants (%s fraenks)\n" !totbounties (fraenks_of_cants !totbounties);
 	  !exitfn 0
     end;
     begin
@@ -2384,7 +2382,7 @@ let initialize () =
 	      let a = DbAsset.dbget h in
 	      DbAssetIdAt.dbput (assetid a) alpha
 	    with Not_found ->
-	      Printf.printf "WARNING: asset %s is not in database\n" (hashval_hexstring h)
+	      Printf.fprintf sout "WARNING: asset %s is not in database\n" (hashval_hexstring h)
 	  in
 	  let rec extraindex_hconselt h alpha =
 	    try
@@ -2395,7 +2393,7 @@ let initialize () =
 	      | Some(h,_) -> extraindex_hconselt h alpha
 	      | None -> ()
 	    with Not_found ->
-	      Printf.printf "WARNING: hconselt %s is not in database\n" (hashval_hexstring h)
+	      Printf.fprintf sout "WARNING: hconselt %s is not in database\n" (hashval_hexstring h)
 	  in
 	  let rec extraindex_ledger_rec h pl =
 	    try
@@ -2403,7 +2401,7 @@ let initialize () =
 	      DbCTreeEltAt.dbput h (List.rev pl);
 	      extraindex_ctree_rec c 9 pl
 	    with Not_found ->
-	      Printf.printf "WARNING: ctreeelt %s is not in database\n" (hashval_hexstring h)
+	      Printf.fprintf sout "WARNING: ctreeelt %s is not in database\n" (hashval_hexstring h)
 	  and extraindex_ctree_rec c i pl =
 	    match c with
 	    | CHash(h) -> extraindex_ledger_rec h pl
@@ -2414,7 +2412,7 @@ let initialize () =
 		extraindex_ctree_rec c0 (i-1) (false::pl);
 		extraindex_ctree_rec c1 (i-1) (true::pl)
 	    | _ ->
-		Printf.printf "WARNING: unexpected non-element ctree at level %d:\n" i;
+		Printf.fprintf sout "WARNING: unexpected non-element ctree at level %d:\n" i;
 		print_ctree c
 	  in
 	  extraindex_ledger_rec lr [];
@@ -2424,7 +2422,7 @@ let initialize () =
       match !netlogreport with
       | None -> ()
       | Some([]) ->
-	  Printf.printf "Expected -netlogreport <sentlogfile> [<reclogfile>*]\n";
+	  Printf.fprintf sout "Expected -netlogreport <sentlogfile> [<reclogfile>*]\n";
 	  !exitfn 1
       | Some(sentf::recfl) ->
 	  let extra_log_info mt ms = (*** for certain types of messages, give more information ***)
@@ -2433,18 +2431,18 @@ let initialize () =
 		begin
 		  let c = ref (ms,String.length ms,None,0,0) in
 		  let (n,cn) = sei_int32 seis !c in
-		  Printf.printf "Inv msg %ld entries\n" n;
+		  Printf.fprintf sout "Inv msg %ld entries\n" n;
 		  c := cn;
 		  for j = 1 to Int32.to_int n do
 		    let ((i,h),cn) = sei_prod sei_int8 sei_hashval seis !c in
 		    c := cn;
-		    Printf.printf "Inv %d %s\n" i (hashval_hexstring h);
+		    Printf.fprintf sout "Inv %d %s\n" i (hashval_hexstring h);
 		  done
 		end
 	    | GetHeader ->
 		begin
 		  let (h,_) = sei_hashval seis (ms,String.length ms,None,0,0) in
-		  Printf.printf "GetHeader %s\n" (hashval_hexstring h)
+		  Printf.fprintf sout "GetHeader %s\n" (hashval_hexstring h)
 		end
 	    | GetHeaders ->
 		begin
@@ -2453,93 +2451,93 @@ let initialize () =
 		  let bhl = ref [] in
 		  let (n,cn) = sei_int8 seis !c in (*** peers can request at most 255 headers at a time **)
 		  c := cn;
-		  Printf.printf "GetHeaders requesting these %d headers:\n" n;
+		  Printf.fprintf sout "GetHeaders requesting these %d headers:\n" n;
 		  for j = 1 to n do
 		    let (h,cn) = sei_hashval seis !c in
 		    c := cn;
-		    Printf.printf "%d. %s\n" j (hashval_hexstring h);
+		    Printf.fprintf sout "%d. %s\n" j (hashval_hexstring h);
 		  done
 		end
 	    | Headers ->
 		begin
 		  let c = ref (ms,String.length ms,None,0,0) in
 		  let (n,cn) = sei_int8 seis !c in (*** peers can request at most 255 headers at a time **)
-		  Printf.printf "Got %d Headers\n" n;
+		  Printf.fprintf sout "Got %d Headers\n" n;
 		  c := cn;
 		  for j = 1 to n do
 		    let (h,cn) = sei_hashval seis !c in
 		    let (bh,cn) = sei_blockheader seis cn in
 		    c := cn;
-		    Printf.printf "%d. %s\n" j (hashval_hexstring h)
+		    Printf.fprintf sout "%d. %s\n" j (hashval_hexstring h)
 		  done
 		end
 	    | _ -> ()
 	  in
-	  Printf.printf "++++++++++++++++++++++++\nReport of all sent messages:\n";
+	  Printf.fprintf sout "++++++++++++++++++++++++\nReport of all sent messages:\n";
 	  let f = open_in_bin sentf in
 	  begin
 	    try
 	      while true do
 		let (tmstmp,_) = sei_int64 seic (f,None) in
 		let gtm = Unix.gmtime (Int64.to_float tmstmp) in
-		Printf.printf "Sending At Time: %Ld (UTC %02d %02d %04d %02d:%02d:%02d)\n" tmstmp gtm.Unix.tm_mday (1+gtm.Unix.tm_mon) (1900+gtm.Unix.tm_year) gtm.Unix.tm_hour gtm.Unix.tm_min gtm.Unix.tm_sec;
+		Printf.fprintf sout "Sending At Time: %Ld (UTC %02d %02d %04d %02d:%02d:%02d)\n" tmstmp gtm.Unix.tm_mday (1+gtm.Unix.tm_mon) (1900+gtm.Unix.tm_year) gtm.Unix.tm_hour gtm.Unix.tm_min gtm.Unix.tm_sec;
 		let (magic,_) = sei_int32 seic (f,None) in
-		if magic = 0x44616c54l then Printf.printf "Testnet message\n" else if magic = 0x44616c4dl then Printf.printf "Mainnet message\n" else Printf.printf "Bad Magic Number %08lx\n" magic;
+		if magic = 0x44616c54l then Printf.fprintf sout "Testnet message\n" else if magic = 0x44616c4dl then Printf.fprintf sout "Mainnet message\n" else Printf.fprintf sout "Bad Magic Number %08lx\n" magic;
 		let rby = input_byte f in
 		if rby = 0 then
-		  Printf.printf "Not a reply\n"
+		  Printf.fprintf sout "Not a reply\n"
 		else if rby = 1 then
 		  begin
 		    let (h,_) = sei_hashval seic (f,None) in
-		    Printf.printf "Reply to %s\n" (hashval_hexstring h)
+		    Printf.fprintf sout "Reply to %s\n" (hashval_hexstring h)
 		  end
 		else
-		  Printf.printf "Bad Reply Byte %d\n" rby;
+		  Printf.fprintf sout "Bad Reply Byte %d\n" rby;
 		let mti = input_byte f in
-		Printf.printf "Message type %d: %s\n" mti (try string_of_msgtype (msgtype_of_int mti) with Not_found -> "no such message type");
+		Printf.fprintf sout "Message type %d: %s\n" mti (try string_of_msgtype (msgtype_of_int mti) with Not_found -> "no such message type");
 		let (msl,_) = sei_int32 seic (f,None) in
-		Printf.printf "Message contents length %ld bytes\n" msl;
+		Printf.fprintf sout "Message contents length %ld bytes\n" msl;
 		let (mh,_) = sei_hashval seic (f,None) in
-		Printf.printf "Message contents hash %s\n" (hashval_hexstring mh);
+		Printf.fprintf sout "Message contents hash %s\n" (hashval_hexstring mh);
 		let sb = Buffer.create 100 in
 		for i = 1 to (Int32.to_int msl) do
 		  let x = input_byte f in
 		  Buffer.add_char sb (Char.chr x)
 		done;
 		let s = Buffer.contents sb in
-		Printf.printf "Message contents: %s\n" (string_hexstring s);
+		Printf.fprintf sout "Message contents: %s\n" (string_hexstring s);
 		try let mt = msgtype_of_int mti in extra_log_info mt s with Not_found -> ()
 	      done
 	    with
 	    | End_of_file -> ()
-	    | e -> Printf.printf "Exception: %s\n" (Printexc.to_string e)
+	    | e -> Printf.fprintf sout "Exception: %s\n" (Printexc.to_string e)
 	  end;
 	  close_in f;
 	  List.iter
 	    (fun fn ->
-	      Printf.printf "++++++++++++++++++++++++\nReport of all messages received via %s:\n" fn;
+	      Printf.fprintf sout "++++++++++++++++++++++++\nReport of all messages received via %s:\n" fn;
 	      let f = open_in_bin fn in
 	      begin
 		try
 		  while true do
 		    let tmstmp : float = input_value f in
 		    let gtm = Unix.gmtime tmstmp in
-		    Printf.printf "Received At Time: %f (UTC %02d %02d %04d %02d:%02d:%02d)\n" tmstmp gtm.Unix.tm_mday (1+gtm.Unix.tm_mon) (1900+gtm.Unix.tm_year) gtm.Unix.tm_hour gtm.Unix.tm_min gtm.Unix.tm_sec;
+		    Printf.fprintf sout "Received At Time: %f (UTC %02d %02d %04d %02d:%02d:%02d)\n" tmstmp gtm.Unix.tm_mday (1+gtm.Unix.tm_mon) (1900+gtm.Unix.tm_year) gtm.Unix.tm_hour gtm.Unix.tm_min gtm.Unix.tm_sec;
 		    let rmmm : hashval option * hashval * msgtype * string = input_value f in
 		    let (replyto,mh,mt,m) = rmmm in
 		    begin
 		      match replyto with
-		      | None -> Printf.printf "Not a reply\n"
-		      | Some(h) -> Printf.printf "Reply to %s\n" (hashval_hexstring h)
+		      | None -> Printf.fprintf sout "Not a reply\n"
+		      | Some(h) -> Printf.fprintf sout "Reply to %s\n" (hashval_hexstring h)
 		    end;
-		    Printf.printf "Message type %d: %s\n" (int_of_msgtype mt) (string_of_msgtype mt);
-		    Printf.printf "Message contents hash %s\n" (hashval_hexstring mh);
-		    Printf.printf "Message contents: %s\n" (string_hexstring m);
+		    Printf.fprintf sout "Message type %d: %s\n" (int_of_msgtype mt) (string_of_msgtype mt);
+		    Printf.fprintf sout "Message contents hash %s\n" (hashval_hexstring mh);
+		    Printf.fprintf sout "Message contents: %s\n" (string_hexstring m);
 		    extra_log_info mt m
 		  done
 		with
 		| End_of_file -> ()
-		| e -> Printf.printf "Exception: %s\n" (Printexc.to_string e)
+		| e -> Printf.fprintf sout "Exception: %s\n" (Printexc.to_string e)
 	      end;
 	      close_in f)
 	    recfl;
@@ -2558,15 +2556,15 @@ let initialize () =
 	| Invalid_argument(_) ->
 	    raise (Failure "Bad seed")
       end;
-    Printf.printf "Initializing theory and signature trees.\n"; flush stdout;
+    Printf.fprintf sout "Initializing theory and signature trees.\n"; flush stdout;
     init_thytrees();
     init_sigtrees();
     if not !Config.offline && not !Config.ltcoffline then
       begin
-	Printf.printf "Syncing with ltc\n"; flush stdout;
+	Printf.fprintf sout "Syncing with ltc\n"; flush stdout;
 	ltc_init();
       end;
-    Printf.printf "Initializing blocktree\n"; flush stdout;
+    Printf.fprintf sout "Initializing blocktree\n"; flush stdout;
     initblocktree();
     missingheaders_th := Some(Thread.create missingheadersthread ());
     begin
@@ -2582,15 +2580,15 @@ let initialize () =
 	      with
 	      | End_of_file -> raise End_of_file
 	      | e ->
-		  Printf.printf "Unexpected exception %s when processing block delta %s. Deleting delta to request it again.\n" (Printexc.to_string e) (hashval_hexstring h);
+		  Printf.fprintf sout "Unexpected exception %s when processing block delta %s. Deleting delta to request it again.\n" (Printexc.to_string e) (hashval_hexstring h);
 		  DbBlockDelta.dbdelete h
 	    done
 	  with End_of_file -> close_in ch; Sys.remove pdf
 	end;
     end;
-    Printf.printf "Loading wallet\n"; flush stdout;
+    Printf.fprintf sout "Loading wallet\n"; flush stdout;
     Commands.load_wallet();
-    Printf.printf "Loading txpool\n"; flush stdout;
+    Printf.fprintf sout "Loading txpool\n"; flush stdout;
     Commands.load_txpool();
     (*** We next compute a nonce for the node to prevent self conns; it doesn't need to be cryptographically secure ***)
     if not !random_initialized then initialize_random_seed();
@@ -2615,6 +2613,9 @@ let run_with_timeout timeout f x =
   | exn -> finish (); raise exn;;
 
 let main () =
+  datadir_from_command_line(); (*** if -datadir=... is on the command line, then set Config.datadir so we can find the config file ***)
+  process_config_file();
+  process_config_args(); (*** settings on the command line shadow those in the config file ***)
   let last_failure = ref None in
   let failure_count = ref 0 in
   let failure_delay() =
@@ -2672,7 +2673,7 @@ let main () =
       try
 	Unix.bind lst (Unix.ADDR_INET(ia,!Config.rpcport));
       with _ ->
-	Printf.printf "Cannot bind to rpcport. Quitting.\n";
+	Printf.fprintf !Utils.log "Cannot bind to rpcport. Quitting.\n";
 	!exitfn 1
     end;
     let efn = !exitfn in
