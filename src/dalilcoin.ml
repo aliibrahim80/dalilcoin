@@ -2564,7 +2564,7 @@ let initialize () =
     init_sigtrees();
     if not !Config.offline && not !Config.ltcoffline then
       begin
-	Printf.fprintf sout "Syncing with ltc\n"; flush sout;
+	if not !Config.daemon then (Printf.fprintf sout "Syncing with ltc\n"; flush sout);
 	ltc_init sout;
       end;
     Printf.fprintf sout "Initializing blocktree\n"; flush sout;
