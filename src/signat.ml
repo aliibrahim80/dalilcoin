@@ -29,6 +29,12 @@ let decode64table = [|
         -1; -1; -1; -1; -1; -1; -1; -1; -1; -1; -1; -1; -1; -1; -1; -1
  |];;
 
+let encode64table = [|'A'; 'B'; 'C'; 'D'; 'E'; 'F'; 'G'; 'H'; 'I'; 'J'; 'K'; 'L'; 'M'; 'N'; 'O';
+  'P'; 'Q'; 'R'; 'S'; 'T'; 'U'; 'V'; 'W'; 'X'; 'Y'; 'Z'; 'a'; 'b'; 'c'; 'd';
+  'e'; 'f'; 'g'; 'h'; 'i'; 'j'; 'k'; 'l'; 'm'; 'n'; 'o'; 'p'; 'q'; 'r'; 's';
+  't'; 'u'; 'v'; 'w'; 'x'; 'y'; 'z'; '0'; '1'; '2'; '3'; '4'; '5'; '6'; '7';
+  '8'; '9'; '+'; '/'|];;
+
 let base64decode_end s l i mode lft =
   if mode = 0 then (*** something extra is in the string, but shouldn't be. ***)
     raise (Failure("not a proper base64 string 0"))
@@ -69,6 +75,60 @@ let rec base64decode_a s l i mode lft =
 let base64decode s =
   base64decode_a s (String.length s) 0 0 0
 
+let rec base64encode_a bu bl mode lft =
+Printf.printf "%d %d %d\n" mode lft (match bl with by::_ -> by | _ -> -1);
+  match bl with
+  | by::br when mode=0 ->
+Printf.printf "%d %d %c\n" mode lft (encode64table.(lft));
+      Buffer.add_char bu (encode64table.(lft));
+      base64encode_a bu br 1 (by land 3)
+  | by::br when mode=1 ->
+Printf.printf "%d %d %c\n" mode lft (encode64table.((by lsr 4) lor (lft lsl 4)));
+      Buffer.add_char bu (encode64table.((by lsr 4) lor (lft lsl 4)));
+      base64encode_a bu br 2 (by land 15)
+  | by::br when mode=2 ->
+Printf.printf "%d %d %c\n" mode lft (encode64table.((by lsr 6) lor (lft lsl 2)));
+      Buffer.add_char bu (encode64table.((by lsr 6) lor (lft lsl 2)));
+      base64encode_a bu br 3 (by land 63)
+  | (by::_) when mode=3 ->
+Printf.printf "%d %d %c\n" mode lft (encode64table.(lft));
+      Buffer.add_char bu (encode64table.(lft));
+      base64encode_a bu bl 0 (by lsr 2)
+  | [] when mode=0 ->
+      Buffer.add_char bu (encode64table.(lft));
+      Buffer.add_char bu '=';
+      Buffer.add_char bu '=';
+  | [] when mode=1 ->
+      Buffer.add_char bu (encode64table.(lft lsl 4));
+      Buffer.add_char bu '=';
+      Buffer.add_char bu '=';
+  | [] when mode=2 ->
+      Buffer.add_char bu (encode64table.(lft lsl 2));
+      Buffer.add_char bu '=';
+      Buffer.add_char bu '=';
+  | [] when mode=3 ->
+      Buffer.add_char bu (encode64table.(lft));
+      Buffer.add_char bu '=';
+  | _ -> raise (Failure("base64encode problem"))
+
+let rec bytelist_to_octetlist bl =
+  match bl with
+  | (by1::by2::by3::br) ->
+      let (ol,pad) = bytelist_to_octetlist br in
+      (by1 lsr 2::(((by1 land 3) lsl 4) lor (by2 lsr 4))::(((by2 land 15) lsl 2) lor (by3 lsr 6))::by3 land 63::ol,pad)
+  | [by1;by2] ->
+      ([by1 lsr 2;(((by1 land 3) lsl 4) lor (by2 lsr 4));((by2 land 15) lsl 2)],1)
+  | [by1] ->
+      ([by1 lsr 2;(by1 land 3) lsl 4],2)
+  | [] -> ([],0)
+
+let base64encode bl =
+  let (ol,pad) = bytelist_to_octetlist bl in
+  let bu = Buffer.create 30 in
+  List.iter (fun i -> Buffer.add_char bu (encode64table.(i))) ol;
+  for i = 1 to pad do Buffer.add_char bu '=' done;
+  Buffer.contents bu
+
 let rec bytelist_to_big_int rst n c =
   if n > 0 then
     match rst with
@@ -94,6 +154,16 @@ let decode_signature sg =
   let recid = by27 land 3 in
   let fcomp = by27 land 4 > 0 in
   (recid,fcomp,(r,s))
+
+let rec big_int_to_bytelist r l bl =
+  if l > 0 then
+    big_int_to_bytelist (shift_right_big_int r 8) (l-1) (int_of_big_int (and_big_int r (big_int_of_int 255))::bl)
+  else
+    bl
+
+let encode_signature recid fcomp (r,s) =
+  let by0 = 27 + if fcomp then 4 lor recid else recid in
+  base64encode (by0::big_int_to_bytelist r 32 []@big_int_to_bytelist s 32 [])
   
 (** * Digital Signatures for Qeditas ***)
 exception ZeroValue

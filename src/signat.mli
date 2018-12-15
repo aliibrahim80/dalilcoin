@@ -13,6 +13,7 @@ exception ZeroValue
 type signat = big_int * big_int
 
 val decode_signature : string -> int * bool * signat
+val encode_signature : int -> bool -> signat -> string
 
 val signat_big_int : big_int -> big_int -> big_int -> signat
 val signat_hashval : hashval -> big_int -> big_int -> signat

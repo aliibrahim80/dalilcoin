@@ -22,6 +22,7 @@ val walletkeys_nonstaking : (big_int * bool * (big_int * big_int) * string * p2p
 val walletkeys_staking_fresh : (big_int * bool * (big_int * big_int) * string * p2pkhaddr * string) list ref
 val walletkeys_nonstaking_fresh : (big_int * bool * (big_int * big_int) * string * p2pkhaddr * string) list ref
 val walletendorsements : (payaddr * payaddr * (big_int * big_int) * int * bool * signat) list ref
+val walletp2shs : (p2shaddr * string * int list) list ref
 val walletwatchaddrs : addr list ref
 val walletwatchaddrs_offlinekey : addr list ref
 val walletwatchaddrs_offlinekey_fresh : addr list ref
@@ -68,3 +69,5 @@ val query_blockheight : int64 -> jsonval
 val preassetinfo_report : out_channel -> preasset -> unit
 
 val requestfullledger : out_channel -> hashval -> unit
+
+val dumpwallet : string -> unit

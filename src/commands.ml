@@ -2068,3 +2068,49 @@ let requestfullledger oc h =
 	    !source_peers
       end
     end
+
+let dumpwallet fn =
+  let f = open_out fn in
+  Printf.fprintf f "1. Wallet keys and address:\n";
+  List.iter
+    (fun (_,_,_,w,_,alpha) ->
+      Printf.fprintf f "%s %s (staking)\n" alpha w)
+    !walletkeys_staking;
+  List.iter
+    (fun (_,_,_,w,_,alpha) ->
+      Printf.fprintf f "%s %s (nonstaking)\n" alpha w)
+    !walletkeys_nonstaking;
+  List.iter
+    (fun (_,_,_,w,_,alpha) ->
+      Printf.fprintf f "%s %s (staking fresh)\n" alpha w)
+    !walletkeys_staking_fresh;
+  List.iter
+    (fun (_,_,_,w,_,alpha) ->
+      Printf.fprintf f "%s %s (nonstaking fresh)\n" alpha w)
+    !walletkeys_nonstaking_fresh;
+  Printf.fprintf f "2. Wallet endorsements:\n";
+  List.iter
+    (fun (alphap,betap,_,recid,fcomp,esg) ->
+      let alpha = addr_daliladdrstr (payaddr_addr alphap) in
+      let beta = addr_daliladdrstr (payaddr_addr betap) in
+      let sgstr = encode_signature recid fcomp esg in
+      Printf.fprintf f "%s controls %s via %s\n" beta alpha sgstr)
+    !walletendorsements;
+  Printf.fprintf f "3. Wallet p2sh:\n";
+  List.iter
+    (fun (_,alpha,scr) ->
+      Printf.fprintf f "%s p2sh with script " alpha;
+      List.iter (fun b -> Printf.fprintf f "%0x" b) scr;
+      Printf.fprintf f "\n")
+    !walletp2shs;
+  Printf.fprintf f "4. Wallet watch addresses:\n";
+  List.iter
+    (fun alpha -> Printf.fprintf f "%s\n" (addr_daliladdrstr alpha))
+    !walletwatchaddrs;
+  List.iter
+    (fun alpha -> Printf.fprintf f "%s (offlinekey)\n" (addr_daliladdrstr alpha))
+    !walletwatchaddrs_offlinekey;
+  List.iter
+    (fun alpha -> Printf.fprintf f "%s (offlinekey, fresh)\n" (addr_daliladdrstr alpha))
+    !walletwatchaddrs_offlinekey_fresh;
+  close_out f

@@ -1309,6 +1309,12 @@ let do_command oc l =
 	| _ ->
 	    raise (Failure("expected query <hashval or address or int[block height]> [<blockid or ledgerroot>]"))
       end
+  | "dumpwallet" ->
+      begin
+	match al with
+	| [fn] -> Commands.dumpwallet fn
+	| _ -> raise (Failure("dumpwallet <filename>"))
+      end
   | "ltcstatusdump" ->
       begin
 	let (fn,blkh,howfarback) =
