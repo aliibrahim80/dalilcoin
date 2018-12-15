@@ -151,17 +151,17 @@ type ctree =
   | CRight of ctree
   | CBin of ctree * ctree
 
-let rec print_ctree_r c n =
+let rec print_ctree_r oc c n =
   for i = 1 to n do Printf.printf " " done;
   match c with
-  | CLeaf(bl,NehHash(h,l)) -> Printf.printf "Leaf %s[%d]\n" (hashval_hexstring h) l
-  | CLeaf(bl,hl) -> Printf.printf "Leaf ...[%d]\n" (nehlist_len hl)
-  | CHash(h) -> Printf.printf "H %s\n" (hashval_hexstring h)
-  | CLeft(c0) -> Printf.printf "L\n"; print_ctree_r c0 (n+1)
-  | CRight(c1) -> Printf.printf "R\n"; print_ctree_r c1 (n+1)
-  | CBin(c0,c1) -> Printf.printf "B\n"; print_ctree_r c0 (n+1); print_ctree_r c1 (n+1)
+  | CLeaf(bl,NehHash(h,l)) -> Printf.fprintf oc "Leaf %s[%d]\n" (hashval_hexstring h) l
+  | CLeaf(bl,hl) -> Printf.fprintf oc "Leaf ...[%d]\n" (nehlist_len hl)
+  | CHash(h) -> Printf.fprintf oc "H %s\n" (hashval_hexstring h)
+  | CLeft(c0) -> Printf.fprintf oc "L\n"; print_ctree_r oc c0 (n+1)
+  | CRight(c1) -> Printf.fprintf oc "R\n"; print_ctree_r oc c1 (n+1)
+  | CBin(c0,c1) -> Printf.fprintf oc "B\n"; print_ctree_r oc c0 (n+1); print_ctree_r oc c1 (n+1)
 
-let print_ctree c = print_ctree_r c 0
+let print_ctree oc c = print_ctree_r oc c 0
 
 let rec print_hlist_gen f hl g =
   match hl with

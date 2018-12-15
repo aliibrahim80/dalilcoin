@@ -338,10 +338,10 @@ let bytelist_of_hexstring h =
   done;
   !bl
 
-let btctodaliladdr a =
+let btctodaliladdr oc a =
   let alpha = btcaddrstr_addr a in
   let a2 = addr_daliladdrstr alpha in
-  Printf.printf "Dalilcoin address %s corresponds to Bitcoin address %s\n" a2 a
+  Printf.fprintf oc "Dalilcoin address %s corresponds to Bitcoin address %s\n" a2 a
 
 let importprivkey_real oc (k,b) cls report =
   match Secp256k1.smulp k Secp256k1._g with
@@ -394,7 +394,7 @@ let importbtcprivkey oc w cls =
   let (k,b) = privkey_from_btcwif w in
   importprivkey_real oc (k,b) cls true
 
-let importendorsement a b s =
+let importendorsement oc a b s =
   let alpha = daliladdrstr_addr a in
   let beta = daliladdrstr_addr b in
   if endorsement_in_wallet_2_p alpha beta then raise (Failure ("An endorsement from " ^ a ^ " to " ^ b ^ " is already in the wallet."));
@@ -415,14 +415,14 @@ let importendorsement a b s =
 	      | None ->
 		  raise (Failure "endorsement signature verification failed; not adding endorsement to wallet")
 	      | Some(x,y) ->
-		  Printf.printf "Fake endorsement acceptable for testnet; adding to wallet.\n";
+		  Printf.fprintf oc "Fake endorsement acceptable for testnet; adding to wallet.\n";
 		  walletendorsements := (alphap,betap,(x,y),recid,fcomp,esg)::!walletendorsements;
 		  save_wallet() (*** overkill, should append if possible ***)
 	    end
 	  else
 	    raise (Failure "endorsement signature verification failed; not adding endorsement to wallet")
       | Some(x,y) ->
-(*	  Printf.printf "just verified endorsement signature:\naddrhex = %s\nrecid = %d\nfcomp = %s\nesgr = %s\nesgs = %s\nendorse %s\n" (hashval_hexstring (x4,x3,x2,x1,x0)) recid (if fcomp then "true" else "false") (let (r,s) = esg in string_of_big_int r) (let (r,s) = esg in string_of_big_int s) b; flush stdout; *)
+(*	  Printf.fprintf oc "just verified endorsement signature:\naddrhex = %s\nrecid = %d\nfcomp = %s\nesgr = %s\nesgs = %s\nendorse %s\n" (hashval_hexstring (x4,x3,x2,x1,x0)) recid (if fcomp then "true" else "false") (let (r,s) = esg in string_of_big_int r) (let (r,s) = esg in string_of_big_int s) b; flush stdout; *)
 	  Printf.printf "Verified endorsement; adding to wallet.\n";
 	  walletendorsements := (alphap,betap,(x,y),recid,fcomp,esg)::!walletendorsements;
 	  save_wallet() (*** overkill, should append if possible ***)
@@ -901,31 +901,31 @@ let get_cants_balances_in_ledger oc ledgerroot =
     Hashtbl.add cants_balances_in_ledger ledgerroot (!tot1,!tot2,!tot3,!tot4);
     (!tot1,!tot2,!tot3,!tot4)
 
-let printasset h =
+let printasset oc h =
   try
     let (aid,bday,obl,u) = DbAsset.dbget h in
-    Printf.printf "%s: %s [%Ld] %s %s\n" (hashval_hexstring h) (hashval_hexstring aid) bday (preasset_string u) (obligation_string obl)
+    Printf.fprintf oc "%s: %s [%Ld] %s %s\n" (hashval_hexstring h) (hashval_hexstring aid) bday (preasset_string u) (obligation_string obl)
   with Not_found ->
-    Printf.printf "No asset with hash %s found. (Did you give the asset id instead of the asset hash?)\n" (hashval_hexstring h)
+    Printf.fprintf oc "No asset with hash %s found. (Did you give the asset id instead of the asset hash?)\n" (hashval_hexstring h)
 
-let printhconselt h =
+let printhconselt oc h =
   try
     let (aid,k) = DbHConsElt.dbget h in
-    Printf.printf "assetid %s\n" (hashval_hexstring aid);
+    Printf.fprintf oc "assetid %s\n" (hashval_hexstring aid);
     match k with
-    | Some(k,l) -> Printf.printf "next hcons elt %s[%d]\n" (hashval_hexstring k) l
-    | None -> Printf.printf "last on the list\n"
+    | Some(k,l) -> Printf.fprintf oc "next hcons elt %s[%d]\n" (hashval_hexstring k) l
+    | None -> Printf.fprintf oc "last on the list\n"
   with Not_found ->
-    Printf.printf "No hcons elt %s found\n" (hashval_hexstring h)
+    Printf.fprintf oc "No hcons elt %s found\n" (hashval_hexstring h)
 
-let printctreeelt h =
+let printctreeelt oc h =
   try
     let c = DbCTreeElt.dbget h in
-    print_ctree c
+    print_ctree oc c
   with Not_found ->
-    Printf.printf "No ctree elt %s found\n" (hashval_hexstring h)
+    Printf.fprintf oc "No ctree elt %s found\n" (hashval_hexstring h)
 
-let printctreeinfo h =
+let printctreeinfo oc h =
   try
     let c = DbCTreeElt.dbget h in
     let n = ref 0 in
@@ -987,49 +987,49 @@ let printctreeinfo h =
       | CBin(c0,c1) -> ctreeeltinfo c0; ctreeeltinfo c1
     in
     ctreeeltinfo c;
-    Printf.printf "Number of abstract unknown ctrees %d\n" !ch;
-    Printf.printf "Number of abstract unknown hcons elts %d\n" !hh;
-    Printf.printf "Number of abstract unknown assets %d\n" !ah;
-    Printf.printf "Number of known ctree elts %d\n" !e;
-    Printf.printf "Number of known leaves %d\n" !l;
-    Printf.printf "Number of known assets %d\n" !a;
-    Printf.printf "Number of ownership assets %d\n" !own;
-    Printf.printf "Number of rights assets %d\n" !rght;
-    Printf.printf "Number of marker assets %d\n" !mrk;
-    Printf.printf "Number of publication assets %d\n" !pub;
-    Printf.printf "Total cants in known currency assets %Ld\n" !v;
-    Printf.printf "Total cants in known bounty assets %Ld\n" !b;
+    Printf.fprintf oc "Number of abstract unknown ctrees %d\n" !ch;
+    Printf.fprintf oc "Number of abstract unknown hcons elts %d\n" !hh;
+    Printf.fprintf oc "Number of abstract unknown assets %d\n" !ah;
+    Printf.fprintf oc "Number of known ctree elts %d\n" !e;
+    Printf.fprintf oc "Number of known leaves %d\n" !l;
+    Printf.fprintf oc "Number of known assets %d\n" !a;
+    Printf.fprintf oc "Number of ownership assets %d\n" !own;
+    Printf.fprintf oc "Number of rights assets %d\n" !rght;
+    Printf.fprintf oc "Number of marker assets %d\n" !mrk;
+    Printf.fprintf oc "Number of publication assets %d\n" !pub;
+    Printf.fprintf oc "Total cants in known currency assets %Ld\n" !v;
+    Printf.fprintf oc "Total cants in known bounty assets %Ld\n" !b;
   with Not_found ->
-    Printf.printf "No ctree %s found\n" (hashval_hexstring h)
+    Printf.fprintf oc "No ctree %s found\n" (hashval_hexstring h)
   
-let printtx_a (tauin,tauout) =
+let printtx_a oc (tauin,tauout) =
   let i = ref 0 in
-  Printf.printf "Inputs (%d):\n" (List.length tauin);
+  Printf.fprintf oc "Inputs (%d):\n" (List.length tauin);
   List.iter
     (fun (alpha,aid) ->
-      Printf.printf "Input %d:%s %s\n" !i (addr_daliladdrstr alpha) (hashval_hexstring aid);
+      Printf.fprintf oc "Input %d:%s %s\n" !i (addr_daliladdrstr alpha) (hashval_hexstring aid);
       incr i)
     tauin;      
   i := 0;
-  Printf.printf "Outputs (%d):\n" (List.length tauout);
+  Printf.fprintf oc "Outputs (%d):\n" (List.length tauout);
   List.iter
     (fun (alpha,(obl,u)) ->
-      Printf.printf "Output %d:%s %s %s\n" !i (addr_daliladdrstr alpha) (preasset_string u) (obligation_string obl);
+      Printf.fprintf oc "Output %d:%s %s %s\n" !i (addr_daliladdrstr alpha) (preasset_string u) (obligation_string obl);
       incr i)
     tauout
 
-let printtx txid =
+let printtx oc txid =
   try
     let (tau,_) = Hashtbl.find stxpool txid in
-    Printf.printf "Tx %s in pool.\n" (hashval_hexstring txid);
-    printtx_a tau
+    Printf.fprintf oc "Tx %s in pool.\n" (hashval_hexstring txid);
+    printtx_a oc tau
   with Not_found ->
     try
       let (tau,_) = DbSTx.dbget txid in
-      Printf.printf "Tx %s in local database.\n" (hashval_hexstring txid);
-      printtx_a tau
+      Printf.fprintf oc "Tx %s in local database.\n" (hashval_hexstring txid);
+      printtx_a oc tau
     with Not_found ->
-      Printf.printf "Unknown tx %s.\n" (hashval_hexstring txid)
+      Printf.fprintf oc "Unknown tx %s.\n" (hashval_hexstring txid)
 
 let createtx inpj outpj =
   match (inpj,outpj) with
@@ -1096,12 +1096,12 @@ let createtx inpj outpj =
       end
   | _ -> raise Exit
 
-let createsplitlocktx ledgerroot alpha beta gamma aid i lkh fee =
+let createsplitlocktx oc ledgerroot alpha beta gamma aid i lkh fee =
   if i <= 0 then raise (Failure ("Cannot split into " ^ (string_of_int i) ^ " assets"));
   let alpha2 = payaddr_addr alpha in
   let ctr = Ctre.CHash(ledgerroot) in
   match ctree_lookup_asset true false aid ctr (addr_bitseq alpha2) with
-  | None -> Printf.printf "Could not find asset %s at %s in ledger %s\n" (hashval_hexstring aid) (addr_daliladdrstr alpha2) (hashval_hexstring ledgerroot); flush stdout
+  | None -> Printf.fprintf oc "Could not find asset %s at %s in ledger %s\n" (hashval_hexstring aid) (addr_daliladdrstr alpha2) (hashval_hexstring ledgerroot); flush stdout
   | Some(_,bday,obl,Currency(v)) ->
       if v > fee then
 	begin
@@ -1116,22 +1116,22 @@ let createsplitlocktx ledgerroot alpha beta gamma aid i lkh fee =
 	      done;
 	      outl := (gamma,(Some(beta,lkh,false),Currency(!rem)))::!outl;
 	      let tau : tx = ([(alpha2,aid)],!outl) in
-	      printtx_a tau;
+	      printtx_a oc tau;
 	      let s = Buffer.create 100 in
 	      seosbf (seo_stx seosb (tau,([],[])) (s,None));
 	      let hs = string_hexstring (Buffer.contents s) in
-	      Printf.printf "%s\n" hs
+	      Printf.fprintf oc "%s\n" hs
 	    end
 	  else
 	    begin
-	      Printf.printf "Asset %s is %s fraenks, which is smaller than %d cants after subtracting the fee of %s\n" (hashval_hexstring aid) (fraenks_of_cants v) i (fraenks_of_cants v); flush stdout
+	      Printf.fprintf oc "Asset %s is %s fraenks, which is smaller than %d cants after subtracting the fee of %s\n" (hashval_hexstring aid) (fraenks_of_cants v) i (fraenks_of_cants v); flush stdout
 	    end	  
 	end
       else
 	begin
-	  Printf.printf "Asset %s is %s fraenks, which is not greater the fee of %s\n" (hashval_hexstring aid) (fraenks_of_cants v) (fraenks_of_cants v); flush stdout
+	  Printf.fprintf oc "Asset %s is %s fraenks, which is not greater the fee of %s\n" (hashval_hexstring aid) (fraenks_of_cants v) (fraenks_of_cants v); flush stdout
 	end
-  | _ -> Printf.printf "Asset %s is not currency.\n" (hashval_hexstring aid); flush stdout
+  | _ -> Printf.fprintf oc "Asset %s is not currency.\n" (hashval_hexstring aid); flush stdout
 
 (*** first see if private key for beta is in the wallet; if not check if an endorsement is in the wallet; if not fail ***)
 let signtx_p2pkh beta taue =

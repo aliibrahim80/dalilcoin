@@ -37,16 +37,16 @@ val save_wallet : unit -> unit
 
 val printassets : out_channel -> unit
 val printassets_in_ledger : out_channel -> hashval -> unit
-val printctreeinfo : hashval -> unit
-val printctreeelt : hashval -> unit
-val printhconselt : hashval -> unit
-val printasset : hashval -> unit
-val printtx : hashval -> unit
+val printctreeinfo : out_channel -> hashval -> unit
+val printctreeelt : out_channel -> hashval -> unit
+val printhconselt : out_channel -> hashval -> unit
+val printasset : out_channel -> hashval -> unit
+val printtx : out_channel -> hashval -> unit
 
-val btctodaliladdr : string -> unit
+val btctodaliladdr : out_channel -> string -> unit
 val importprivkey : out_channel -> string -> string -> unit
 val importbtcprivkey : out_channel -> string -> string -> unit
-val importendorsement : string -> string -> string -> unit
+val importendorsement : out_channel -> string -> string -> string -> unit
 val importwatchaddr : out_channel -> string -> string -> unit
 val importwatchbtcaddr : out_channel -> string -> string -> unit
 val generate_newkeyandaddress : hashval -> string -> big_int * p2pkhaddr
@@ -55,7 +55,7 @@ val get_fresh_offline_address : out_channel -> addr
 val reclassify_staking : out_channel -> string -> bool -> unit
 
 val createtx : jsonval -> jsonval -> tx
-val createsplitlocktx : hashval -> payaddr -> payaddr -> addr -> hashval -> int -> int64 -> int64 -> unit
+val createsplitlocktx : out_channel -> hashval -> payaddr -> payaddr -> addr -> hashval -> int -> int64 -> int64 -> unit
 
 val signtx : out_channel -> hashval -> string -> unit
 val savetxtopool : int64 -> hashval -> string -> unit

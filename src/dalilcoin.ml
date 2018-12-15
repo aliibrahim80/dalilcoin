@@ -26,6 +26,8 @@ open Blocktree;;
 open Ltcrpc;;
 open Setconfig;;
 
+exception BadCommandForm;;
+
 let get_reward_locktime blkh =
   let rl =
     match !Config.reward_lock_relative with
@@ -159,6 +161,37 @@ let lock datadir =
   let c = open_out lf in
   close_out c;
   exitfn := (fun n -> Commands.save_wallet(); Commands.save_txpool(); saveknownpeers(); save_processing_deltas(); Sys.remove lf; exit n);;
+
+let sinceltctime f =
+  let snc = Int64.sub (ltc_medtime()) f in
+  if snc >= 172800L then
+    (Int64.to_string (Int64.div snc 86400L)) ^ " days"
+  else if snc >= 7200L then
+    (Int64.to_string (Int64.div snc 7200L)) ^ " hours"
+  else if snc >= 120L then
+    (Int64.to_string (Int64.div snc 60L)) ^ " minutes"
+  else if snc = 1L then
+    "1 second"
+  else
+    (Int64.to_string snc) ^ " seconds";;
+
+let sincetime f =
+  let snc = Int64.sub (Int64.of_float (Unix.time())) f in
+  if snc >= 172800L then
+    (Int64.to_string (Int64.div snc 86400L)) ^ " days"
+  else if snc >= 7200L then
+    (Int64.to_string (Int64.div snc 7200L)) ^ " hours"
+  else if snc >= 120L then
+    (Int64.to_string (Int64.div snc 60L)) ^ " minutes"
+  else if snc = 1L then
+    "1 second"
+  else
+    (Int64.to_string snc) ^ " seconds";;
+
+let fstohash a =
+  match a with
+  | None -> None
+  | Some(h,_) -> Some(h);;
 
 let stkth : Thread.t option ref = ref None;;
 
@@ -330,11 +363,6 @@ let maxburnnow tm =
       !Config.maxburn
   in
   max !extraburn (if mbn >= !Config.ltctxfee then Int64.sub mbn !Config.ltctxfee else 0L)
-
-let fstohash a =
-  match a with
-  | None -> None
-  | Some(h,_) -> Some(h)
 
 exception StakingPause of float
 exception StakingProblemPause
@@ -1058,33 +1086,971 @@ let dbledgersnapshot_ctree_top (ctreeeltfile,hconseltfile,assetfile) fin supp h 
 	done;
 	!r
       in
-      dbledgersnapshot_shards (ctreeeltfile,hconseltfile,assetfile) fin supp h (List.map bitseq sl)
+      dbledgersnapshot_shards (ctreeeltfile,hconseltfile,assetfile) fin supp h (List.map bitseq sl);;
 
-let sinceltctime f =
-  let snc = Int64.sub (ltc_medtime()) f in
-  if snc >= 172800L then
-    (Int64.to_string (Int64.div snc 86400L)) ^ " days"
-  else if snc >= 7200L then
-    (Int64.to_string (Int64.div snc 7200L)) ^ " hours"
-  else if snc >= 120L then
-    (Int64.to_string (Int64.div snc 60L)) ^ " minutes"
-  else if snc = 1L then
-    "1 second"
-  else
-    (Int64.to_string snc) ^ " seconds";;
+let commandh : (string,(string * string * (out_channel -> string list -> unit))) Hashtbl.t = Hashtbl.create 100;;
+let sortedcommands : string list ref = ref [];;
 
-let sincetime f =
-  let snc = Int64.sub (Int64.of_float (Unix.time())) f in
-  if snc >= 172800L then
-    (Int64.to_string (Int64.div snc 86400L)) ^ " days"
-  else if snc >= 7200L then
-    (Int64.to_string (Int64.div snc 7200L)) ^ " hours"
-  else if snc >= 120L then
-    (Int64.to_string (Int64.div snc 60L)) ^ " minutes"
-  else if snc = 1L then
-    "1 second"
-  else
-    (Int64.to_string snc) ^ " seconds";;
+let ac c h longhelp f =
+  sortedcommands := List.merge compare [c] !sortedcommands;
+  Hashtbl.add commandh c (h,longhelp,(fun oc al -> try f oc al with BadCommandForm -> Printf.fprintf oc "%s\n" h));;
+
+let initialize_commands () =
+  ac "setbestblock" "setbestblock <blockid> [<blockheight> <ltcblockid> <ltcburntx>]" ""
+    (fun oc al ->
+      match al with
+      | [a] ->
+	  begin
+	    let h = hexstring_hashval a in
+	    try
+	      let bh = DbBlockHeader.dbget h in
+	      let (bhd,_) = bh in
+	      artificialbestblock := Some(h);
+	      artificialledgerroot := Some(bhd.newledgerroot)
+	    with Not_found ->
+	      Printf.fprintf oc "Unknown block.\n"
+	  end
+      | [a;blkh;lblk;ltx] ->
+	  begin
+	    let h = hexstring_hashval a in
+	    let blkh = Int64.of_string blkh in
+	    let lblk = hexstring_md256 lblk in
+	    let ltx = hexstring_md256 ltx in
+	    try
+	      let bh = DbBlockHeader.dbget h in
+	      let (bhd,_) = bh in
+	      artificialbestblock := Some(h);
+	      let pob = Poburn(lblk,ltx,0L,0L) in
+	      let newcsm = poburn_stakemod pob in
+	      let par =
+		match bhd.prevblockhash with
+		| None ->
+		    begin
+		      try
+			Some(Hashtbl.find blkheadernode None)
+		      with Not_found -> None
+		    end
+		| Some(pbhid,ppob) ->
+		    try
+		      Some(Hashtbl.find blkheadernode (Some(pbhid)))
+		    with Not_found ->
+		      try
+			let pbh = DbBlockHeader.dbget pbhid in
+			let (pbhd,_) = pbh in
+			let parpar =
+			  match pbhd.prevblockhash with
+			  | None ->
+			      begin
+				try
+				  Some(Hashtbl.find blkheadernode None)
+				with Not_found -> None
+			      end
+			  | Some(ppbhid,_) ->
+			      try
+				Some(Hashtbl.find blkheadernode (Some(ppbhid)))
+			      with Not_found ->
+				None
+			in
+			let pcsm = poburn_stakemod ppob in
+			let parnode = BlocktreeNode(parpar,ref [],Some(pbhid,ppob),pbhd.newtheoryroot,pbhd.newsignaroot,pbhd.newledgerroot,pcsm,pbhd.tinfo,pbhd.timestamp,zero_big_int,blkh,ref ValidBlock,ref false,ref []) in
+			Hashtbl.add blkheadernode (Some(pbhid)) parnode;
+			Some(parnode)
+		      with Not_found -> None
+	      in
+	      Hashtbl.add blkheadernode (Some(h)) (BlocktreeNode(par,ref [],Some(h,pob),bhd.newtheoryroot,bhd.newsignaroot,bhd.newledgerroot,newcsm,bhd.tinfo,bhd.timestamp,zero_big_int,Int64.add blkh 1L,ref ValidBlock,ref false,ref []))
+	    with Not_found ->
+	      Printf.fprintf oc "Unknown block.\n"
+	  end
+      | _ ->
+	  raise BadCommandForm);
+  ac "setledgerroot" "setledgerroot <ledgerroot or blockid>" ""
+    (fun oc al ->
+      match al with
+      | [a] ->
+	  begin
+	    let h = hexstring_hashval a in
+	    try
+	      let (bhd,_) = DbBlockHeader.dbget h in
+	      artificialledgerroot := Some(bhd.newledgerroot)
+	    with Not_found ->
+	      artificialledgerroot := Some(h)
+	  end
+      | _ -> raise BadCommandForm);
+  ac "requestfullledger" "requestfullledger [<ledgerroot>]" "try to request the full ledger from peers\nThis is an experimental command and can take several hours.\nCurrently it is more likely to be successful if the node already has most of the ledger.\nIf you have very little of the full ledger and you want it, consider downloading the initial full ledger from https://mega.nz/#!waQE1DiC!yRo9vTYPK9CZsfOxT-6eJ7vtl3WLeIMqK4LAcA2ASKc"
+    (fun oc al ->
+      match al with
+      | [a] ->
+	  begin
+	    let h = hexstring_hashval a in
+	    Commands.requestfullledger oc h
+	  end
+      | [] ->
+	  begin
+	    try
+	      let BlocktreeNode(_,_,pbh,_,_,ledgerroot,csm,tar,tmstmp,_,blkh,_,_,_) = get_bestnode_print_warnings oc true in
+	      Commands.requestfullledger oc ledgerroot
+	    with e ->
+	      Printf.fprintf oc "Exception: %s\n" (Printexc.to_string e)
+	  end
+      | _ -> raise BadCommandForm);
+  ac "requestblock" "requestblock <blockid>" ""
+    (fun oc al ->
+      match al with
+      | [a] ->
+	  begin
+	    let h = hexstring_hashval a in
+	    try
+	      if DbInvalidatedBlocks.dbexists h then DbInvalidatedBlocks.dbdelete h;
+	      if DbBlacklist.dbexists h then DbBlacklist.dbdelete h;
+	      if DbBlockHeader.dbexists h then
+		Printf.fprintf oc "Already have header.\n"
+	      else
+		begin
+		  find_and_send_requestdata GetHeader h;
+		  Printf.fprintf oc "Block header requested.\n"
+		end;
+	      try
+		if DbBlockDelta.dbexists h then
+		  Printf.fprintf oc "Already have delta.\n"
+		else
+		  begin
+		    find_and_send_requestdata GetBlockdelta h;
+		    Printf.fprintf oc "Block delta requested.\n"
+		  end
+	      with Not_found ->
+		Printf.fprintf oc "No peer has delta %s.\n" a
+	    with Not_found ->
+	      Printf.fprintf oc "No peer has header %s.\n" a
+	  end
+      | _ -> raise BadCommandForm);
+  ac "query" "query <hashval or address or int[block height]> [<blockid or ledgerroot>]" ""
+    (fun oc al ->
+      match al with
+      | [h] ->
+	  begin
+	    try
+	      let blkh = Int64.of_string h in
+	      let j = Commands.query_blockheight blkh in
+	      print_jsonval oc j;
+	      Printf.fprintf oc "\n"
+	    with Failure(_) ->
+	      let j = Commands.query h in
+	      print_jsonval oc j;
+	      Printf.fprintf oc "\n"
+	  end
+      | [h;kh] ->
+	  let k = hexstring_hashval kh in
+	  begin
+	    try
+	      let BlocktreeNode(_,_,pbh,_,_,ledgerroot,_,_,_,_,blkh,_,_,_) = Hashtbl.find blkheadernode (Some(k)) in
+	      let j = Commands.query_at_block h pbh ledgerroot blkh in
+	      print_jsonval oc j;
+	      Printf.fprintf oc "\n"
+	    with Not_found ->
+	      if DbCTreeElt.dbexists k then
+		begin
+		  let j = Commands.query_at_block h None k (-1L) in
+		  print_jsonval oc j;
+		  Printf.fprintf oc "\n"
+		end
+	      else
+		raise (Failure ("could not interpret " ^ kh ^ " as a block or ledger root"))
+	  end
+      | _ -> raise BadCommandForm);
+  ac "dumpwallet" "dumpwallet <filename>" ""
+    (fun oc al ->
+      match al with
+      | [fn] -> Commands.dumpwallet fn
+      | _ -> raise BadCommandForm);
+  ac "ltcstatusdump" "ltcstatusdump [<filename> [<ltcblockhash> [<how many ltc blocks back>]]]" ""
+    (fun oc al ->
+      let (fn,blkh,howfarback) =
+	match al with
+	| [] -> ("ltcstatusdumpfile",hexstring_hashval (Ltcrpc.ltc_getbestblockhash ()),1000)
+	| [fn] -> (fn,hexstring_hashval (Ltcrpc.ltc_getbestblockhash ()),1000)
+	| [fn;hh] -> (fn,hexstring_hashval hh,1000)
+	| [fn;hh;b] -> (fn,hexstring_hashval hh,int_of_string b)
+	| _ -> raise BadCommandForm
+      in
+      let cblkh = ref blkh in
+      let f = open_out fn in
+      begin
+	try
+	  for i = 1 to howfarback do
+	    Printf.fprintf f "%d. ltc block %s DacStatus\n" i (hashval_hexstring !cblkh);
+	    begin
+	      try
+		match DbLtcDacStatus.dbget !cblkh with
+		| LtcDacStatusPrev(h) ->
+		    Printf.fprintf f "  DacStatus unchanged since ltc block %s\n" (hashval_hexstring h)
+		| LtcDacStatusNew(l) ->
+		    Printf.fprintf f "  New DacStatus:\n";
+		    let cnt = ref 0 in
+		    List.iter
+		      (fun li ->
+			let i = !cnt in
+			incr cnt;
+			match li with
+			| [] -> Printf.fprintf f "   %d. Empty tip? Should not be possible.\n" i;
+			| ((bh,lbh,ltx,ltm,lhght)::r) ->
+			    Printf.fprintf f "   (%d) - Dalilcoin Block: %s\n        Litecoin Block: %s\n        Litecoin Burn Tx: %s\n        Litecoin Time: %Ld\n        Litecoin Height: %Ld\n" i (hashval_hexstring bh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght;
+			    List.iter (fun (bh,lbh,ltx,ltm,lhght) ->
+			      Printf.fprintf f "       - Dalilcoin Block: %s\n        Litecoin Block: %s\n        Litecoin Burn Tx: %s\n        Litecoin Time: %Ld\n        Litecoin Height: %Ld\n" (hashval_hexstring bh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght)
+			      r)
+		      l
+	      with Not_found ->
+		Printf.fprintf f "  DacStatus not found\n"
+	    end;
+	    begin
+	      try
+		let (prevh,tm,hght,burntxhs) = DbLtcBlock.dbget !cblkh in
+		Printf.fprintf f "%d. ltc block %s info\n" i (hashval_hexstring !cblkh);
+		Printf.fprintf f "   Previous %s\n   Block Time %Ld\n    Height %Ld\n" (hashval_hexstring prevh) tm hght;
+		cblkh := prevh;
+		match burntxhs with
+		| [] -> ()
+		| [x] -> Printf.fprintf f "    Burn Tx: %s\n" (hashval_hexstring x)
+		| _ ->
+		    Printf.fprintf f "    %d Burn Txs:\n" (List.length burntxhs);
+		    List.iter (fun x -> Printf.fprintf f "         %s\n" (hashval_hexstring x)) burntxhs
+	      with Not_found ->
+		Printf.fprintf f "  LtcBlock not found\n"
+	    end
+	  done
+	with e -> Printf.fprintf f "Exception: %s\n" (Printexc.to_string e)
+      end;
+      close_out f);
+  ac "ltcstatus" "ltcstatus [<ltcblockhash>]" ""
+    (fun oc al ->
+      let h =
+	match al with
+	| [hh] -> hexstring_hashval hh
+	| [] ->
+	    Printf.fprintf oc "ltcbest %s\n" (hashval_hexstring !ltc_bestblock);
+	    !ltc_bestblock
+	| _ -> raise BadCommandForm
+      in
+      let (lastchangekey,zll) = ltcdacstatus_dbget h in
+      let tm = ltc_medtime() in
+      if zll = [] && tm > Int64.add !Config.genesistimestamp 604800L then
+	begin
+	  Printf.fprintf oc "No blocks were created in the past week. Dalilcoin has reached terminal status.\nThe only recovery possible for the network is a hard fork.\n"
+	end;
+      let i = ref 0 in
+      List.iter
+	(fun zl ->
+	  incr i;
+	  Printf.fprintf oc "%d.\n" !i;
+	  List.iter
+	    (fun (dbh,lbh,ltx,ltm,lhght) ->
+	      if DbBlacklist.dbexists dbh then
+		Printf.fprintf oc "- %s (blacklisted, presumably invalid) %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
+	      else if DbInvalidatedBlocks.dbexists dbh then
+		Printf.fprintf oc "- %s (marked invalid) %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
+	      else if DbBlockHeader.dbexists dbh then
+		if DbBlockDelta.dbexists dbh then
+		  Printf.fprintf oc "+ %s %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
+		else
+		  begin
+		    possibly_request_dalilcoin_block dbh;
+		    Printf.fprintf oc "* %s (missing delta) %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
+		  end
+	      else
+		begin
+		  possibly_request_dalilcoin_block dbh;
+		  Printf.fprintf oc "* %s (missing header) %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
+		end)
+	    zl)
+	zll);
+  ac "ltcgettxinfo" "ltcgettxinfo <txid>" ""
+    (fun oc al ->
+      match al with
+      | [h] ->
+	  begin
+	    try
+	      let (burned,prev,nxt,lblkh,confs) = Ltcrpc.ltc_gettransactioninfo h in
+	      match lblkh,confs with
+	      | Some(lh),Some(confs) ->
+		  Printf.fprintf oc "burned %Ld prev %s next %s in ltc block %s, %d confirmations\n" burned (hashval_hexstring prev) (hashval_hexstring nxt) lh confs
+	      | _,_ ->
+		  Printf.fprintf oc "burned %Ld prev %s next %s\n" burned (hashval_hexstring prev) (hashval_hexstring nxt)
+	    with Not_found -> raise (Failure("problem"))
+	  end
+      | _ -> raise BadCommandForm);
+  ac "ltcgetbestblockhash" "ltcgetbestblockhash" "get the current tip of the ltc blockchain"
+    (fun oc al ->
+      if al = [] then
+	begin
+	  try
+	    let x = Ltcrpc.ltc_getbestblockhash () in
+	    Printf.fprintf oc "best ltc block hash %s\n" x
+	  with Not_found ->
+	    Printf.fprintf oc "could not find best ltc block hash\n"
+	end
+      else
+	raise BadCommandForm);
+  ac "ltcgetblock" "ltcgetblock <blockid>" "print dalilcoin related information about the given ltc block"
+    (fun oc al ->
+      match al with
+      | [h] ->
+	  begin
+	    try
+	      let (pbh,tm,hght,txl) = Ltcrpc.ltc_getblock h in
+	      Printf.fprintf oc "ltc block %s time %Ld height %Ld prev %s; %d dalilcoin candidate txs:\n" h tm hght pbh (List.length txl);
+	      List.iter (fun tx -> Printf.fprintf oc "%s\n" tx) txl
+	    with Not_found ->
+	      Printf.fprintf oc "could not find ltc block %s\n" h
+	  end
+      | _ -> raise BadCommandForm);
+  ac "ltclistunspent" "ltclistunspent" "list the current relevant utxos in the local ltc wallet"
+    (fun oc al ->
+      if al = [] then
+	begin
+	  try
+	    let utxol = Ltcrpc.ltc_listunspent () in
+	    Printf.fprintf oc "%d ltc utxos\n" (List.length utxol);
+	    List.iter (fun (txid,vout,_,_,amt) -> Printf.fprintf oc "%s:%d %Ld\n" txid vout amt) utxol
+	  with Not_found ->
+	    Printf.fprintf oc "could not get unspent ltc list\n"
+	end
+      else
+	raise BadCommandForm);
+  ac "ltcsigntx" "ltcsigntx <txinhex>" "use the local ltc wallet to sign an ltc tx"
+    (fun oc al ->
+      match al with
+      | [tx] -> Printf.fprintf oc "%s\n" (Ltcrpc.ltc_signrawtransaction tx)
+      | _ -> raise BadCommandForm);
+  ac "ltcsendtx" "ltcsendtx <txinhex>" "use the local ltc wallet to send an ltc tx"
+    (fun oc al ->
+      match al with
+      | [tx] -> Printf.fprintf oc "%s\n" (Ltcrpc.ltc_sendrawtransaction tx)
+      | _ -> raise BadCommandForm);
+  ac "ltccreateburn" "ltccreateburn <hash1> <hash2> <litoshis to burn>" "manually create an ltc burn tx to support a newly staked dalilcoin block"
+    (fun oc al ->
+      match al with
+      | [h1;h2;toburn] ->
+	  begin
+	    try
+	      let txs = Ltcrpc.ltc_createburntx (hexstring_hashval h1) (hexstring_hashval h2) (Int64.of_string toburn) in
+	      Printf.fprintf oc "burntx: %s\n" (Hashaux.string_hexstring txs)
+	    with
+	    | Ltcrpc.InsufficientLtcFunds ->
+		Printf.fprintf oc "no ltc utxo has %s litoshis\n" toburn
+	    | Not_found ->
+		Printf.fprintf oc "trouble creating burn tx\n"
+	  end
+      | _ -> raise BadCommandForm);
+  ac "exit" "exit" "exit or stop kills the dalilcoin node"
+    (fun oc _ -> (*** Could call Thread.kill on netth and stkth, but Thread.kill is not always implemented. ***)
+      closelog();
+      Printf.fprintf oc "Shutting down threads. Please be patient.\n"; flush oc;
+      !exitfn 0);
+  ac "stop" "stop" "exit or stop kills the dalilcoin node"
+    (fun oc _ -> (*** Could call Thread.kill on netth and stkth, but Thread.kill is not always implemented. ***)
+      closelog();
+      Printf.fprintf oc "Shutting down threads. Please be patient.\n"; flush oc;
+      !exitfn 0);
+  ac "dumpstate" "dumpstate <textfile>" "dump the current dalilcoin state to a file for debugging"
+    (fun oc al ->
+      match al with
+      | [fa] -> dumpstate fa
+      | _ -> raise BadCommandForm);
+  ac "addnode" "addnode <address:port> [add|remove|onetry]" "add or remove a peer by giving an address or port number.\nThe address may be an ip or an onion address."
+    (fun oc al ->
+      let addnode_add n =
+	match tryconnectpeer n with
+	| None -> raise (Failure "Failed to add node")
+	| Some(lth,sth,(fd,sin,sout,gcs)) ->
+	    match !gcs with
+	    | None -> raise (Failure "Problem adding node")
+	    | Some(cs) ->
+		if cs.addrfrom = "" then Thread.delay 1.0;
+		addknownpeer (Int64.of_float cs.conntime) cs.addrfrom
+      in
+      match al with
+      | [n] -> addnode_add n
+      | [n;"add"] -> addnode_add n
+      | [n;"remove"] ->
+          removeknownpeer n;
+          List.iter
+	    (fun (lth,sth,(fd,sin,sout,gcs)) -> if peeraddr !gcs = n then (shutdown_close fd; gcs := None))
+	    !netconns
+      | [n;"onetry"] ->
+	  ignore (tryconnectpeer n)
+      | _ -> raise BadCommandForm);
+  ac "clearbanned" "clearbanned" "clear the list of banned peers"
+    (fun _ _ -> clearbanned());
+  ac "listbanned" "listbanned" "list the current banned peers"
+    (fun oc _ -> Hashtbl.iter (fun n () -> Printf.fprintf oc "%s\n" n) bannedpeers);
+  ac "bannode" "bannode [<address:port>] ... [<address:port>]" "ban the given peers"
+    (fun _ al -> List.iter (fun n -> banpeer n) al);
+  ac "getinfo" "getinfo" "print a summary of the current dalilcoin node state including:\nnumber of connections, current best block, current difficulty, current balance"
+    (fun oc al ->
+      remove_dead_conns();
+      let ll = List.length !netconns in
+      Printf.fprintf oc "%d connection%s\n" ll (if ll = 1 then "" else "s");
+      begin
+	try
+	  let BlocktreeNode(_,_,pbh,_,_,ledgerroot,csm,tar,tmstmp,_,blkh,_,_,_) = get_bestnode_print_warnings oc true in
+	  let gtm = Unix.gmtime (Int64.to_float tmstmp) in
+	  begin
+	    match pbh with
+	    | Some(h,_) -> Printf.fprintf oc "Best block %s at height %Ld\n" (hashval_hexstring h) (Int64.sub blkh 1L) (*** blkh is the height the next block will have ***)
+	    | None -> Printf.fprintf oc "No blocks yet\n"
+	  end;
+	  Printf.fprintf oc "Time: %Ld (UTC %02d %02d %04d %02d:%02d:%02d)\n" tmstmp gtm.Unix.tm_mday (1+gtm.Unix.tm_mon) (1900+gtm.Unix.tm_year) gtm.Unix.tm_hour gtm.Unix.tm_min gtm.Unix.tm_sec;
+	  Printf.fprintf oc "Target: %s\n" (string_of_big_int tar);
+	  Printf.fprintf oc "Difficulty: %s\n" (string_of_big_int (difficulty tar));
+	  let (bal1,bal2,bal3,bal4) = Commands.get_cants_balances_in_ledger oc ledgerroot in
+	  Printf.fprintf oc "Total p2pkh: %s fraenks\n" (fraenks_of_cants bal1);
+	  Printf.fprintf oc "Total p2sh: %s fraenks\n" (fraenks_of_cants bal2);
+	  Printf.fprintf oc "Total via endorsement: %s fraenks\n" (fraenks_of_cants bal3);
+	  Printf.fprintf oc "Total watched: %s fraenks\n" (fraenks_of_cants bal4);
+	  Printf.fprintf oc "Sum of all: %s fraenks\n" (fraenks_of_cants (Int64.add bal1 (Int64.add bal2 (Int64.add bal3 bal4))))
+	with e ->
+	  Printf.fprintf oc "Exception: %s\n" (Printexc.to_string e)
+      end);
+  ac "getpeerinfo" "getpeerinfo" "list the current peers and when the last message was received from each"
+    (fun oc al ->
+      remove_dead_conns();
+      let ll = List.length !netconns in
+      Printf.fprintf oc "%d connection%s\n" ll (if ll = 1 then "" else "s");
+      List.iter
+	(fun (_,_,(_,_,_,gcs)) ->
+	  match !gcs with
+	  | Some(cs) ->
+	      Printf.fprintf oc "%s (%s): %s\n" cs.realaddr cs.addrfrom cs.useragent;
+	      let snc = Int64.sub (Int64.of_float (Unix.time())) (Int64.of_float cs.conntime) in
+	      let snc1 = sincetime (Int64.of_float cs.conntime) in
+	      let snc2 = sincetime (Int64.of_float cs.lastmsgtm) in
+	      Printf.fprintf oc "Connected for %s; last message %s ago.\n" snc1 snc2;
+	      if cs.handshakestep < 5 then Printf.fprintf oc "(Still in handshake phase)\n";
+	  | None -> (*** This could happen if a connection died after remove_dead_conns above. ***)
+	      Printf.fprintf oc "[Dead Connection]\n";
+	)
+	!netconns;
+      flush oc);
+  ac "nettime" "nettime" "print the current network time (median of peers) and skew from local node"
+    (fun oc al ->
+      let (tm,skew) = network_time() in
+      Printf.fprintf oc "network time %Ld (median skew of %d)\n" tm skew;
+      flush oc);
+  ac "invalidateblock" "invalidateblock <blockhash>" "manually invalidate a dalilcoin block\nThis should be used if someone is attacking the network and nodes decide to ignore their blocks."
+    (fun oc al ->
+      match al with
+      | [h] ->
+	  let hh = hexstring_hashval h in
+	  recursively_invalidate_blocks hh
+      | _ -> raise BadCommandForm);
+  ac "revalidateblock" "revalidateblock <blockhash>" "manually mark a previously manually invalidated block as being valid.\nThis will also mark the previous blocks as valid."
+    (fun oc al ->
+      match al with
+      | [h] ->
+	  let hh = hexstring_hashval h in
+	  recursively_revalidate_blocks hh
+      | _ -> raise BadCommandForm);
+  ac "rawblockheader" "rawblockheader <blockhash>" "print the given block header in hex"
+    (fun oc al ->
+      match al with
+      | [hh] ->
+	  begin
+	    let h = hexstring_hashval hh in
+	    try
+	      let bh = DbBlockHeader.dbget h in
+	      let sb = Buffer.create 1000 in
+	      seosbf (seo_blockheader seosb bh (sb,None));
+	      let s = string_hexstring (Buffer.contents sb) in
+	      Printf.fprintf oc "%s\n" s;
+	    with Not_found ->
+	      Printf.fprintf oc "Could not find header %s\n" hh
+	  end
+      | _ -> raise BadCommandForm);
+  ac "rawblockdelta" "rawblockdelta <blockid>" "print the given block delta in hex"
+    (fun oc al ->
+      match al with
+      | [hh] ->
+	  begin
+	    let h = hexstring_hashval hh in
+	    try
+	      let bd = DbBlockDelta.dbget h in
+	      let sb = Buffer.create 1000 in
+	      seosbf (seo_blockdelta seosb bd (sb,None));
+	      let s = string_hexstring (Buffer.contents sb) in
+	      Printf.fprintf oc "%s\n" s;
+	    with Not_found ->
+	      Printf.fprintf oc "Could not find delta %s\n" hh
+	  end
+      | _ -> raise BadCommandForm);
+  ac "rawblock" "rawblock <blockid>" "print the block (header and delta) in hex"
+    (fun oc al ->
+      match al with
+      | [hh] ->
+	  begin
+	    let h = hexstring_hashval hh in
+	    try
+	      let bh = DbBlockHeader.dbget h in
+	      try
+		let bd = DbBlockDelta.dbget h in
+		let sb = Buffer.create 1000 in
+		seosbf (seo_block seosb (bh,bd) (sb,None));
+		let s = string_hexstring (Buffer.contents sb) in
+		Printf.fprintf oc "%s\n" s;
+	      with Not_found ->
+		Printf.fprintf oc "Could not find delta %s\n" hh
+	    with Not_found ->
+	      Printf.fprintf oc "Could not find header %s\n" hh
+	  end
+      | _ -> raise BadCommandForm);
+  ac "getblock" "getblock <blockhash>" "print information about the block, or request it from a peer if it is missing"
+    (fun oc al ->
+      match al with
+      | [hh] ->
+	  begin
+	    let h = hexstring_hashval hh in
+	    try
+	      let (bhd,_) = DbBlockHeader.dbget h in
+	      Printf.fprintf oc "Time: %Ld\n" bhd.timestamp;
+	      begin
+		try
+		  let bd = DbBlockDelta.dbget h in
+		  Printf.fprintf oc "%d txs\n" (List.length (bd.blockdelta_stxl));
+		  List.iter (fun (tx,txs) -> Printf.fprintf oc "%s\n" (hashval_hexstring (hashtx tx))) (bd.blockdelta_stxl);
+		with Not_found ->
+		  find_and_send_requestdata GetBlockdelta h;
+		  Printf.fprintf oc "Missing block delta\n"
+	      end
+	    with Not_found ->
+	      find_and_send_requestdata GetHeader h
+	  end
+      | _ -> raise BadCommandForm);
+  ac "nextstakingchances" "nextstakingchances [<hours> [<max ltc to burn> [<blockid>]]" "Print chances for the node to stake\nincluding chances if the node were to hypothetically burn some ltc (see extraburn).\nBy default nextstakingchances checks for every chance from the time of the previous block to 24 hours in the future."
+    (fun oc al ->
+      let (scnds,maxburn,n) =
+	match al with
+	| [] ->
+	    let n = get_bestnode_print_warnings oc true in
+	    (3600 * 24,100000000L,n)
+	| [hrs] ->
+	    let n = get_bestnode_print_warnings oc true in
+	    (3600 * (int_of_string hrs),100000000L,n)
+	| [hrs;maxburn] ->
+	    let n = get_bestnode_print_warnings oc true in
+	    (3600 * (int_of_string hrs),litoshis_of_ltc maxburn,n)
+	| [hrs;maxburn;blockid] ->
+	    begin
+	      try
+		let n = Hashtbl.find blkheadernode (Some(hexstring_hashval blockid)) in
+		(3600 * (int_of_string hrs),litoshis_of_ltc maxburn,n)
+	      with Not_found ->
+		raise (Failure ("unknown block " ^ blockid))
+	    end
+	| _ -> raise BadCommandForm
+      in
+      let BlocktreeNode(_,_,prevblk,_,_,_,_,_,tmstmp,_,_,_,_,_) = n in
+      let prevblkh = fstohash prevblk in
+      let nw = ltc_medtime() in (*** for staking purposes, ltc is the clock to follow ***)
+      let fromnow_string i nw =
+	if i <= nw then
+	  "now"
+	else
+	  let del = Int64.to_int (Int64.sub i nw) in
+	  if del < 60 then
+	    Printf.sprintf "%d seconds from now" del
+	  else if del < 3600 then
+	    Printf.sprintf "%d minutes %d seconds from now" (del / 60) (del mod 60)
+	  else
+	    Printf.sprintf "%d hours %d minutes %d seconds from now" (del / 3600) ((del mod 3600) / 60) (del mod 60)
+      in
+      compute_staking_chances n tmstmp (min (Int64.add tmstmp 604800L) (Int64.add nw (Int64.of_int scnds)));
+      begin
+	try
+	  match Hashtbl.find nextstakechances prevblkh with
+	  | NextStake(i,stkaddr,h,bday,obl,v,Some(toburn),_,_,_,_,_) ->
+	      Printf.fprintf oc "Can stake at time %Ld (%s) with asset %s at address %s burning %Ld litoshis (%s ltc).\n" i (fromnow_string i nw) (hashval_hexstring h) (addr_daliladdrstr (p2pkhaddr_addr stkaddr)) toburn (ltc_of_litoshis toburn);
+	  | NextStake(i,stkaddr,h,bday,obl,v,None,_,_,_,_,_) -> () (*** should not happen; ignore ***)
+	  | NoStakeUpTo(_) -> Printf.fprintf oc "Found no chance to stake with current wallet and ltc burn limits.\n"
+	with Not_found -> ()
+      end;
+      List.iter
+	(fun z ->
+	  let il = ref [] in
+	  match z with
+	  | NextStake(i,stkaddr,h,bday,obl,v,Some(toburn),_,_,_,_,_) ->
+	      if not (List.mem i !il) then
+		begin
+		  il := i::!il; (** while the info should not be on the hash table more than once, sometimes it is, so only report it once **)
+		  Printf.fprintf oc "With extraburn %Ld litoshis (%s ltc), could stake at time %Ld (%s) with asset %s at address %s.\n" toburn (ltc_of_litoshis toburn) i (fromnow_string i nw) (hashval_hexstring h) (addr_daliladdrstr (p2pkhaddr_addr stkaddr))
+		end
+	  | _ -> ())
+	(List.sort
+	   (fun y z ->
+	     match (y,z) with
+	     | (NextStake(i,_,_,_,_,_,Some(_),_,_,_,_,_),NextStake(j,_,_,_,_,_,Some(_),_,_,_,_,_)) -> compare i j
+	     | _ -> 0)
+	   (List.filter
+	      (fun z ->
+		match z with
+		| NextStake(i,stkaddr,h,bday,obl,v,Some(toburn),_,_,_,_,_) -> true
+		| _ -> false)
+	      (Hashtbl.find_all nextstakechances_hypo prevblkh))));
+  ac "extraburn" "extraburn <ltc> or extraburn <litoshis> litoshis" "order the node to burn up to the given amount of ltc given a chance to stake by doing the burn (see nextstakingchances)"
+    (fun oc al ->
+      match al with
+      | [a] -> (extraburn := litoshis_of_ltc a; Hashtbl.clear nextstakechances)
+      | [a;b] when b = "litoshis" -> (extraburn := Int64.of_string a; Hashtbl.clear nextstakechances)
+      | _ -> raise BadCommandForm);
+  ac "printassets" "printassets [<ledgerroot>] ... [<ledgerroot>]" "Print the assets in the given ledger roots.\nBy default the ledger root of the current best block is used."
+    (fun oc al -> if al = [] then Commands.printassets oc else List.iter (fun h -> Commands.printassets_in_ledger oc (hexstring_hashval h)) al);
+  ac "printtx" "printtx <txid> [<txid>] ... [<txid>]" "print info about the given txs"
+    (fun oc al -> List.iter (fun h -> Commands.printtx oc (hexstring_hashval h)) al);
+  ac "importprivkey" "importprivkey <WIFkey> [staking|nonstaking|staking_fresh|nonstaking_fresh]" "import a private key for a p2pkh address into the wallet"
+    (fun oc al ->
+      match al with
+      | [w] -> Commands.importprivkey oc w "staking"
+      | [w;cls] -> Commands.importprivkey oc w cls
+      | _ -> raise BadCommandForm);
+  ac "importbtcprivkey" "importbtcprivkey <btcWIFkey> [staking|nonstaking|staking_fresh|nonstaking_fresh]" "import a btc private key for a p2pkh address into the wallet"
+    (fun oc al ->
+      match al with
+      | [w] -> Commands.importbtcprivkey oc w "staking"
+      | [w;cls] -> Commands.importbtcprivkey oc w cls
+      | _ -> raise BadCommandForm);
+  ac "importwatchaddr" "importwatchaddr <address> [offlinekey|offlinekey_fresh]" "Import a dalilcoin address to watch.\nofflinekey or offlinekey_fresh indicates that the user has the private key offline.\nofflinekey_fresh tells dalilcoin to use the address when it needs a fresh address controlled offline (e.g. for staking rewards)"
+    (fun oc al ->
+      match al with
+      | [a] -> Commands.importwatchaddr oc a ""
+      | [a;cls] ->
+	  if cls = "offlinekey" || cls = "offlinekey_fresh" then
+	    Commands.importwatchaddr oc a cls
+	  else
+	    raise BadCommandForm
+      | _ -> raise BadCommandForm);
+  ac "importwatchbtcaddr" "importwatchbtcaddr <address> [offlinekey|offlinekey_fresh]" "Import a dalilcoin address to watch by giving it as a bitcoin address.\nofflinekey or offlinekey_fresh indicates that the user has the private key offline.\nofflinekey_fresh tells dalilcoin to use the address when it needs a fresh address controlled offline (e.g. for staking rewards)"
+    (fun oc al ->
+      match al with
+      | [a] -> Commands.importwatchbtcaddr oc a ""
+      | [a;cls] ->
+	  if cls = "offlinekey" || cls = "offlinekey_fresh" then
+	    Commands.importwatchbtcaddr oc a cls
+	  else
+	    raise BadCommandForm
+      | _ -> raise BadCommandForm);
+  ac "importendorsement" "importendorsement <address> <address> <signature>" "importendorsement should be given three arguments: a b s where s is a signature made with the private key for address a endorsing to address b"
+    (fun oc al ->
+      match al with
+      | [a;b;s] -> Commands.importendorsement oc a b s
+      | _ -> raise BadCommandForm);
+  ac "btctodaliladdr" "btctodaliladdr <btcaddress> [<btcaddress>] .. [<btcaddress>]" "print the dalilcoin addresses corresponding to the given btc addresses"
+    (fun oc al -> List.iter (Commands.btctodaliladdr oc) al);
+  ac "printasset" "printasset <assethash>" "print information about the given asset"
+    (fun oc al ->
+      match al with
+      | [h] -> Commands.printasset oc (hexstring_hashval h)
+      | _ -> raise BadCommandForm);
+  ac "printhconselt" "printhconselt <hashval>" "print information about the given hconselt, which is an asset possibly followed by a hash referencing more assets"
+    (fun oc al ->
+      match al with
+      | [h] -> Commands.printhconselt oc (hexstring_hashval h)
+      | _ -> raise BadCommandForm);
+  ac "printctreeelt" "printctreeelt <hashval>" "print information about a ctree element with the given Merkle root"
+    (fun oc al ->
+      match al with
+      | [h] -> Commands.printctreeelt oc (hexstring_hashval h)
+      | _ -> raise BadCommandForm);
+  ac "printctreeinfo" "printctreeinfo [ledgerroot]" "print info about a ctree with the given Merkle root"
+    (fun oc al ->
+      match al with
+      | [] ->
+	  let best = get_bestnode_print_warnings oc true in
+	  let BlocktreeNode(_,_,_,_,_,currledgerroot,_,_,_,_,_,_,_,_) = best in
+	  Commands.printctreeinfo oc currledgerroot
+      | [h] -> Commands.printctreeinfo oc (hexstring_hashval h)
+      | _ -> raise BadCommandForm);
+  ac "newofflineaddress" "newofflineaddress" "find an address in the watch wallet that was marked as offlinekey and fresh, print it and mark it as no longer fresh"
+    (fun oc al ->
+      let alpha = Commands.get_fresh_offline_address oc in
+      Printf.fprintf oc "%s\n" (addr_daliladdrstr alpha));
+  ac "newaddress" "newaddress [ledgerroot]" ""
+    (fun oc al ->
+      match al with
+      | [] ->
+	  let best = get_bestnode_print_warnings oc true in
+	  let BlocktreeNode(_,_,_,_,_,currledgerroot,_,_,_,_,_,_,_,_) = best in
+	  let (k,h) = Commands.generate_newkeyandaddress currledgerroot "nonstaking" in
+	  let alpha = p2pkhaddr_addr h in
+	  let a = addr_daliladdrstr alpha in
+	  Printf.fprintf oc "%s\n" a
+      | [clr] ->
+	  let (k,h) = Commands.generate_newkeyandaddress (hexstring_hashval clr) "nonstaking" in
+	  let alpha = p2pkhaddr_addr h in
+	  let a = addr_daliladdrstr alpha in
+	  Printf.fprintf oc "%s\n" a
+      | _ -> raise BadCommandForm);
+  ac "newstakingaddress" "newstakingaddress [ledgerroot]" ""
+    (fun oc al ->
+      match al with
+      | [] ->
+	  let best = get_bestnode_print_warnings oc true in
+	  let BlocktreeNode(_,_,_,_,_,currledgerroot,_,_,_,_,_,_,_,_) = best in
+	  let (k,h) = Commands.generate_newkeyandaddress currledgerroot "staking" in
+	  let alpha = p2pkhaddr_addr h in
+	  let a = addr_daliladdrstr alpha in
+	  Printf.fprintf oc "%s\n" a
+      | [clr] ->
+	  let (k,h) = Commands.generate_newkeyandaddress (hexstring_hashval clr) "staking" in
+	  let alpha = p2pkhaddr_addr h in
+	  let a = addr_daliladdrstr alpha in
+	  Printf.fprintf oc "%s\n" a
+      | _ -> raise BadCommandForm);
+  ac "stakewith" "stakewith <address>" "move an address in the wallet from nonstaking to staking"
+    (fun oc al ->
+      match al with
+      | [alpha] -> Commands.reclassify_staking oc alpha true
+      | _ -> raise BadCommandForm);
+  ac "donotstakewith" "donotstakewith <address>" "move an address in the wallet from staking to nonstaking"
+    (fun oc al ->
+      match al with
+      | [alpha] -> Commands.reclassify_staking oc alpha false
+      | _ -> raise BadCommandForm);
+  ac "createtx" "createtx <inputs as json array> <outputs as json array>" "each input: {\"<addr>\":\"<assetid>\"}\neach output: {\"addr\":\"<addr>\",\"val\":<fraenks>,\"lock\":<height>,\"obligationaddress\":\"<addr>\"}\nwhere lock is optional (default null, unlocked output)\nand obligationaddress is optional (default null, meaning the holder address is implicitly the obligationaddress)"
+    (fun oc al ->
+      match al with
+      | [inp;outp] ->
+	  begin
+	    try
+	      let (inpj,_) = parse_jsonval inp in
+	      begin
+		try
+		  let (outpj,_) = parse_jsonval outp in
+		  let tau = Commands.createtx inpj outpj in
+		  let s = Buffer.create 100 in
+		  seosbf (seo_stx seosb (tau,([],[])) (s,None));
+		  let hs = Hashaux.string_hexstring (Buffer.contents s) in
+		  Printf.fprintf oc "%s\n" hs
+		with
+		| JsonParseFail(i,msg) ->
+		    Printf.fprintf oc "Problem parsing json object for tx inputs at position %d %s\n" i msg
+	      end
+	    with
+	    | JsonParseFail(i,msg) ->
+		Printf.fprintf oc "Problem parsing json object for tx outputs at position %d %s\n" i msg
+	  end
+      | _ -> raise BadCommandForm);
+  ac "creategeneraltx" "creategeneraltx <tx as json object>" "create a general tx given as as a json object"
+    (fun oc al ->
+      try
+	match al with
+	| [jtxstr] ->
+	    let (jtx,_) = parse_jsonval jtxstr in
+	    let tau = tx_from_json jtx in
+	    let s = Buffer.create 100 in
+	    seosbf (seo_stx seosb (tau,([],[])) (s,None));
+	    let hs = Hashaux.string_hexstring (Buffer.contents s) in
+	    Printf.fprintf oc "%s\n" hs
+	| _ -> raise BadCommandForm
+      with
+      | JsonParseFail(i,msg) ->
+	  Printf.fprintf oc "Problem parsing json object for tx at position %d %s\n" i msg);
+  ac "createsplitlocktx" "createsplitlocktx <current address> <assetid> <number of outputs> <lockheight> <fee> [<new holding address> [<new obligation address> [<ledger root>]]]" "create a tx to spend an asset into several assets locked until a given height\noptionally the new assets can be held at a new address, and may be controlled by a different obligation address"
+    (fun oc al ->
+      match al with
+      | (alp::aid::n::lkh::fee::r) ->
+	  begin
+	    let alpha2 = daliladdrstr_addr alp in
+	    if not (payaddr_p alpha2) then raise (Failure (alp ^ " is not a pay address"));
+	    let (p,a4,a3,a2,a1,a0) = alpha2 in
+	    let alpha = (p=1,a4,a3,a2,a1,a0) in
+	    let aid = hexstring_hashval aid in
+	    let n = int_of_string n in
+	    if n <= 0 then raise (Failure ("Cannot split into " ^ (string_of_int n) ^ " assets"));
+	    let lkh = Int64.of_string lkh in
+	    let fee = cants_of_fraenks fee in
+	    if fee < 0L then raise (Failure ("Cannot have a negative free"));
+	    match r with
+	    | [] ->
+		let gamma = alpha2 in
+		let beta = alpha in
+		let lr = node_ledgerroot (get_bestnode_print_warnings oc true) in
+		Commands.createsplitlocktx oc lr alpha beta gamma aid n lkh fee
+	    | (gam::r) ->
+		let gamma = daliladdrstr_addr gam in
+		if not (payaddr_p gamma) then raise (Failure (gam ^ " is not a pay address"));
+		match r with
+		| [] ->
+		    let beta = alpha in
+		    let lr = node_ledgerroot (get_bestnode_print_warnings oc true) in
+		    Commands.createsplitlocktx oc lr alpha beta gamma aid n lkh fee
+		| (bet::r) ->
+		    let beta2 = daliladdrstr_addr bet in
+		    if not (payaddr_p beta2) then raise (Failure (bet ^ " is not a pay address"));
+		    let (p,b4,b3,b2,b1,b0) = beta2 in
+		    let beta = (p=1,b4,b3,b2,b1,b0) in
+		    match r with
+		    | [] ->
+			let lr = node_ledgerroot (get_bestnode_print_warnings oc true) in
+			Commands.createsplitlocktx oc lr alpha beta gamma aid n lkh fee
+		    | [lr] ->
+			let lr = hexstring_hashval lr in
+			Commands.createsplitlocktx oc lr alpha beta gamma aid n lkh fee
+		    | _ -> raise BadCommandForm
+	  end
+      | _ -> raise BadCommandForm);
+  ac "signtx" "signtx <tx in hex>" ""
+    (fun oc al ->
+      match al with
+      | [s] -> Commands.signtx oc (node_ledgerroot (get_bestnode_print_warnings oc true)) s
+      | _ -> raise BadCommandForm);
+  ac "savetxtopool" "savetxtopool <tx in hex>" ""
+    (fun oc al ->
+      match al with
+      | [s] -> Commands.savetxtopool (node_blockheight (get_bestnode_print_warnings oc true)) (node_ledgerroot (get_bestnode_print_warnings oc true)) s
+      | _ -> raise BadCommandForm);
+  ac "sendtx" "sendtx <tx in hex>" ""
+    (fun oc al ->
+      match al with
+      | [s] ->
+	  let BlocktreeNode(_,_,_,tr,sr,lr,_,_,_,_,_,_,_,_) = get_bestnode_print_warnings oc true in
+	  Commands.sendtx oc (node_blockheight (get_bestnode_print_warnings oc true)) tr sr lr s
+      | _ -> raise BadCommandForm);
+  ac "validatetx" "validatetx <tx in hex>" "Print information about the tx and whether or not it is valid.\nIf the tx is not valid, information about why it is not valid is given."
+    (fun oc al ->
+      match al with
+      | [s] ->
+	  let BlocktreeNode(_,_,_,tr,sr,lr,_,_,_,_,_,_,_,_) = get_bestnode_print_warnings oc true in
+	  Commands.validatetx oc (node_blockheight (get_bestnode_print_warnings oc true)) tr sr lr s
+      | _ -> raise BadCommandForm);
+  ac "preassetinfo" "preassetinfo <preasset as json>" ""
+    (fun oc al ->
+      match al with
+      | [a] ->
+	  begin
+	    try
+	      let (j,_) = parse_jsonval a in
+	      let u = preasset_from_json j in
+	      Commands.preassetinfo_report oc u
+	    with
+	    | JsonParseFail(i,msg) ->
+		Printf.fprintf oc "Problem parsing json object for preasset at position %d %s\n" i msg
+	  end
+      | _ -> raise BadCommandForm);
+  ac "terminfo" "terminfo <term as json> [<type as json>, with default 'prop'] [<theoryid, default of empty theory>]" ""
+    (fun oc al ->
+      let (jtm,jtp,thyid) =
+	match al with
+	| [jtm] -> (jtm,"'\"prop\"'",None)
+	| [jtm;jtp] -> (jtm,jtp,None)
+	| [jtm;jtp;theoryid] -> (jtm,jtp,Some(hexstring_hashval theoryid))
+	| _ -> raise BadCommandForm
+      in
+      begin
+	try
+	  let (jtm,_) = parse_jsonval jtm in
+	  begin
+	    try
+	      let (jtp,_) = parse_jsonval jtp in
+	      let m =
+		match jtm with
+		| JsonStr(x) -> Logic.TmH(hexstring_hashval x) (*** treat a string as just the term root abbreviating the term ***)
+		| _ -> trm_from_json jtm
+	      in
+	      let a =
+		match jtp with
+		| JsonStr(x) when x = "prop" -> Logic.Prop
+		| JsonNum(x) -> Logic.Base(int_of_string x)
+		| _ -> stp_from_json jtp
+	      in (*** not checking if the term has the type; this could depend on the theory ***)
+	      let h = tm_hashroot m in
+	      let tph = hashtp a in
+	      Printf.fprintf oc "term root: %s\n" (hashval_hexstring h);
+	      Printf.fprintf oc "pure term address: %s\n" (addr_daliladdrstr (termaddr_addr (hashval_md160 h)));
+	      if thyid = None then
+		begin
+		  let k = hashtag (hashopair2 None (hashpair h tph)) 32l in
+		  Printf.fprintf oc "obj id in empty theory: %s\n" (hashval_hexstring k);
+		  Printf.fprintf oc "obj address in empty theory: %s\n" (addr_daliladdrstr (termaddr_addr (hashval_md160 k)))
+		end
+	      else
+		begin
+		  let k = hashtag (hashopair2 thyid (hashpair h tph)) 32l in
+		  Printf.fprintf oc "obj id in given theory: %s\n" (hashval_hexstring k);
+		  Printf.fprintf oc "obj address in given theory: %s\n" (addr_daliladdrstr (termaddr_addr (hashval_md160 k)))
+		end;
+	      if a = Logic.Prop then
+		begin
+		  if thyid = None then
+		    begin
+		      let k = hashtag (hashopair2 None h) 33l in
+		      Printf.fprintf oc "prop id in empty theory: %s\n" (hashval_hexstring k);
+		      Printf.fprintf oc "prop address in empty theory: %s\n" (addr_daliladdrstr (termaddr_addr (hashval_md160 k)))
+		    end
+		  else
+		    begin
+		      let k = hashtag (hashopair2 thyid h) 33l in
+		      Printf.fprintf oc "prop id in given theory: %s\n" (hashval_hexstring k);
+		      Printf.fprintf oc "prop address in given theory: %s\n" (addr_daliladdrstr (termaddr_addr (hashval_md160 k)))
+		    end
+		end
+	    with
+	    | JsonParseFail(i,msg) ->
+		Printf.fprintf oc "Problem parsing json object for tp at position %d %s\n" i msg
+	  end
+	with
+	| JsonParseFail(i,msg) ->
+	    Printf.fprintf oc "Problem parsing json object for tm at position %d %s\n" i msg
+      end);
+  ac "decodetx" "decode <raw tx in hex>" ""
+    (fun oc al ->
+      match al with
+      | [a] ->
+	  let s = hexstring_string a in
+	  let (stx,_) = sei_stx seis (s,String.length s,None,0,0) in
+	  print_jsonval oc (json_stx stx);
+	  Printf.fprintf oc "\n"
+      | _ -> raise BadCommandForm);
+  ac "querybestblock" "querybestblock" ""
+    (fun oc al ->
+      let node = get_bestnode_print_warnings oc true in
+      let h = node_prevblockhash node in
+      let blkh = node_blockheight node in
+      let lr = node_ledgerroot node in
+      begin
+	match h with
+	| Some(h,_) ->
+	    print_jsonval oc (JsonObj([("height",JsonNum(Int64.to_string (Int64.sub blkh 1L)));("block",JsonStr(hashval_hexstring h));("ledgerroot",JsonStr(hashval_hexstring lr))]));
+	    flush oc
+	| None ->
+	    print_jsonval oc (JsonObj([("height",JsonNum(Int64.to_string (Int64.sub blkh 1L)));("ledgerroot",JsonStr(hashval_hexstring lr))]));
+	    flush oc
+      end);
+  ac "bestblock" "bestblock" ""
+    (fun oc al ->
+      let node = get_bestnode_print_warnings oc true in
+      let h = node_prevblockhash node in
+      let blkh = node_blockheight node in
+      let lr = node_ledgerroot node in
+      begin
+	match h with
+	| Some(h,_) ->
+	    Printf.fprintf oc "Height: %Ld\nBlock hash: %s\nLedger root: %s\n" (Int64.sub blkh 1L) (hashval_hexstring h) (hashval_hexstring lr);
+	    flush oc
+	| None ->
+	    Printf.fprintf oc "Height: %Ld\nNo blocks yet.\nLedger root: %s\n" (Int64.sub blkh 1L) (hashval_hexstring lr);
+	    flush oc
+      end);
+  ac "difficulty" "difficulty" ""
+    (fun oc al ->
+      let node = get_bestnode_print_warnings oc true in
+      let tar = node_targetinfo node in
+      let blkh = node_blockheight node in
+      Printf.fprintf oc "Current target (for block at height %Ld): %s\n" blkh (string_of_big_int tar);
+      flush oc);
+  ac "blockchain" "blockchain" ""
+    (fun oc al -> pblockchain oc (get_bestnode_print_warnings oc true) None None 1000);
+  ac "reprocessblock" "reprocessblock <blockhash>" ""
+    (fun oc al ->
+      match al with
+      | [h] -> reprocessblock oc (hexstring_hashval h)
+      | _ -> raise (Failure "reprocessblock <blockid>"));;
 
 let rec parse_command_r l i n =
   if i < n then
@@ -1138,1024 +2104,31 @@ let parse_command l =
 
 let do_command oc l =
   let (c,al) = parse_command l in
-  match c with
-  | "setbestblock" ->
-      begin
-	match al with
-	| [a] ->
-	    begin
-	      let h = hexstring_hashval a in
-	      try
-		let bh = DbBlockHeader.dbget h in
-		let (bhd,_) = bh in
-		artificialbestblock := Some(h);
-		artificialledgerroot := Some(bhd.newledgerroot)
-	      with Not_found ->
-		Printf.fprintf oc "Unknown block.\n"
-	    end
-	| [a;blkh;lblk;ltx] ->
-	    begin
-	      let h = hexstring_hashval a in
-	      let blkh = Int64.of_string blkh in
-	      let lblk = hexstring_md256 lblk in
-	      let ltx = hexstring_md256 ltx in
-	      try
-		let bh = DbBlockHeader.dbget h in
-		let (bhd,_) = bh in
-		artificialbestblock := Some(h);
-		let pob = Poburn(lblk,ltx,0L,0L) in
-		let newcsm = poburn_stakemod pob in
-		let par =
-		  match bhd.prevblockhash with
-		  | None ->
-		      begin
-			try
-			  Some(Hashtbl.find blkheadernode None)
-			with Not_found -> None
-		      end
-		  | Some(pbhid,ppob) ->
-		      try
-			Some(Hashtbl.find blkheadernode (Some(pbhid)))
-		      with Not_found ->
-			try
-			  let pbh = DbBlockHeader.dbget pbhid in
-			  let (pbhd,_) = pbh in
-			  let parpar =
-			    match pbhd.prevblockhash with
-			    | None ->
-				begin
-				  try
-				    Some(Hashtbl.find blkheadernode None)
-				  with Not_found -> None
-				end
-			    | Some(ppbhid,_) ->
-				try
-				  Some(Hashtbl.find blkheadernode (Some(ppbhid)))
-				with Not_found ->
-				  None
-			  in
-			  let pcsm = poburn_stakemod ppob in
-			  let parnode = BlocktreeNode(parpar,ref [],Some(pbhid,ppob),pbhd.newtheoryroot,pbhd.newsignaroot,pbhd.newledgerroot,pcsm,pbhd.tinfo,pbhd.timestamp,zero_big_int,blkh,ref ValidBlock,ref false,ref []) in
-			  Hashtbl.add blkheadernode (Some(pbhid)) parnode;
-			  Some(parnode)
-			with Not_found -> None
-		in
-		Hashtbl.add blkheadernode (Some(h)) (BlocktreeNode(par,ref [],Some(h,pob),bhd.newtheoryroot,bhd.newsignaroot,bhd.newledgerroot,newcsm,bhd.tinfo,bhd.timestamp,zero_big_int,Int64.add blkh 1L,ref ValidBlock,ref false,ref []))
-	      with Not_found ->
-		Printf.fprintf oc "Unknown block.\n"
-	    end
-	| _ ->
-	    raise (Failure("setbestblock <blockid> [<blockheight> <ltcblockid> <ltcburntx>]"))
-      end
-  | "setledgerroot" ->
-      begin
-	match al with
-	| [a] ->
-	    begin
-	      let h = hexstring_hashval a in
-	      try
-		let (bhd,_) = DbBlockHeader.dbget h in
-		artificialledgerroot := Some(bhd.newledgerroot)
-	      with Not_found ->
-		artificialledgerroot := Some(h)
-	    end
-	| _ ->
-	    raise (Failure("setledgerroot <ledgerroot or blockid>"))
-      end
-  | "requestfullledger" ->
-      begin
-	match al with
-	| [a] ->
-	    begin
-	      let h = hexstring_hashval a in
-	      Commands.requestfullledger oc h
-	    end
-	| [] ->
-	    begin
-	      try
-		let BlocktreeNode(_,_,pbh,_,_,ledgerroot,csm,tar,tmstmp,_,blkh,_,_,_) = get_bestnode_print_warnings oc true in
-		Commands.requestfullledger oc ledgerroot
-	      with e ->
-		Printf.fprintf oc "Exception: %s\n" (Printexc.to_string e)
-	    end
-	| _ ->
-	    Printf.fprintf oc "requestfullledger [<ledgerroot>]"
-      end
-  | "requestblock" ->
-      begin
-	match al with
-	| [a] ->
-	    begin
-	      let h = hexstring_hashval a in
-	      try
-		if DbInvalidatedBlocks.dbexists h then DbInvalidatedBlocks.dbdelete h;
-		if DbBlacklist.dbexists h then DbBlacklist.dbdelete h;
-		if DbBlockHeader.dbexists h then
-		  Printf.fprintf oc "Already have header.\n"
-		else
-		  begin
-		    find_and_send_requestdata GetHeader h;
-		    Printf.fprintf oc "Block header requested.\n"
-		  end;
-		try
-		  if DbBlockDelta.dbexists h then
-		    Printf.fprintf oc "Already have delta.\n"
-		  else
-		    begin
-		      find_and_send_requestdata GetBlockdelta h;
-		      Printf.fprintf oc "Block delta requested.\n"
-		    end
-		with Not_found ->
-		  Printf.fprintf oc "No peer has delta %s.\n" a
-	      with Not_found ->
-		Printf.fprintf oc "No peer has header %s.\n" a
-	    end
-	| _ ->
-	    raise (Failure("requestblock <blockid>"))
-      end
-  | "query" ->
-      begin
-	match al with
-	| [h] ->
-	    begin
-	      try
-		let blkh = Int64.of_string h in
-		let j = Commands.query_blockheight blkh in
-		print_jsonval oc j;
-		Printf.fprintf oc "\n"
-	      with Failure(_) ->
-		let j = Commands.query h in
-		print_jsonval oc j;
-		Printf.fprintf oc "\n"
-	    end
-	| [h;kh] ->
-	    let k = hexstring_hashval kh in
-	    begin
-	      try
-		let BlocktreeNode(_,_,pbh,_,_,ledgerroot,_,_,_,_,blkh,_,_,_) = Hashtbl.find blkheadernode (Some(k)) in
-		let j = Commands.query_at_block h pbh ledgerroot blkh in
-		print_jsonval oc j;
-		Printf.fprintf oc "\n"
-	      with Not_found ->
-		if DbCTreeElt.dbexists k then
-		  begin
-		    let j = Commands.query_at_block h None k (-1L) in
-		    print_jsonval oc j;
-		    Printf.fprintf oc "\n"
-		  end
-		else
-		  raise (Failure ("could not interpret " ^ kh ^ " as a block or ledger root"))
-	    end
-	| _ ->
-	    raise (Failure("expected query <hashval or address or int[block height]> [<blockid or ledgerroot>]"))
-      end
-  | "dumpwallet" ->
-      begin
-	match al with
-	| [fn] -> Commands.dumpwallet fn
-	| _ -> raise (Failure("dumpwallet <filename>"))
-      end
-  | "ltcstatusdump" ->
-      begin
-	let (fn,blkh,howfarback) =
-	  match al with
-	  | [] -> ("ltcstatusdumpfile",hexstring_hashval (Ltcrpc.ltc_getbestblockhash ()),1000)
-	  | [fn] -> (fn,hexstring_hashval (Ltcrpc.ltc_getbestblockhash ()),1000)
-	  | [fn;hh] -> (fn,hexstring_hashval hh,1000)
-	  | [fn;hh;b] -> (fn,hexstring_hashval hh,int_of_string b)
-	  | _ -> raise (Failure "expected ltcstatusdump [<filename> [<ltcblockhash> [<how many ltc blocks back>]]]")
-	in
-	let cblkh = ref blkh in
-	let f = open_out fn in
-	begin
-	  try
-	    for i = 1 to howfarback do
-	      Printf.fprintf f "%d. ltc block %s DacStatus\n" i (hashval_hexstring !cblkh);
-	      begin
-		try
-		  match DbLtcDacStatus.dbget !cblkh with
-		  | LtcDacStatusPrev(h) ->
-		      Printf.fprintf f "  DacStatus unchanged since ltc block %s\n" (hashval_hexstring h)
-		  | LtcDacStatusNew(l) ->
-		      Printf.fprintf f "  New DacStatus:\n";
-		      let cnt = ref 0 in
-		      List.iter
-			(fun li ->
-			  let i = !cnt in
-			  incr cnt;
-			  match li with
-			  | [] -> Printf.fprintf f "   %d. Empty tip? Should not be possible.\n" i;
-			  | ((bh,lbh,ltx,ltm,lhght)::r) ->
-			      Printf.fprintf f "   (%d) - Dalilcoin Block: %s\n        Litecoin Block: %s\n        Litecoin Burn Tx: %s\n        Litecoin Time: %Ld\n        Litecoin Height: %Ld\n" i (hashval_hexstring bh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght;
-			      List.iter (fun (bh,lbh,ltx,ltm,lhght) ->
-				Printf.fprintf f "       - Dalilcoin Block: %s\n        Litecoin Block: %s\n        Litecoin Burn Tx: %s\n        Litecoin Time: %Ld\n        Litecoin Height: %Ld\n" (hashval_hexstring bh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght)
-				r)
-			l
-		with Not_found ->
-		  Printf.fprintf f "  DacStatus not found\n"
-	      end;
-	      begin
-		try
-		  let (prevh,tm,hght,burntxhs) = DbLtcBlock.dbget !cblkh in
-		  Printf.fprintf f "%d. ltc block %s info\n" i (hashval_hexstring !cblkh);
-		  Printf.fprintf f "   Previous %s\n   Block Time %Ld\n    Height %Ld\n" (hashval_hexstring prevh) tm hght;
-		  cblkh := prevh;
-		  match burntxhs with
-		  | [] -> ()
-		  | [x] -> Printf.fprintf f "    Burn Tx: %s\n" (hashval_hexstring x)
-		  | _ ->
-		      Printf.fprintf f "    %d Burn Txs:\n" (List.length burntxhs);
-		      List.iter (fun x -> Printf.fprintf f "         %s\n" (hashval_hexstring x)) burntxhs
-		with Not_found ->
-		  Printf.fprintf f "  LtcBlock not found\n"
-	      end
-	    done
-	  with e -> Printf.fprintf f "Exception: %s\n" (Printexc.to_string e)
-	end;
-	close_out f
-      end
-  | "ltcstatus" ->
-      begin
-	let h =
-	  match al with
-	  | [hh] -> hexstring_hashval hh
-	  | _ ->
-	      Printf.fprintf oc "ltcbest %s\n" (hashval_hexstring !ltc_bestblock);
-	      !ltc_bestblock
-	in
-	let (lastchangekey,zll) = ltcdacstatus_dbget h in
-	let tm = ltc_medtime() in
-	if zll = [] && tm > Int64.add !Config.genesistimestamp 604800L then
+  if c = "help" then
+    begin
+      match al with
+      | [a] ->
 	  begin
-	    Printf.fprintf oc "No blocks were created in the past week. Dalilcoin has reached terminal status.\nThe only recovery possible for the network is a hard fork.\n"
-	  end;
-	let i = ref 0 in
-	List.iter
-	  (fun zl ->
-	    incr i;
-	    Printf.fprintf oc "%d.\n" !i;
-	    List.iter
-	      (fun (dbh,lbh,ltx,ltm,lhght) ->
-		if DbBlacklist.dbexists dbh then
-		  Printf.fprintf oc "- %s (blacklisted, presumably invalid) %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
-		else if DbInvalidatedBlocks.dbexists dbh then
-		  Printf.fprintf oc "- %s (marked invalid) %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
-		else if DbBlockHeader.dbexists dbh then
-		  if DbBlockDelta.dbexists dbh then
-		    Printf.fprintf oc "+ %s %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
-		  else
-		    begin
-		      possibly_request_dalilcoin_block dbh;
-		      Printf.fprintf oc "* %s (missing delta) %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
-		    end
-		else
-		  begin
-		    possibly_request_dalilcoin_block dbh;
-		    Printf.fprintf oc "* %s (missing header) %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
-		  end)
-	      zl)
-	  zll
-      end
-  | "ltcgettxinfo" ->
-      begin
-	match al with
-	| [h] ->
-	    begin
-	      try
-		let (burned,prev,nxt,lblkh,confs) = Ltcrpc.ltc_gettransactioninfo h in
-		match lblkh,confs with
-		| Some(lh),Some(confs) ->
-		    Printf.fprintf oc "burned %Ld prev %s next %s in ltc block %s, %d confirmations\n" burned (hashval_hexstring prev) (hashval_hexstring nxt) lh confs
-		| _,_ ->
-		    Printf.fprintf oc "burned %Ld prev %s next %s\n" burned (hashval_hexstring prev) (hashval_hexstring nxt)
-	      with Not_found -> raise (Failure("problem"))
-	    end
-	| _ -> raise (Failure("expected ltcgettxinfo <txid>"))
-      end
-  | "ltcgetbestblockhash" ->
-      begin
-	try
-	  let x = Ltcrpc.ltc_getbestblockhash () in
-	  Printf.fprintf oc "best ltc block hash %s\n" x
-	with Not_found ->
-	  Printf.fprintf oc "could not find best ltc block hash\n"
-      end
-  | "ltcgetblock" ->
-      begin
-	match al with
-	| [h] ->
-	    begin
-	      try
-		let (pbh,tm,hght,txl) = Ltcrpc.ltc_getblock h in
-		Printf.fprintf oc "ltc block %s time %Ld height %Ld prev %s; %d dalilcoin candidate txs:\n" h tm hght pbh (List.length txl);
-		List.iter (fun tx -> Printf.fprintf oc "%s\n" tx) txl
-	      with Not_found ->
-		Printf.fprintf oc "could not find ltc block %s\n" h
-	    end
-	| _ -> Printf.fprintf oc "expected ltcgetblock <blockid>\n"
-      end
-  | "ltclistunspent" ->
-      begin
-	try
-	  let utxol = Ltcrpc.ltc_listunspent () in
-	  Printf.fprintf oc "%d ltc utxos\n" (List.length utxol);
-	  List.iter (fun (txid,vout,_,_,amt) -> Printf.fprintf oc "%s:%d %Ld\n" txid vout amt) utxol
-	with Not_found ->
-	  Printf.fprintf oc "could not get unspent ltc list\n"
-      end
-  | "hash" ->
-      begin
-	match al with
-	| [h] -> Printf.fprintf oc "%s\n" (hashval_hexstring (Sha256.sha256dstr (Hashaux.hexstring_string h)))
-	| _ -> raise Not_found
-      end
-  | "ltcsigntx" ->
-      begin
-	match al with
-	| [tx] -> Printf.fprintf oc "%s\n" (Ltcrpc.ltc_signrawtransaction tx)
-	| _ -> raise Not_found
-      end
-  | "ltcsendtx" ->
-      begin
-	match al with
-	| [tx] -> Printf.fprintf oc "%s\n" (Ltcrpc.ltc_sendrawtransaction tx)
-	| _ -> raise Not_found
-      end
-  | "ltccreateburn" ->
-      begin
-	match al with
-	| [h1;h2;toburn] ->
-	    begin
-	      try
-		let txs = Ltcrpc.ltc_createburntx (hexstring_hashval h1) (hexstring_hashval h2) (Int64.of_string toburn) in
-		Printf.fprintf oc "burntx: %s\n" (Hashaux.string_hexstring txs)
-	      with
-	      | Ltcrpc.InsufficientLtcFunds ->
-		  Printf.fprintf oc "no ltc utxo has %s litoshis\n" toburn
-	      | Not_found ->
-		  Printf.fprintf oc "trouble creating burn tx\n"
-	    end
-	| _ -> Printf.fprintf oc "expected ltccreateburn <hash1> <hash2> <litoshis to burn>\n"
-      end
-  | "exit" ->
-      (*** Could call Thread.kill on netth and stkth, but Thread.kill is not always implemented. ***)
-      closelog();
-      Printf.fprintf oc "Shutting down threads. Please be patient.\n"; flush oc;
-      !exitfn 0
-  | "stop" ->
-      (*** Could call Thread.kill on netth and stkth, but Thread.kill is not always implemented. ***)
-      closelog();
-      Printf.fprintf oc "Shutting down threads. Please be patient.\n"; flush oc;
-      !exitfn 0
-  | "dumpstate" -> (*** dump state to a file for debugging ***)
-      begin
-	match al with
-	| [fa] -> dumpstate fa
-	| _ -> raise (Failure "dumpstate <textfile>")
-      end
-  | "addnode" ->
-      begin
-	let addnode_add n =
-	  match tryconnectpeer n with
-	  | None -> raise (Failure "Failed to add node")
-	  | Some(lth,sth,(fd,sin,sout,gcs)) ->
-	      match !gcs with
-	      | None -> raise (Failure "Problem adding node")
-	      | Some(cs) ->
-		  if cs.addrfrom = "" then Thread.delay 1.0;
-		  addknownpeer (Int64.of_float cs.conntime) cs.addrfrom
-	in
-	match al with
-	| [n] -> addnode_add n
-	| [n;"add"] -> addnode_add n
-        | [n;"remove"] ->
-          removeknownpeer n;
-          List.iter
-	      (fun (lth,sth,(fd,sin,sout,gcs)) -> if peeraddr !gcs = n then (shutdown_close fd; gcs := None))
-	      !netconns
-	| [n;"onetry"] ->
-	    ignore (tryconnectpeer n)
-	| _ ->
-	    raise (Failure "addnode <ip:port> [add|remove|onetry]")
-      end
-  | "clearbanned" -> clearbanned()
-  | "listbanned" -> Hashtbl.iter (fun n () -> Printf.fprintf oc "%s\n" n) bannedpeers
-  | "bannode" -> List.iter (fun n -> banpeer n) al
-  | "getinfo" ->
-      remove_dead_conns();
-      let ll = List.length !netconns in
-      Printf.fprintf oc "%d connection%s\n" ll (if ll = 1 then "" else "s");
-      begin
-	try
-	  let BlocktreeNode(_,_,pbh,_,_,ledgerroot,csm,tar,tmstmp,_,blkh,_,_,_) = get_bestnode_print_warnings oc true in
-	  let gtm = Unix.gmtime (Int64.to_float tmstmp) in
-	  begin
-	    match pbh with
-	    | Some(h,_) -> Printf.fprintf oc "Best block %s at height %Ld\n" (hashval_hexstring h) (Int64.sub blkh 1L) (*** blkh is the height the next block will have ***)
-	    | None -> Printf.fprintf oc "No blocks yet\n"
-	  end;
-	  Printf.fprintf oc "Time: %Ld (UTC %02d %02d %04d %02d:%02d:%02d)\n" tmstmp gtm.Unix.tm_mday (1+gtm.Unix.tm_mon) (1900+gtm.Unix.tm_year) gtm.Unix.tm_hour gtm.Unix.tm_min gtm.Unix.tm_sec;
-	  Printf.fprintf oc "Target: %s\n" (string_of_big_int tar);
-	  Printf.fprintf oc "Difficulty: %s\n" (string_of_big_int (difficulty tar));
-	  let (bal1,bal2,bal3,bal4) = Commands.get_cants_balances_in_ledger oc ledgerroot in
-	  Printf.fprintf oc "Total p2pkh: %s fraenks\n" (fraenks_of_cants bal1);
-	  Printf.fprintf oc "Total p2sh: %s fraenks\n" (fraenks_of_cants bal2);
-	  Printf.fprintf oc "Total via endorsement: %s fraenks\n" (fraenks_of_cants bal3);
-	  Printf.fprintf oc "Total watched: %s fraenks\n" (fraenks_of_cants bal4);
-	  Printf.fprintf oc "Sum of all: %s fraenks\n" (fraenks_of_cants (Int64.add bal1 (Int64.add bal2 (Int64.add bal3 bal4))))
-	with e ->
-	  Printf.fprintf oc "Exception: %s\n" (Printexc.to_string e)
-      end
-  | "getpeerinfo" ->
-      remove_dead_conns();
-      let ll = List.length !netconns in
-      Printf.fprintf oc "%d connection%s\n" ll (if ll = 1 then "" else "s");
-      List.iter
-	(fun (_,_,(_,_,_,gcs)) ->
-	  match !gcs with
-	  | Some(cs) ->
-	      Printf.fprintf oc "%s (%s): %s\n" cs.realaddr cs.addrfrom cs.useragent;
-	      let snc = Int64.sub (Int64.of_float (Unix.time())) (Int64.of_float cs.conntime) in
-	      let snc1 = sincetime (Int64.of_float cs.conntime) in
-	      let snc2 = sincetime (Int64.of_float cs.lastmsgtm) in
-	      Printf.fprintf oc "Connected for %s; last message %s ago.\n" snc1 snc2;
-	      if cs.handshakestep < 5 then Printf.fprintf oc "(Still in handshake phase)\n";
-	  | None -> (*** This could happen if a connection died after remove_dead_conns above. ***)
-	      Printf.fprintf oc "[Dead Connection]\n";
-	  )
-	!netconns;
-      flush oc
-  | "nettime" ->
-      let (tm,skew) = network_time() in
-      Printf.fprintf oc "network time %Ld (median skew of %d)\n" tm skew;
-      flush oc;
-  | "invalidateblock" ->
-      begin
-	match al with
-	| [h] ->
-	    let hh = hexstring_hashval h in
-	    recursively_invalidate_blocks hh
-	| _ -> raise (Failure "invalidateblock <blockhash>")
-      end
-  | "revalidateblock" ->
-      begin
-	match al with
-	| [h] ->
-	    let hh = hexstring_hashval h in
-	    recursively_revalidate_blocks hh
-	| _ -> raise (Failure "revalidateblock <blockhash>")
-      end
-  | "rawblockheader" ->
-      begin
-	match al with
-	| [hh] ->
-	    begin
-	      let h = hexstring_hashval hh in
-	      try
-		let bh = DbBlockHeader.dbget h in
-		let sb = Buffer.create 1000 in
-		seosbf (seo_blockheader seosb bh (sb,None));
-		let s = string_hexstring (Buffer.contents sb) in
-		Printf.fprintf oc "%s\n" s;
-	      with Not_found ->
-		Printf.fprintf oc "Could not find header %s\n" hh
-	    end
-	| _ ->
-	    raise (Failure("rawblockheader <blockid>"))
-      end
-  | "rawblockdelta" ->
-      begin
-	match al with
-	| [hh] ->
-	    begin
-	      let h = hexstring_hashval hh in
-	      try
-		let bd = DbBlockDelta.dbget h in
-		let sb = Buffer.create 1000 in
-		seosbf (seo_blockdelta seosb bd (sb,None));
-		let s = string_hexstring (Buffer.contents sb) in
-		Printf.fprintf oc "%s\n" s;
-	      with Not_found ->
-		Printf.fprintf oc "Could not find delta %s\n" hh
-	    end
-	| _ ->
-	    raise (Failure("rawblockdelta <blockid>"))
-      end
-  | "rawblock" ->
-      begin
-	match al with
-	| [hh] ->
-	    begin
-	      let h = hexstring_hashval hh in
-	      try
-		let bh = DbBlockHeader.dbget h in
-		try
-		  let bd = DbBlockDelta.dbget h in
-		  let sb = Buffer.create 1000 in
-		  seosbf (seo_block seosb (bh,bd) (sb,None));
-		  let s = string_hexstring (Buffer.contents sb) in
-		  Printf.fprintf oc "%s\n" s;
-		with Not_found ->
-		  Printf.fprintf oc "Could not find delta %s\n" hh
-	      with Not_found ->
-		Printf.fprintf oc "Could not find header %s\n" hh
-	    end
-	| _ ->
-	    raise (Failure("rawblock <blockid>"))
-      end
-  | "getblock" ->
-      begin
-	match al with
-	| [hh] ->
-	    begin
-	      let h = hexstring_hashval hh in
-	      try
-		let (bhd,_) = DbBlockHeader.dbget h in
-		Printf.fprintf oc "Time: %Ld\n" bhd.timestamp;
-		begin
-		  try
-		    let bd = DbBlockDelta.dbget h in
-		    Printf.fprintf oc "%d txs\n" (List.length (bd.blockdelta_stxl));
-		    List.iter (fun (tx,txs) -> Printf.fprintf oc "%s\n" (hashval_hexstring (hashtx tx))) (bd.blockdelta_stxl);
-		  with Not_found ->
-		    find_and_send_requestdata GetBlockdelta h;
-		    Printf.fprintf oc "Missing block delta\n"
-		end
-	      with Not_found ->
-		find_and_send_requestdata GetHeader h
-	    end
-	| _ -> raise (Failure "getblock <blockhash>")
-      end
-  | "nextstakingchances" ->
-      begin
-	let (scnds,maxburn,n) =
-	  match al with
-	  | [] ->
-	      let n = get_bestnode_print_warnings oc true in
-	      (3600 * 24,100000000L,n)
-	  | [hrs] ->
-	      let n = get_bestnode_print_warnings oc true in
-	      (3600 * (int_of_string hrs),100000000L,n)
-	  | [hrs;maxburn] ->
-	      let n = get_bestnode_print_warnings oc true in
-	      (3600 * (int_of_string hrs),litoshis_of_ltc maxburn,n)
-	  | [hrs;maxburn;blockid] ->
-	      begin
-		try
-		  let n = Hashtbl.find blkheadernode (Some(hexstring_hashval blockid)) in
-		  (3600 * (int_of_string hrs),litoshis_of_ltc maxburn,n)
-		with Not_found ->
-		  raise (Failure ("unknown block " ^ blockid))
-	      end
-	  | _ -> raise (Failure "nextstakingchances [<hours> [<max ltc to burn> [<blockid>]]")
-	in
-	let BlocktreeNode(_,_,prevblk,_,_,_,_,_,tmstmp,_,_,_,_,_) = n in
-	let prevblkh = fstohash prevblk in
-	let nw = ltc_medtime() in (*** for staking purposes, ltc is the clock to follow ***)
-	let fromnow_string i nw =
-	  if i <= nw then
-	    "now"
-	  else
-	    let del = Int64.to_int (Int64.sub i nw) in
-	    if del < 60 then
-	      Printf.sprintf "%d seconds from now" del
-	    else if del < 3600 then
-	      Printf.sprintf "%d minutes %d seconds from now" (del / 60) (del mod 60)
-	    else
-	      Printf.sprintf "%d hours %d minutes %d seconds from now" (del / 3600) ((del mod 3600) / 60) (del mod 60)
-	in
-	compute_staking_chances n tmstmp (min (Int64.add tmstmp 604800L) (Int64.add nw (Int64.of_int scnds)));
-	begin
-	  try
-	    match Hashtbl.find nextstakechances prevblkh with
-	    | NextStake(i,stkaddr,h,bday,obl,v,Some(toburn),_,_,_,_,_) ->
-		Printf.fprintf oc "Can stake at time %Ld (%s) with asset %s at address %s burning %Ld litoshis (%s ltc).\n" i (fromnow_string i nw) (hashval_hexstring h) (addr_daliladdrstr (p2pkhaddr_addr stkaddr)) toburn (ltc_of_litoshis toburn);
-	    | NextStake(i,stkaddr,h,bday,obl,v,None,_,_,_,_,_) -> () (*** should not happen; ignore ***)
-	    | NoStakeUpTo(_) -> Printf.fprintf oc "Found no chance to stake with current wallet and ltc burn limits.\n"
-	  with Not_found -> ()
-	end;
-	List.iter
-	  (fun z ->
-	    let il = ref [] in
-	    match z with
-	    | NextStake(i,stkaddr,h,bday,obl,v,Some(toburn),_,_,_,_,_) ->
-		if not (List.mem i !il) then
-		  begin
-		    il := i::!il; (** while the info should not be on the hash table more than once, sometimes it is, so only report it once **)
-		    Printf.fprintf oc "With extraburn %Ld litoshis (%s ltc), could stake at time %Ld (%s) with asset %s at address %s.\n" toburn (ltc_of_litoshis toburn) i (fromnow_string i nw) (hashval_hexstring h) (addr_daliladdrstr (p2pkhaddr_addr stkaddr))
-		  end
-	    | _ -> ())
-	  (List.sort
-	     (fun y z ->
-	       match (y,z) with
-	       | (NextStake(i,_,_,_,_,_,Some(_),_,_,_,_,_),NextStake(j,_,_,_,_,_,Some(_),_,_,_,_,_)) -> compare i j
-	       | _ -> 0)
-	     (List.filter
-		(fun z ->
-		  match z with
-		  | NextStake(i,stkaddr,h,bday,obl,v,Some(toburn),_,_,_,_,_) -> true
-		  | _ -> false)
-		(Hashtbl.find_all nextstakechances_hypo prevblkh)))
-      end
-  | "extraburn" ->
-      begin
-	match al with
-	| [a] -> (extraburn := litoshis_of_ltc a; Hashtbl.clear nextstakechances)
-	| [a;b] when b = "litoshis" -> (extraburn := Int64.of_string a; Hashtbl.clear nextstakechances)
-	| _ -> raise (Failure "extraburn <ltc> or extraburn <litoshis> litoshis")
-      end
-  | "printassets" when al = [] -> Commands.printassets oc
-  | "printassets" -> List.iter (fun h -> Commands.printassets_in_ledger oc (hexstring_hashval h)) al
-  | "printtx" -> List.iter (fun h -> Commands.printtx (hexstring_hashval h)) al
-  | "importprivkey" ->
-      begin
-	match al with
-	| [w] -> Commands.importprivkey oc w "staking"
-	| [w;cls] -> Commands.importprivkey oc w cls
-	| _ -> raise (Failure("importprivkey <WIFkey> [staking|nonstaking|staking_fresh|nonstaking_fresh]"))
-      end
-  | "importbtcprivkey" ->
-      begin
-	match al with
-	| [w] -> Commands.importbtcprivkey oc w "staking"
-	| [w;cls] -> Commands.importbtcprivkey oc w cls
-	| _ -> raise (Failure("importprivkey <btcWIFkey> [staking|nonstaking|staking_fresh|nonstaking_fresh]"))
-      end
-  | "importwatchaddr" ->
-      begin
-	match al with
-	| [a] -> Commands.importwatchaddr oc a ""
-	| [a;cls] ->
-	    if cls = "offlinekey" || cls = "offlinekey_fresh" then
-	      Commands.importwatchaddr oc a cls
-	    else
-	      raise (Failure("importwatchaddr <address> [offlinekey|offlinekey_fresh]"))
-	| _ -> raise (Failure("importwatchaddr <address> [offlinekey|offlinekey_fresh]"))
-      end
-  | "importwatchbtcaddr" ->
-      begin
-	match al with
-	| [a] -> Commands.importwatchbtcaddr oc a ""
-	| [a;cls] ->
-	    if cls = "offlinekey" || cls = "offlinekey_fresh" then
-	      Commands.importwatchbtcaddr oc a cls
-	    else
-	      raise (Failure("importwatchaddr <btcaddress> [offlinekey|offlinekey_fresh]"))
-	| _ -> raise (Failure("importwatchaddr <btcaddress> [offlinekey|offlinekey_fresh]"))
-      end
-  | "importendorsement" ->
-      begin
-	match al with
-	| [a;b;s] -> Commands.importendorsement a b s
-	| _ -> raise (Failure "importendorsement should be given three arguments: a b s where s is a signature made with the private key for address a endorsing to address b")
-      end
-  | "btctodaliladdr" -> List.iter Commands.btctodaliladdr al
-  | "printasset" ->
-      begin
-	match al with
-	| [h] -> Commands.printasset (hexstring_hashval h)
-	| _ -> raise (Failure "printasset <assethash>")
-      end
-  | "printhconselt" ->
-      begin
-	match al with
-	| [h] -> Commands.printhconselt (hexstring_hashval h)
-	| _ -> raise (Failure "printhconselt <hashval>")
-      end
-  | "printctreeelt" ->
-      begin
-	match al with
-	| [h] -> Commands.printctreeelt (hexstring_hashval h)
-	| _ -> raise (Failure "printctreeelt <hashval>")
-      end
-  | "printctreeinfo" ->
-      begin
-	match al with
-	| [] ->
-	    let best = get_bestnode_print_warnings oc true in
-	    let BlocktreeNode(_,_,_,_,_,currledgerroot,_,_,_,_,_,_,_,_) = best in
-	    Commands.printctreeinfo currledgerroot
-	| [h] -> Commands.printctreeinfo (hexstring_hashval h)
-	| _ -> raise (Failure "printctreeinfo [ledgerroot]")
-      end
-  | "newofflineaddress" ->
-      begin
-	let alpha = Commands.get_fresh_offline_address oc in
-	Printf.fprintf oc "%s\n" (addr_daliladdrstr alpha)
-      end
-  | "newaddress" ->
-      begin
-	match al with
-	| [] ->
-	    let best = get_bestnode_print_warnings oc true in
-	    let BlocktreeNode(_,_,_,_,_,currledgerroot,_,_,_,_,_,_,_,_) = best in
-	    let (k,h) = Commands.generate_newkeyandaddress currledgerroot "nonstaking" in
-	    let alpha = p2pkhaddr_addr h in
-	    let a = addr_daliladdrstr alpha in
-	    Printf.fprintf oc "%s\n" a
-	| [clr] ->
-	    let (k,h) = Commands.generate_newkeyandaddress (hexstring_hashval clr) "nonstaking" in
-	    let alpha = p2pkhaddr_addr h in
-	    let a = addr_daliladdrstr alpha in
-	    Printf.fprintf oc "%s\n" a
-	| _ -> raise (Failure "newaddress [ledgerroot]")
-      end
-  | "newstakingaddress" ->
-      begin
-	match al with
-	| [] ->
-	    let best = get_bestnode_print_warnings oc true in
-	    let BlocktreeNode(_,_,_,_,_,currledgerroot,_,_,_,_,_,_,_,_) = best in
-	    let (k,h) = Commands.generate_newkeyandaddress currledgerroot "staking" in
-	    let alpha = p2pkhaddr_addr h in
-	    let a = addr_daliladdrstr alpha in
-	    Printf.fprintf oc "%s\n" a
-	| [clr] ->
-	    let (k,h) = Commands.generate_newkeyandaddress (hexstring_hashval clr) "staking" in
-	    let alpha = p2pkhaddr_addr h in
-	    let a = addr_daliladdrstr alpha in
-	    Printf.fprintf oc "%s\n" a
-	| _ -> raise (Failure "newstakingaddress [ledgerroot]")
-      end
-  | "stakewith" ->
-      begin
-	match al with
-	| [alpha] -> Commands.reclassify_staking oc alpha true
-	| _ -> raise (Failure "stakewith <address>")
-      end
-  | "donotstakewith" ->
-      begin
-	match al with
-	| [alpha] -> Commands.reclassify_staking oc alpha false
-	| _ -> raise (Failure "donotstakewith <address>")
-      end
-  | "createtx" ->
-      begin
-	try
-	  match al with
-	  | [inp;outp] ->
-	      begin
-		try
-		  let (inpj,_) = parse_jsonval inp in
-		  begin
-		    try
-		      let (outpj,_) = parse_jsonval outp in
-		      let tau = Commands.createtx inpj outpj in
-		      let s = Buffer.create 100 in
-		      seosbf (seo_stx seosb (tau,([],[])) (s,None));
-		      let hs = Hashaux.string_hexstring (Buffer.contents s) in
-		      Printf.fprintf oc "%s\n" hs
-		    with
-		    | JsonParseFail(i,msg) ->
-			Printf.fprintf oc "Problem parsing json object for tx inputs at position %d %s\n" i msg
-		  end
-		with
-		| JsonParseFail(i,msg) ->
-		    Printf.fprintf oc "Problem parsing json object for tx outputs at position %d %s\n" i msg
-	      end
-	  | _ -> raise Exit
-	with Exit ->
-	  Printf.fprintf oc "createtx <inputs as json array> <outputs as json array>\neach input: {\"<addr>\":\"<assetid>\"}\neach output: {\"addr\":\"<addr>\",\"val\":<fraenks>,\"lock\":<height>,\"obligationaddress\":\"<addr>\"}\nwhere lock is optional (default null, unlocked output)\nand obligationaddress is optional (default null, meaning the holder address is implicitly the obligationaddress)\n"
-      end
-  | "creategeneraltx" ->
-      begin
-	try
-	  match al with
-	  | [jtxstr] ->
-	      let (jtx,_) = parse_jsonval jtxstr in
-	      let tau = tx_from_json jtx in
-	      let s = Buffer.create 100 in
-	      seosbf (seo_stx seosb (tau,([],[])) (s,None));
-	      let hs = Hashaux.string_hexstring (Buffer.contents s) in
-	      Printf.fprintf oc "%s\n" hs
-	  | _ ->
-	      raise Exit
-	with
-	| JsonParseFail(i,msg) ->
-	    Printf.fprintf oc "Problem parsing json object for tx at position %d %s\n" i msg
-	| Exit ->
-	    Printf.fprintf oc "creategeneraltx <tx as json object>\n"
-      end
-  | "createsplitlocktx" ->
-      begin
-	match al with
-	| (alp::aid::n::lkh::fee::r) ->
-	    begin
-	      let alpha2 = daliladdrstr_addr alp in
-	      if not (payaddr_p alpha2) then raise (Failure (alp ^ " is not a pay address"));
-	      let (p,a4,a3,a2,a1,a0) = alpha2 in
-	      let alpha = (p=1,a4,a3,a2,a1,a0) in
-	      let aid = hexstring_hashval aid in
-	      let n = int_of_string n in
-	      if n <= 0 then raise (Failure ("Cannot split into " ^ (string_of_int n) ^ " assets"));
-	      let lkh = Int64.of_string lkh in
-	      let fee = cants_of_fraenks fee in
-	      if fee < 0L then raise (Failure ("Cannot have a negative free"));
-	      match r with
-	      | [] ->
-		  let gamma = alpha2 in
-		  let beta = alpha in
-		  let lr = node_ledgerroot (get_bestnode_print_warnings oc true) in
-		  Commands.createsplitlocktx lr alpha beta gamma aid n lkh fee
-	      | (gam::r) ->
-		  let gamma = daliladdrstr_addr gam in
-		  if not (payaddr_p gamma) then raise (Failure (gam ^ " is not a pay address"));
-		  match r with
-		  | [] ->
-		      let beta = alpha in
-		      let lr = node_ledgerroot (get_bestnode_print_warnings oc true) in
-		      Commands.createsplitlocktx lr alpha beta gamma aid n lkh fee
-		  | (bet::r) ->
-		      let beta2 = daliladdrstr_addr bet in
-		      if not (payaddr_p beta2) then raise (Failure (bet ^ " is not a pay address"));
-		      let (p,b4,b3,b2,b1,b0) = beta2 in
-		      let beta = (p=1,b4,b3,b2,b1,b0) in
-		      match r with
-		      | [] ->
-			  let lr = node_ledgerroot (get_bestnode_print_warnings oc true) in
-			  Commands.createsplitlocktx lr alpha beta gamma aid n lkh fee
-		      | [lr] ->
-			  let lr = hexstring_hashval lr in
-			  Commands.createsplitlocktx lr alpha beta gamma aid n lkh fee
-		      | _ ->
-			  Printf.fprintf oc "createsplitlocktx <current address> <assetid> <number of outputs> <lockheight> <fee> [<new holding address> [<new obligation address> [<ledger root>]]]\n";
-			  flush oc
-	    end
-	| _ ->
-	    Printf.fprintf oc "createsplitlocktx <current address> <assetid> <number of outputs> <lockheight> <fee> [<new holding address> [<new obligation address> [<ledger root>]]]\n";
-	    flush oc
-      end
-  | "signtx" ->
-      begin
-	match al with
-	| [s] -> Commands.signtx oc (node_ledgerroot (get_bestnode_print_warnings oc true)) s
-	| _ ->
-	    Printf.fprintf oc "signtx <tx in hex>\n";
-	    flush oc
-      end
-  | "savetxtopool" ->
-      begin
-	match al with
-	| [s] -> Commands.savetxtopool (node_blockheight (get_bestnode_print_warnings oc true)) (node_ledgerroot (get_bestnode_print_warnings oc true)) s
-	| _ ->
-	    Printf.fprintf oc "savetxtopool <tx in hex>\n";
-	    flush oc
-      end
-  | "sendtx" ->
-      begin
-	match al with
-	| [s] ->
-	    let BlocktreeNode(_,_,_,tr,sr,lr,_,_,_,_,_,_,_,_) = get_bestnode_print_warnings oc true in
-	    Commands.sendtx oc (node_blockheight (get_bestnode_print_warnings oc true)) tr sr lr s
-	| _ ->
-	    Printf.fprintf oc "sendtx <tx in hex>\n";
-	    flush oc
-      end
-  | "validatetx" ->
-      begin
-	match al with
-	| [s] ->
-	    let BlocktreeNode(_,_,_,tr,sr,lr,_,_,_,_,_,_,_,_) = get_bestnode_print_warnings oc true in
-	    Commands.validatetx oc (node_blockheight (get_bestnode_print_warnings oc true)) tr sr lr s
-	| _ ->
-	    Printf.fprintf oc "validatetx <tx in hex>\n";
-	    flush oc
-      end
-  | "preassetinfo" ->
-      begin
-	match al with
-	| [a] ->
-	    begin
-	      try
-		let (j,_) = parse_jsonval a in
-		let u = preasset_from_json j in
-		Commands.preassetinfo_report oc u
-	      with
-	      | JsonParseFail(i,msg) ->
-		  Printf.fprintf oc "Problem parsing json object for preasset at position %d %s\n" i msg
-	    end
-	| _ -> raise (Failure("preassetinfo <preasset as json>"))
-      end
-  | "terminfo" ->
-      begin
-	let (jtm,jtp,thyid) =
-	  match al with
-	  | [jtm] -> (jtm,"'\"prop\"'",None)
-	  | [jtm;jtp] -> (jtm,jtp,None)
-	  | [jtm;jtp;theoryid] -> (jtm,jtp,Some(hexstring_hashval theoryid))
-	  | _ ->
-	      raise (Failure("terminfo <term as json> [<type as json>, with default 'prop'] [<theoryid, default of empty theory>]"))
-	in
-	begin
-	  try
-	    let (jtm,_) = parse_jsonval jtm in
-	    begin
 	    try
-	      let (jtp,_) = parse_jsonval jtp in
-	      let m =
-		match jtm with
-		| JsonStr(x) -> Logic.TmH(hexstring_hashval x) (*** treat a string as just the term root abbreviating the term ***)
-		| _ -> trm_from_json jtm
-	      in
-	      let a =
-		match jtp with
-		| JsonStr(x) when x = "prop" -> Logic.Prop
-		| JsonNum(x) -> Logic.Base(int_of_string x)
-		| _ -> stp_from_json jtp
-	      in (*** not checking if the term has the type; this could depend on the theory ***)
-	      let h = tm_hashroot m in
-	      let tph = hashtp a in
-	      Printf.fprintf oc "term root: %s\n" (hashval_hexstring h);
-	      Printf.fprintf oc "pure term address: %s\n" (addr_daliladdrstr (termaddr_addr (hashval_md160 h)));
-	      if thyid = None then
-		begin
-		  let k = hashtag (hashopair2 None (hashpair h tph)) 32l in
-		  Printf.fprintf oc "obj id in empty theory: %s\n" (hashval_hexstring k);
-		  Printf.fprintf oc "obj address in empty theory: %s\n" (addr_daliladdrstr (termaddr_addr (hashval_md160 k)))
-		end
-	      else
-		begin
-		  let k = hashtag (hashopair2 thyid (hashpair h tph)) 32l in
-		  Printf.fprintf oc "obj id in given theory: %s\n" (hashval_hexstring k);
-		  Printf.fprintf oc "obj address in given theory: %s\n" (addr_daliladdrstr (termaddr_addr (hashval_md160 k)))
-		end;
-	      if a = Logic.Prop then
-		begin
-		  if thyid = None then
-		    begin
-		      let k = hashtag (hashopair2 None h) 33l in
-		      Printf.fprintf oc "prop id in empty theory: %s\n" (hashval_hexstring k);
-		      Printf.fprintf oc "prop address in empty theory: %s\n" (addr_daliladdrstr (termaddr_addr (hashval_md160 k)))
-		    end
-		  else
-		    begin
-		      let k = hashtag (hashopair2 thyid h) 33l in
-		      Printf.fprintf oc "prop id in given theory: %s\n" (hashval_hexstring k);
-		      Printf.fprintf oc "prop address in given theory: %s\n" (addr_daliladdrstr (termaddr_addr (hashval_md160 k)))
-		    end
-		end
-	    with
-	    | JsonParseFail(i,msg) ->
-		Printf.fprintf oc "Problem parsing json object for tp at position %d %s\n" i msg
-	    end
-	  with
-	  | JsonParseFail(i,msg) ->
-	      Printf.fprintf oc "Problem parsing json object for tm at position %d %s\n" i msg
-	end
-      end
-  | "decodetx" ->
-      begin
-	match al with
-	| [a] ->
-	    let s = hexstring_string a in
-	    let (stx,_) = sei_stx seis (s,String.length s,None,0,0) in
-	    print_jsonval oc (json_stx stx);
-	    Printf.fprintf oc "\n"
-	| _ -> raise (Failure "decode <raw tx in hex>")
-      end
-  | "querybestblock" ->
-      let node = get_bestnode_print_warnings oc true in
-      let h = node_prevblockhash node in
-      let blkh = node_blockheight node in
-      let lr = node_ledgerroot node in
-      begin
-	match h with
-	| Some(h,_) ->
-	    print_jsonval oc (JsonObj([("height",JsonNum(Int64.to_string (Int64.sub blkh 1L)));("block",JsonStr(hashval_hexstring h));("ledgerroot",JsonStr(hashval_hexstring lr))]));
-	    flush oc
-	| None ->
-	    print_jsonval oc (JsonObj([("height",JsonNum(Int64.to_string (Int64.sub blkh 1L)));("ledgerroot",JsonStr(hashval_hexstring lr))]));
-	    flush oc
-      end
-  | "bestblock" ->
-      let node = get_bestnode_print_warnings oc true in
-      let h = node_prevblockhash node in
-      let blkh = node_blockheight node in
-      let lr = node_ledgerroot node in
-      begin
-	match h with
-	| Some(h,_) ->
-	    Printf.fprintf oc "Height: %Ld\nBlock hash: %s\nLedger root: %s\n" (Int64.sub blkh 1L) (hashval_hexstring h) (hashval_hexstring lr);
-	    flush oc
-	| None ->
-	    Printf.fprintf oc "Height: %Ld\nNo blocks yet.\nLedger root: %s\n" (Int64.sub blkh 1L) (hashval_hexstring lr);
-	    flush oc
-      end
-  | "difficulty" ->
-      let node = get_bestnode_print_warnings oc true in
-      let tar = node_targetinfo node in
-      let blkh = node_blockheight node in
-      Printf.fprintf oc "Current target (for block at height %Ld): %s\n" blkh (string_of_big_int tar);
-      flush oc
-  | "blockchain" -> pblockchain oc (get_bestnode_print_warnings oc true) None None 1000
-  | "reprocessblock" ->
-      begin
-	match al with
-	| [h] -> reprocessblock oc (hexstring_hashval h)
-	| _ -> raise (Failure "reprocessblock <blockid>")
-      end
-  | _ ->
-      (Printf.fprintf oc "Ignoring unknown command: %s\n" c; List.iter (fun a -> Printf.fprintf oc "%s\n" a) al; flush oc);;
+	      let (h,longhelp,_) = Hashtbl.find commandh a in
+	      Printf.fprintf oc "%s\n" h;
+	      if not (longhelp = "") then Printf.fprintf oc "%s\n" longhelp
+	    with Not_found ->
+	      Printf.fprintf oc "Unknown command %s\n" a;
+	  end
+      | _ ->
+	  Printf.fprintf oc "Available Commands:\n";
+	  List.iter
+	    (fun c -> Printf.fprintf oc "%s\n" c)
+	    !sortedcommands;
+	  Printf.fprintf oc "\nFor more specific information: help <command>\n";
+    end
+  else
+    try
+      let (_,_,f) = Hashtbl.find commandh c in
+      f oc al
+    with Not_found ->
+      Printf.fprintf oc "Unknown command %s\n" c;;
 
 let initialize () =
   begin
@@ -2369,7 +2342,7 @@ let initialize () =
 		check_ctree_rec c1 (i-1)
 	    | _ ->
 		Printf.fprintf sout "WARNING: unexpected non-element ctree at level %d:\n" i;
-		print_ctree c
+		print_ctree sout c
 	  in
 	  check_ledger_rec lr;
 	  Printf.fprintf sout "Total Currency Assets: %Ld cants (%s fraenks)\n" !totcants (fraenks_of_cants !totcants);
@@ -2416,7 +2389,7 @@ let initialize () =
 		extraindex_ctree_rec c1 (i-1) (true::pl)
 	    | _ ->
 		Printf.fprintf sout "WARNING: unexpected non-element ctree at level %d:\n" i;
-		print_ctree c
+		print_ctree sout c
 	  in
 	  extraindex_ledger_rec lr [];
 	  !exitfn 0
@@ -2616,6 +2589,7 @@ let run_with_timeout timeout f x =
   | exn -> finish (); raise exn;;
 
 let main () =
+  initialize_commands();
   datadir_from_command_line(); (*** if -datadir=... is on the command line, then set Config.datadir so we can find the config file ***)
   process_config_file();
   process_config_args(); (*** settings on the command line shadow those in the config file ***)
