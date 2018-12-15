@@ -12,6 +12,9 @@ val staking : bool ref
 val ip : string option ref
 val ipv6 : bool ref
 val port : int ref
+val onion : string option ref
+val onionlocalport : int ref
+val onionremoteport : int ref
 val socks : int option ref
 val socksport : int ref
 val rpcuser : string ref

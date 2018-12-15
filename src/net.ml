@@ -139,7 +139,9 @@ let myaddr () =
       else
 	ip ^ ":" ^ (string_of_int !Config.port)
   | None ->
-      ""
+      match !Config.onion with
+      | Some(onionaddr) -> onionaddr ^ ":" ^ (string_of_int !Config.onionremoteport)
+      | None -> ""
 
 let fallbacknodes = [
 "87.121.52.180:20805";
@@ -243,11 +245,66 @@ let openlistener ip port numconns =
   Unix.listen s numconns;
   s
 
+let openonionlistener onionaddr localport remoteport numconns =
+  let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  Unix.bind s (Unix.ADDR_INET(Unix.inet_addr_loopback, localport));
+  Unix.listen s numconns;
+  s
+
 let connectpeer ip port =
   let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
   let ia = Unix.inet_addr_of_string ip in
   Unix.connect s (Unix.ADDR_INET(ia, port));
   s
+
+let log_msg m =
+  let h = string_hexstring m in
+  log_string (Printf.sprintf "\nmsg: %s\n" h)
+
+let connectonionpeer proxyport onionaddr port =
+  let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  Unix.connect s (Unix.ADDR_INET(Unix.inet_addr_loopback, proxyport));
+  let sin = Unix.in_channel_of_descr s in
+  let sout = Unix.out_channel_of_descr s in
+  set_binary_mode_in sin true;
+  set_binary_mode_out sout true;
+  output_byte sout 4;
+  output_byte sout 1;
+  (** port, big endian **)
+  output_byte sout ((port asr 8) land 255);
+  output_byte sout (port land 255);
+  (** fake ip for socks4a **)
+  output_byte sout 0;
+  output_byte sout 0;
+  output_byte sout 0;
+  output_byte sout 1;
+  output_byte sout 0; (** empty string **)
+  (** onion addr **)
+  for i = 0 to String.length onionaddr - 1 do
+    output_byte sout (Char.code onionaddr.[i])
+  done;
+  output_byte sout 0; (** terminate string **)
+  flush sout;
+  try
+    let by = input_byte sin in
+    if not (by = 0) then raise (Failure "server did not give initial null byte");
+    let by = input_byte sin in
+    if by = 0x5b then raise (Failure "request rejected or failed");
+    if by = 0x5c then raise (Failure "request failed because client is not running identd (or not reachable from the server)");
+    if by = 0x5d then raise (Failure "request failed because client's identd could not confirm the user ID string in the request");
+    if not (by = 0x5a) then raise (Failure "bad status byte from server");
+    let rport1 = input_byte sin in
+    let rport0 = input_byte sin in
+    let rport = rport1 * 256 + rport0 in
+    let ip0 = input_byte sin in
+    let ip1 = input_byte sin in
+    let ip2 = input_byte sin in
+    let ip3 = input_byte sin in
+    log_msg (Printf.sprintf "Connected to %s:%d via socks4a with %d.%d.%d.%d:%d\n" onionaddr port ip0 ip1 ip2 ip3 rport);
+    (s,sin,sout)
+  with e ->
+    log_msg (Printf.sprintf "Failed to connect to %s:%d : %s\n" onionaddr port (Printexc.to_string e));
+    raise Exit
 
 let extract_ipv4 ip =
   let x = Array.make 4 0 in
@@ -294,6 +351,18 @@ let extract_ip_and_port ipp =
   else
     let (ip,port) = extract_ipv4_and_port ipp 0 l in
     (ip,port,false)
+
+let extract_onion_and_port n =
+  let dot = String.index n '.' in
+  let col = String.index n ':' in
+  if dot < col && String.sub n dot (col - dot) = ".onion" then
+    begin
+      try
+	(String.sub n 0 col,int_of_string (String.sub n (col+1) (String.length n - (col+1))))
+      with _ -> raise Not_found
+    end
+  else
+    raise Not_found
 
 let connectpeer_socks4 proxyport ip port =
   let s = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
@@ -435,6 +504,7 @@ let rec_msg blkh c =
       raise IllformedMsg
 
 let netlistenerth : Thread.t option ref = ref None
+let onionlistenerth : Thread.t option ref = ref None
 let netseekerth : Thread.t option ref = ref None
 let netconns : (Thread.t * Thread.t * (Unix.file_descr * in_channel * out_channel * connstate option ref)) list ref = ref []
 let netconnsmutex : Mutex.t = Mutex.create()
@@ -444,10 +514,6 @@ let peeraddr gcs =
   match gcs with
   | Some(cs) -> cs.addrfrom
   | None -> "[dead]"
-
-let log_msg m =
-  let h = string_hexstring m in
-  log_string (Printf.sprintf "\nmsg: %s\n" h)
 
 let network_time () =
   let mytm = Int64.of_float (Unix.time()) in
@@ -746,29 +812,58 @@ let tryconnectpeer n =
   try
     Some(List.find (fun (_,_,(_,_,_,gcs)) -> n = peeraddr !gcs) !netconns);
   with Not_found ->
-    let (ip,port,v6) = extract_ip_and_port n in
-    begin
+    try
+      let (onionaddr,port) = extract_onion_and_port n in
       try
-	match !Config.socks with
-	| None ->
-	    let s = connectpeer ip port in
-	    Some (initialize_conn n s)
-	| Some(4) ->
-	    let (s,sin,sout) = connectpeer_socks4 !Config.socksport ip port in
-	    Some (initialize_conn_2 n s sin sout)
-	| Some(5) ->
-	    raise (Failure "socks5 is not yet supported")
-	| Some(z) ->
-	    raise (Failure ("do not know what socks" ^ (string_of_int z) ^ " means"))
-      with
-      | RequestRejected ->
-	  log_string (Printf.sprintf "RequestRejected\n");
-	  None
-      | _ ->
-	  None
-    end
+	let (s,sin,sout) = connectonionpeer !Config.socksport onionaddr port in
+	Some(initialize_conn_2 n s sin sout)
+      with _ -> None
+    with Not_found ->
+      let (ip,port,v6) = extract_ip_and_port n in
+      begin
+	try
+	  match !Config.socks with
+	  | None ->
+	      let s = connectpeer ip port in
+	      Some (initialize_conn n s)
+	  | Some(4) ->
+	      let (s,sin,sout) = connectpeer_socks4 !Config.socksport ip port in
+	      Some (initialize_conn_2 n s sin sout)
+	  | Some(5) ->
+	      raise (Failure "socks5 is not yet supported")
+	  | Some(z) ->
+	      raise (Failure ("do not know what socks" ^ (string_of_int z) ^ " means"))
+	with
+	| RequestRejected ->
+	    log_string (Printf.sprintf "RequestRejected\n");
+	    None
+	| _ ->
+	    None
+      end
 
 let netlistener l =
+  while true do
+    try
+      let (s,a) = Unix.accept l in
+      let ra =
+	begin
+	  match a with
+	  | Unix.ADDR_UNIX(x) ->
+	      log_string (Printf.sprintf "got local connection %s\n" x);
+	      "local " ^ x
+	  | Unix.ADDR_INET(x,y) ->
+	      log_string (Printf.sprintf "got remote connection %s %d\n" (Unix.string_of_inet_addr x) y);
+	      (Unix.string_of_inet_addr x) ^ " " ^ (string_of_int y)
+	end
+      in
+      remove_dead_conns();
+      initialize_conn_accept ra s
+    with
+    | EnoughConnections -> log_string (Printf.sprintf "Rejecting connection because of maxconns.\n");
+    | _ -> ()
+  done
+
+let onionlistener l =
   while true do
     try
       let (s,a) = Unix.accept l in

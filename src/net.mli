@@ -48,6 +48,7 @@ val int_of_msgtype : msgtype -> int
 val string_of_msgtype : msgtype -> string
 
 val openlistener : string -> int -> int -> Unix.file_descr
+val openonionlistener : string -> int -> int -> int -> Unix.file_descr
 
 type connstate = {
     conntime : float;
@@ -92,6 +93,7 @@ val send_inv_fn : (int -> out_channel -> connstate -> unit) ref
 val msgtype_handler : (msgtype,in_channel * out_channel * connstate * string -> unit) Hashtbl.t
 
 val netlistenerth : Thread.t option ref
+val onionlistenerth : Thread.t option ref
 val netseekerth : Thread.t option ref
 val netconns : (Thread.t * Thread.t * (Unix.file_descr * in_channel * out_channel * connstate option ref)) list ref
 val netconnsmutex : Mutex.t
@@ -100,6 +102,7 @@ val this_nodes_nonce : int64 ref
 val remove_dead_conns : unit -> unit
 
 val netlistener : Unix.file_descr -> unit
+val onionlistener : Unix.file_descr -> unit
 val netseeker : unit -> unit
 
 val network_time : unit -> int64 * int

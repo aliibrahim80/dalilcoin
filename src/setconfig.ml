@@ -30,6 +30,8 @@ let boolconfigvars = [
 ];;
 let intconfigvars = [
 ("port",fun x -> Config.port := x);
+("onionlocalport",fun x -> Config.onionlocalport := x);
+("onionremoteport",fun x -> Config.onionremoteport := x);
 ("socksport",fun x -> Config.socksport := x);
 ("rpcport",fun x -> Config.rpcport := x);
 ("rpcport",fun x -> Config.rpcport := x);
@@ -53,6 +55,7 @@ let cantsoffraenksconfigvars = [
 ];;
 let stringoptionconfigvars = [
 ("ip",fun x -> Config.ip := x);
+("onion",fun x -> Config.onion := x);
 ("randomseed",fun x -> Config.randomseed := x);
 ("offlinestakerewardslock",fun x -> Config.offlinestakerewardslock := x);
 ];;

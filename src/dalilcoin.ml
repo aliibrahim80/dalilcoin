@@ -165,17 +165,46 @@ let stkth : Thread.t option ref = ref None;;
 let initnetwork () =
   begin
     try
-      match !Config.ip with
-      | Some(ip) ->
-	  let l = openlistener ip !Config.port 5 in
-	  let efn = !exitfn in
-	  exitfn := (fun n -> shutdown_close l; efn n);
-	  Printf.printf "Listening for incoming connections.\n";
-	  flush stdout;
-	  netlistenerth := Some(Thread.create netlistener l)
-      | None ->
-	  Printf.printf "Not listening for incoming connections.\nIf you want Dalilcoin to listen for incoming connections set ip to your ip address\nusing ip=... in dalilcoin.conf or -ip=... on the command line.\n";
+      let notlistening = ref true in
+      begin
+	match !Config.ip with
+	| Some(ip) ->
+	    let l = openlistener ip !Config.port 5 in
+	    let efn = !exitfn in
+	    exitfn := (fun n -> shutdown_close l; efn n);
+	    Printf.printf "Listening for incoming connections via ip %s on port %d.\n" ip !Config.port;
+	    flush stdout;
+	    notlistening := false;
+	    netlistenerth := Some(Thread.create netlistener l)
+	| None -> ()
+      end;
+      begin
+	match !Config.onion with
+	| Some(onionaddr) ->
+	    let l = openonionlistener onionaddr !Config.onionlocalport !Config.onionremoteport 5 in
+	    let efn = !exitfn in
+	    exitfn := (fun n -> shutdown_close l; efn n);
+	    Printf.printf "Listening for incoming connections via tor hidden service %s using port %d.\n" onionaddr !Config.onionremoteport;
+	    flush stdout;
+	    notlistening := false;
+	    onionlistenerth := Some(Thread.create onionlistener l)
+	| None -> ()
+      end;
+      if !notlistening then
+	begin
+	  Printf.printf "Not listening for incoming connections.\n";
+	  Printf.printf "If you want Dalilcoin to listen for incoming connections set ip to your ip address\n";
+	  Printf.printf "using ip=... in dalilcoin.conf or -ip=... on the command line.\n";
+	  Printf.printf "By default ip listeners use port 20805.\n";
+	  Printf.printf "This can be changed by setting port=... in dalilcoin.conf or -port=... on the command line.\n";
+	  Printf.printf "To listen as a tor hidden service set onion address\n";
+	  Printf.printf "using onion=... in dalilcoin.conf or -onion=... on the command line.\n";
+	  Printf.printf "By default onion listeners listen via the advertised port 20808.\n";
+	  Printf.printf "This can be changed by setting onionremoteport=... in dalilcoin.conf or -onionremoteport=... on the command line.\n";
+	  Printf.printf "By default onion listeners use the local (unadvertised) port 20807.\n";
+	  Printf.printf "This can be changed by setting onionlocalport=... in dalilcoin.conf or -onionlocalport=... on the command line.\n";
 	  flush stdout
+	end
     with _ -> ()
   end;
   netseeker ();
