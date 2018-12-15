@@ -261,6 +261,7 @@ let ltc_init sout =
   if !Config.testnet then ltctestnet();
   try
     log_string (Printf.sprintf "syncing with ltc\n");
+    ltc_old_sync(); (*** in case the node is far behind, start by syncing up with some historic ltc blocks first ***)
     let lbh = ltc_getbestblockhash () in
     log_string (Printf.sprintf "ltc bestblock %s\n" lbh);
     ltc_process_block lbh;
