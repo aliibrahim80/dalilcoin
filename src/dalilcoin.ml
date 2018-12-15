@@ -2615,13 +2615,6 @@ let run_with_timeout timeout f x =
   | exn -> finish (); raise exn;;
 
 let main () =
-  initialize();
-  if not !Config.offline then
-    begin
-      initnetwork();
-      if !Config.staking then stkth := Some(Thread.create stakingthread ());
-      if not !Config.ltcoffline then ltc_listener_th := Some(Thread.create ltc_listener ());
-    end;
   let last_failure = ref None in
   let failure_count = ref 0 in
   let failure_delay() =
@@ -2731,11 +2724,28 @@ let main () =
   if !Config.daemon then
     begin
       match Unix.fork() with
-      | 0 -> daemon_readevalloop ()
+      | 0 ->
+	  initialize();
+	  if not !Config.offline then
+	    begin
+	      initnetwork();
+	      if !Config.staking then stkth := Some(Thread.create stakingthread ());
+	      if not !Config.ltcoffline then ltc_listener_th := Some(Thread.create ltc_listener ());
+	    end;
+	  daemon_readevalloop ()
       | pid -> Printf.printf "Dalilcoin daemon process %d started.\n" pid
     end
   else
-    readevalloop();;
+    begin
+      initialize();
+      if not !Config.offline then
+	begin
+	  initnetwork();
+	  if !Config.staking then stkth := Some(Thread.create stakingthread ());
+	  if not !Config.ltcoffline then ltc_listener_th := Some(Thread.create ltc_listener ());
+	end;
+      readevalloop()
+    end;;
 
 main();;
 
