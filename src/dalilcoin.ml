@@ -2599,65 +2599,7 @@ let initialize () =
     log_string (Printf.sprintf "Nonce: %Ld\n" n);
   end;;
 
-initialize();;
-if not !Config.offline then
-  begin
-    initnetwork();
-    if !Config.staking then stkth := Some(Thread.create stakingthread ());
-    if not !Config.ltcoffline then ltc_listener_th := Some(Thread.create ltc_listener ());
-  end;;
-
-let last_failure = ref None;;
-let failure_count = ref 0;;
-let failure_delay() =
-  let tm = ltc_medtime() in
-  match !last_failure with
-  | Some(tm0) ->
-      let d = Int64.sub tm tm0 in
-      if d > 21600L then (** first failure in 6 hours, reset failure count to 1 and only delay 1 second **)
-	begin
-	  failure_count := 1;
-	  last_failure := Some(tm);
-	  Thread.delay 1.0
-	end
-      else if !failure_count > 100 then (** after 100 regular failures, just exit **)
-	begin
-	  closelog();
-	  !exitfn 1
-	end
-      else
-	begin
-	  incr failure_count;
-	  last_failure := Some(tm);
-	  Thread.delay (float_of_int !failure_count) (** with each new failure, delay for longer **)
-	end
-  | None ->
-      incr failure_count;
-      last_failure := Some(tm);
-      Thread.delay 1.0
-
-let readevalloop () =
-  while true do
-    try
-      Printf.printf "%s" !Config.prompt; flush stdout;
-      let l = read_line() in
-      do_command stdout l
-    with
-    | GettingRemoteData -> Printf.printf "Requested some remote data; try again.\n"
-    | Exit -> () (*** silently ignore ***)
-    | End_of_file ->
-	closelog();
-	Printf.printf "Shutting down threads. Please be patient.\n"; flush stdout;
-	!exitfn 0
-    | Failure(x) ->
-	Printf.fprintf stdout "Ignoring Uncaught Failure: %s\n" x; flush stdout;
-	failure_delay()
-    | exn -> (*** unexpected ***)
-	Printf.fprintf stdout "Ignoring Uncaught Exception: %s\n" (Printexc.to_string exn); flush stdout;
-	failure_delay()
-  done;;
-
-exception Timeout
+exception Timeout;;
 
 let run_with_timeout timeout f x =
   let old_handler = Sys.signal Sys.sigalrm
@@ -2670,67 +2612,130 @@ let run_with_timeout timeout f x =
     ignore (f x);
     finish ()
   with Timeout -> finish ()
-  | exn -> finish (); raise exn
+  | exn -> finish (); raise exn;;
 
-exception Timeout
-
-let daemon_readevalloop () =
-  let lst = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
-  let ia = Unix.inet_addr_of_string "127.0.0.1" in
-  begin
-    try
-      Unix.bind lst (Unix.ADDR_INET(ia,!Config.rpcport));
-    with _ ->
-      Printf.printf "Cannot bind to rpcport. Quitting.\n";
-      !exitfn 1
-  end;
-  let efn = !exitfn in
-  exitfn := (fun n -> shutdown_close lst; efn n);
-  Unix.listen lst 1;
-  while true do
-    try
-      let (s,a) = Unix.accept lst in
-      let sin = Unix.in_channel_of_descr s in
-      let sout = Unix.out_channel_of_descr s in
-      let alrmh = Sys.signal Sys.sigalrm (Sys.Signal_handle (fun _ -> raise Timeout)) in
+let main () =
+  initialize();
+  if not !Config.offline then
+    begin
+      initnetwork();
+      if !Config.staking then stkth := Some(Thread.create stakingthread ());
+      if not !Config.ltcoffline then ltc_listener_th := Some(Thread.create ltc_listener ());
+    end;
+  let last_failure = ref None in
+  let failure_count = ref 0 in
+  let failure_delay() =
+    let tm = ltc_medtime() in
+    match !last_failure with
+    | Some(tm0) ->
+	let d = Int64.sub tm tm0 in
+	if d > 21600L then (** first failure in 6 hours, reset failure count to 1 and only delay 1 second **)
+	  begin
+	    failure_count := 1;
+	    last_failure := Some(tm);
+	    Thread.delay 1.0
+	  end
+	else if !failure_count > 100 then (** after 100 regular failures, just exit **)
+	  begin
+	    closelog();
+	    !exitfn 1
+	  end
+	else
+	  begin
+	    incr failure_count;
+	    last_failure := Some(tm);
+	    Thread.delay (float_of_int !failure_count) (** with each new failure, delay for longer **)
+	  end
+    | None ->
+	incr failure_count;
+	last_failure := Some(tm);
+	Thread.delay 1.0
+  in
+  let readevalloop () =
+    while true do
       try
-	ignore (Unix.alarm 2);
-	let l = input_line sin in
-	if not (l = !Config.rpcuser) then raise (Failure "bad rpcuser");
-	let l = input_line sin in
-	if not (l = !Config.rpcpass) then raise (Failure "bad rpcpass");
-	let l = input_line sin in
-	ignore (Unix.alarm 60);
-	do_command sout l;
-	flush sout;
-	ignore (Unix.alarm 0);
-	ignore (Sys.signal Sys.sigalrm alrmh);
-	shutdown_close s
+	Printf.printf "%s" !Config.prompt; flush stdout;
+	let l = read_line() in
+	do_command stdout l
       with
-      | Timeout -> 
-	  flush sout;
-	  ignore (Sys.signal Sys.sigalrm alrmh);
-	  shutdown_close s
-      | exn ->
+      | GettingRemoteData -> Printf.printf "Requested some remote data; try again.\n"
+      | Exit -> () (*** silently ignore ***)
+      | End_of_file ->
+	  closelog();
+	  Printf.printf "Shutting down threads. Please be patient.\n"; flush stdout;
+	  !exitfn 0
+      | Failure(x) ->
+	  Printf.fprintf stdout "Ignoring Uncaught Failure: %s\n" x; flush stdout;
+	  failure_delay()
+      | exn -> (*** unexpected ***)
+	  Printf.fprintf stdout "Ignoring Uncaught Exception: %s\n" (Printexc.to_string exn); flush stdout;
+	  failure_delay()
+    done
+  in
+  let daemon_readevalloop () =
+    let lst = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+    let ia = Unix.inet_addr_of_string "127.0.0.1" in
+    begin
+      try
+	Unix.bind lst (Unix.ADDR_INET(ia,!Config.rpcport));
+      with _ ->
+	Printf.printf "Cannot bind to rpcport. Quitting.\n";
+	!exitfn 1
+    end;
+    let efn = !exitfn in
+    exitfn := (fun n -> shutdown_close lst; efn n);
+    Unix.listen lst 1;
+    while true do
+      try
+	let (s,a) = Unix.accept lst in
+	let sin = Unix.in_channel_of_descr s in
+	let sout = Unix.out_channel_of_descr s in
+	let alrmh = Sys.signal Sys.sigalrm (Sys.Signal_handle (fun _ -> raise Timeout)) in
+	try
+	  ignore (Unix.alarm 2);
+	  let l = input_line sin in
+	  if not (l = !Config.rpcuser) then raise (Failure "bad rpcuser");
+	  let l = input_line sin in
+	  if not (l = !Config.rpcpass) then raise (Failure "bad rpcpass");
+	  let l = input_line sin in
+	  ignore (Unix.alarm 60);
+	  do_command sout l;
 	  flush sout;
 	  ignore (Unix.alarm 0);
 	  ignore (Sys.signal Sys.sigalrm alrmh);
-	  Unix.close s;
-	  raise exn
-    with
-    | Exit -> () (*** silently ignore ***)
-    | End_of_file ->
-	closelog();
-	!exitfn 0
-    | Failure(x) ->
-	log_string (Printf.sprintf "Ignoring Uncaught Failure: %s\n" x);
-	failure_delay()
-    | exn -> (*** unexpected ***)
-	log_string (Printf.sprintf "Ignoring Uncaught Exception: %s\n" (Printexc.to_string exn));
-	failure_delay()
-  done;;
+	  shutdown_close s
+	with
+	| Timeout -> 
+	    flush sout;
+	    ignore (Sys.signal Sys.sigalrm alrmh);
+	    shutdown_close s
+	| exn ->
+	    flush sout;
+	    ignore (Unix.alarm 0);
+	    ignore (Sys.signal Sys.sigalrm alrmh);
+	    Unix.close s;
+	    raise exn
+      with
+      | Exit -> () (*** silently ignore ***)
+      | End_of_file ->
+	  closelog();
+	  !exitfn 0
+      | Failure(x) ->
+	  log_string (Printf.sprintf "Ignoring Uncaught Failure: %s\n" x);
+	  failure_delay()
+      | exn -> (*** unexpected ***)
+	  log_string (Printf.sprintf "Ignoring Uncaught Exception: %s\n" (Printexc.to_string exn));
+	  failure_delay()
+    done
+  in
+  if !Config.daemon then
+    begin
+      match Unix.fork() with
+      | 0 -> daemon_readevalloop ()
+      | pid -> Printf.printf "Dalilcoin daemon process %d started.\n" pid
+    end
+  else
+    readevalloop();;
 
-if !Config.daemon then
-  daemon_readevalloop ()
-else
-  readevalloop();;
+main();;
+
