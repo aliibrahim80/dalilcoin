@@ -241,8 +241,7 @@ let ltc_init () =
   with exc ->
     log_string (Printf.sprintf "problem syncing with ltc. %s quitting.\n" (Printexc.to_string exc));
     Printf.printf "problem syncing with ltc. quitting.\n";
-(*    !exitfn 2 *)
-    ()
+    !exitfn 2
 
 let ltc_listener () =
   while true do
