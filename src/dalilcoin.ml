@@ -162,7 +162,7 @@ let lock datadir =
 
 let stkth : Thread.t option ref = ref None;;
 
-let initnetwork () =
+let initnetwork sout =
   begin
     try
       let notlistening = ref true in
@@ -172,8 +172,8 @@ let initnetwork () =
 	    let l = openlistener ip !Config.port 5 in
 	    let efn = !exitfn in
 	    exitfn := (fun n -> shutdown_close l; efn n);
-	    Printf.printf "Listening for incoming connections via ip %s on port %d.\n" ip !Config.port;
-	    flush stdout;
+	    Printf.fprintf sout "Listening for incoming connections via ip %s on port %d.\n" ip !Config.port;
+	    flush sout;
 	    notlistening := false;
 	    netlistenerth := Some(Thread.create netlistener l)
 	| None -> ()
@@ -184,26 +184,26 @@ let initnetwork () =
 	    let l = openonionlistener onionaddr !Config.onionlocalport !Config.onionremoteport 5 in
 	    let efn = !exitfn in
 	    exitfn := (fun n -> shutdown_close l; efn n);
-	    Printf.printf "Listening for incoming connections via tor hidden service %s using port %d.\n" onionaddr !Config.onionremoteport;
-	    flush stdout;
+	    Printf.fprintf sout "Listening for incoming connections via tor hidden service %s using port %d.\n" onionaddr !Config.onionremoteport;
+	    flush sout;
 	    notlistening := false;
 	    onionlistenerth := Some(Thread.create onionlistener l)
 	| None -> ()
       end;
       if !notlistening then
 	begin
-	  Printf.printf "Not listening for incoming connections.\n";
-	  Printf.printf "If you want Dalilcoin to listen for incoming connections set ip to your ip address\n";
-	  Printf.printf "using ip=... in dalilcoin.conf or -ip=... on the command line.\n";
-	  Printf.printf "By default ip listeners use port 20805.\n";
-	  Printf.printf "This can be changed by setting port=... in dalilcoin.conf or -port=... on the command line.\n";
-	  Printf.printf "To listen as a tor hidden service set onion address\n";
-	  Printf.printf "using onion=... in dalilcoin.conf or -onion=... on the command line.\n";
-	  Printf.printf "By default onion listeners listen via the advertised port 20808.\n";
-	  Printf.printf "This can be changed by setting onionremoteport=... in dalilcoin.conf or -onionremoteport=... on the command line.\n";
-	  Printf.printf "By default onion listeners use the local (unadvertised) port 20807.\n";
-	  Printf.printf "This can be changed by setting onionlocalport=... in dalilcoin.conf or -onionlocalport=... on the command line.\n";
-	  flush stdout
+	  Printf.fprintf sout "Not listening for incoming connections.\n";
+	  Printf.fprintf sout "If you want Dalilcoin to listen for incoming connections set ip to your ip address\n";
+	  Printf.fprintf sout "using ip=... in dalilcoin.conf or -ip=... on the command line.\n";
+	  Printf.fprintf sout "By default ip listeners use port 20805.\n";
+	  Printf.fprintf sout "This can be changed by setting port=... in dalilcoin.conf or -port=... on the command line.\n";
+	  Printf.fprintf sout "To listen as a tor hidden service set onion address\n";
+	  Printf.fprintf sout "using onion=... in dalilcoin.conf or -onion=... on the command line.\n";
+	  Printf.fprintf sout "By default onion listeners listen via the advertised port 20808.\n";
+	  Printf.fprintf sout "This can be changed by setting onionremoteport=... in dalilcoin.conf or -onionremoteport=... on the command line.\n";
+	  Printf.fprintf sout "By default onion listeners use the local (unadvertised) port 20807.\n";
+	  Printf.fprintf sout "This can be changed by setting onionlocalport=... in dalilcoin.conf or -onionlocalport=... on the command line.\n";
+	  flush sout
 	end
     with _ -> ()
   end;
@@ -224,7 +224,7 @@ let missingheadersthread () = (*** every five minutes check if there are headers
 
 let ltc_listener_th : Thread.t option ref = ref None;;
 
-let ltc_init () =
+let ltc_init sout =
   if !Config.testnet then ltctestnet();
   try
     log_string (Printf.sprintf "syncing with ltc\n");
@@ -240,7 +240,7 @@ let ltc_init () =
     log_string (Printf.sprintf "finished syncing with ltc\n");
   with exc ->
     log_string (Printf.sprintf "problem syncing with ltc. %s quitting.\n" (Printexc.to_string exc));
-    Printf.printf "problem syncing with ltc. quitting.\n";
+    Printf.fprintf sout "problem syncing with ltc. quitting.\n";
     !exitfn 2
 
 let ltc_listener () =
@@ -1387,7 +1387,7 @@ let do_command oc l =
 	let tm = ltc_medtime() in
 	if zll = [] && tm > Int64.add !Config.genesistimestamp 604800L then
 	  begin
-	    Printf.printf "No blocks were created in the past week. Dalilcoin has reached terminal status.\nThe only recovery possible for the network is a hard fork.\n"
+	    Printf.fprintf oc "No blocks were created in the past week. Dalilcoin has reached terminal status.\nThe only recovery possible for the network is a hard fork.\n"
 	  end;
 	let i = ref 0 in
 	List.iter
@@ -1539,7 +1539,7 @@ let do_command oc l =
 	    raise (Failure "addnode <ip:port> [add|remove|onetry]")
       end
   | "clearbanned" -> clearbanned()
-  | "listbanned" -> Hashtbl.iter (fun n () -> Printf.printf "%s\n" n) bannedpeers
+  | "listbanned" -> Hashtbl.iter (fun n () -> Printf.fprintf oc "%s\n" n) bannedpeers
   | "bannode" -> List.iter (fun n -> banpeer n) al
   | "getinfo" ->
       remove_dead_conns();
@@ -1671,15 +1671,15 @@ let do_command oc l =
 	      let h = hexstring_hashval hh in
 	      try
 		let (bhd,_) = DbBlockHeader.dbget h in
-		Printf.printf "Time: %Ld\n" bhd.timestamp;
+		Printf.fprintf oc "Time: %Ld\n" bhd.timestamp;
 		begin
 		  try
 		    let bd = DbBlockDelta.dbget h in
-		    Printf.printf "%d txs\n" (List.length (bd.blockdelta_stxl));
-		    List.iter (fun (tx,txs) -> Printf.printf "%s\n" (hashval_hexstring (hashtx tx))) (bd.blockdelta_stxl);
+		    Printf.fprintf oc "%d txs\n" (List.length (bd.blockdelta_stxl));
+		    List.iter (fun (tx,txs) -> Printf.fprintf oc "%s\n" (hashval_hexstring (hashtx tx))) (bd.blockdelta_stxl);
 		  with Not_found ->
 		    find_and_send_requestdata GetBlockdelta h;
-		    Printf.printf "Missing block delta\n"
+		    Printf.fprintf oc "Missing block delta\n"
 		end
 	      with Not_found ->
 		find_and_send_requestdata GetHeader h
@@ -2167,9 +2167,12 @@ let initialize () =
       end;
     if Sys.file_exists (Filename.concat datadir "lock") then
       begin
-	Printf.printf "Cannot start Dalilcoin. Do you already have Dalilcoin running? If not, remove: %s\n" (Filename.concat datadir "lock");
-	flush stdout;
-	exit 1;
+	if not !Config.daemon then
+	  begin
+	    Printf.printf "Cannot start Dalilcoin. Do you already have Dalilcoin running? If not, remove: %s\n" (Filename.concat datadir "lock");
+	    flush stdout;
+	    exit 1;
+	  end;
       end;
     lock datadir;
     if not !Config.daemon then (Printf.printf "Initializing the database..."; flush stdout);
@@ -2200,7 +2203,7 @@ let initialize () =
 	    Printf.fprintf sout "No snapshot directory given.\n";
 	    !exitfn 1
 	| Some(dir) -> (*** then creating a snapshot ***)
-	    Printf.fprintf sout "Creating snapshot.\n"; flush stdout;
+	    Printf.fprintf sout "Creating snapshot.\n"; flush sout;
 	    let fin : (hashval,unit) Hashtbl.t = Hashtbl.create 10000 in
 	    begin
 	      if Sys.file_exists dir then
@@ -2262,7 +2265,7 @@ let initialize () =
 	    Printf.fprintf sout "No snapshot directory given.\n";
 	    !exitfn 1
 	| Some(dir) -> (*** then creating a snapshot ***)
-	    Printf.fprintf sout "Importing snapshot.\n"; flush stdout;
+	    Printf.fprintf sout "Importing snapshot.\n"; flush sout;
 	    let headerfile = open_in_bin (Filename.concat dir "headers") in
 	    let blockfile = open_in_bin (Filename.concat dir "blocks") in
 	    let ctreeeltfile = open_in_bin (Filename.concat dir "ctreeelts") in
@@ -2556,15 +2559,15 @@ let initialize () =
 	| Invalid_argument(_) ->
 	    raise (Failure "Bad seed")
       end;
-    Printf.fprintf sout "Initializing theory and signature trees.\n"; flush stdout;
+    Printf.fprintf sout "Initializing theory and signature trees.\n"; flush sout;
     init_thytrees();
     init_sigtrees();
     if not !Config.offline && not !Config.ltcoffline then
       begin
-	Printf.fprintf sout "Syncing with ltc\n"; flush stdout;
-	ltc_init();
+	Printf.fprintf sout "Syncing with ltc\n"; flush sout;
+	ltc_init sout;
       end;
-    Printf.fprintf sout "Initializing blocktree\n"; flush stdout;
+    Printf.fprintf sout "Initializing blocktree\n"; flush sout;
     initblocktree();
     missingheaders_th := Some(Thread.create missingheadersthread ());
     begin
@@ -2586,9 +2589,9 @@ let initialize () =
 	  with End_of_file -> close_in ch; Sys.remove pdf
 	end;
     end;
-    Printf.fprintf sout "Loading wallet\n"; flush stdout;
+    Printf.fprintf sout "Loading wallet\n"; flush sout;
     Commands.load_wallet();
-    Printf.fprintf sout "Loading txpool\n"; flush stdout;
+    Printf.fprintf sout "Loading txpool\n"; flush sout;
     Commands.load_txpool();
     (*** We next compute a nonce for the node to prevent self conns; it doesn't need to be cryptographically secure ***)
     if not !random_initialized then initialize_random_seed();
@@ -2729,7 +2732,7 @@ let main () =
 	  initialize();
 	  if not !Config.offline then
 	    begin
-	      initnetwork();
+	      initnetwork !Utils.log;
 	      if !Config.staking then stkth := Some(Thread.create stakingthread ());
 	      if not !Config.ltcoffline then ltc_listener_th := Some(Thread.create ltc_listener ());
 	    end;
@@ -2741,7 +2744,7 @@ let main () =
       initialize();
       if not !Config.offline then
 	begin
-	  initnetwork();
+	  initnetwork stdout;
 	  if !Config.staking then stkth := Some(Thread.create stakingthread ());
 	  if not !Config.ltcoffline then ltc_listener_th := Some(Thread.create ltc_listener ());
 	end;

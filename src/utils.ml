@@ -87,7 +87,7 @@ let initialize_random_seed () =
       if Sys.file_exists "/dev/random" then
 	let r = open_in_bin "/dev/random" in
 	let a = Array.make 32 0 in
-	Printf.printf "Computing random seed, this may take a while.\n"; flush stdout;
+	if not !Config.daemon then (Printf.printf "Computing random seed, this may take a while.\n"; flush stdout);
 	for i = 0 to 31 do
 	  a.(i) <- input_byte r
 	done;
