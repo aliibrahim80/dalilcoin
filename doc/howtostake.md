@@ -31,7 +31,7 @@ the second when the asset is allowed to stake) must be no larger
 than the median time of the litecoin block in which the corresponding
 burn tx was confirmed.
 
-Since staked nodes are published as litecoin transactions, there is no
+Since staked blocks are published as litecoin transactions, there is no
 possibility of nodes staking in secret.  This prevents long range
 attacks possible in pure POS.
 
