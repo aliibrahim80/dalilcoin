@@ -1097,7 +1097,7 @@ let ac c h longhelp f =
   Hashtbl.add commandh c (h,longhelp,(fun oc al -> try f oc al with BadCommandForm -> Printf.fprintf oc "%s\n" h));;
 
 let initialize_commands () =
-  ac "setbestblock" "setbestblock <blockid> [<blockheight> <ltcblockid> <ltcburntx>]" ""
+  ac "setbestblock" "setbestblock <blockid> [<blockheight> <ltcblockid> <ltcburntx>]" "Manually set the current best block. This is mostly useful if -ltcoffline is being used."
     (fun oc al ->
       match al with
       | [a] ->
@@ -1164,7 +1164,7 @@ let initialize_commands () =
 	  end
       | _ ->
 	  raise BadCommandForm);
-  ac "setledgerroot" "setledgerroot <ledgerroot or blockid>" ""
+  ac "setledgerroot" "setledgerroot <ledgerroot or blockhash>" "Manually set the current ledger root, either by giving the ledger root (Merkle root of a ctree)\nor by giving the hash of a block containing the new ledger root."
     (fun oc al ->
       match al with
       | [a] ->
@@ -1177,7 +1177,7 @@ let initialize_commands () =
 	      artificialledgerroot := Some(h)
 	  end
       | _ -> raise BadCommandForm);
-  ac "requestfullledger" "requestfullledger [<ledgerroot>]" "try to request the full ledger from peers\nThis is an experimental command and can take several hours.\nCurrently it is more likely to be successful if the node already has most of the ledger.\nIf you have very little of the full ledger and you want it, consider downloading the initial full ledger from https://mega.nz/#!waQE1DiC!yRo9vTYPK9CZsfOxT-6eJ7vtl3WLeIMqK4LAcA2ASKc"
+  ac "requestfullledger" "requestfullledger [<ledgerroot>]" "try to request the full ledger from peers\nThis is an experimental command and can take several hours.\nCurrently it is more likely to be successful if the node already has most of the ledger.\nIf you have very little of the full ledger and you want it, consider downloading the initial full ledger from\nhttps://mega.nz/#!waQE1DiC!yRo9vTYPK9CZsfOxT-6eJ7vtl3WLeIMqK4LAcA2ASKc"
     (fun oc al ->
       match al with
       | [a] ->
@@ -1194,7 +1194,7 @@ let initialize_commands () =
 	      Printf.fprintf oc "Exception: %s\n" (Printexc.to_string e)
 	  end
       | _ -> raise BadCommandForm);
-  ac "requestblock" "requestblock <blockid>" ""
+  ac "requestblock" "requestblock <blockhash>" "Manually request a missing block from peers, if possible.\nThis is mostly useful if -ltcoffline is set.\nUnder normal operations dalilcoin will request the block when its hash is seen in the ltc burn tx."
     (fun oc al ->
       match al with
       | [a] ->
@@ -1224,7 +1224,7 @@ let initialize_commands () =
 	      Printf.fprintf oc "No peer has header %s.\n" a
 	  end
       | _ -> raise BadCommandForm);
-  ac "query" "query <hashval or address or int[block height]> [<blockid or ledgerroot>]" ""
+  ac "query" "query <hashval or address or int[block height]> [<blockid or ledgerroot>]" "Get information (in json format) about some item.\nThis is intended to support exporers.\nThe query command gives more detailed information if -extraindex is set to true."
     (fun oc al ->
       match al with
       | [h] ->
@@ -1258,12 +1258,12 @@ let initialize_commands () =
 		raise (Failure ("could not interpret " ^ kh ^ " as a block or ledger root"))
 	  end
       | _ -> raise BadCommandForm);
-  ac "dumpwallet" "dumpwallet <filename>" ""
+  ac "dumpwallet" "dumpwallet <filename>" "Dump the current wallet keys, addresses, etc., to a given file."
     (fun oc al ->
       match al with
       | [fn] -> Commands.dumpwallet fn
       | _ -> raise BadCommandForm);
-  ac "ltcstatusdump" "ltcstatusdump [<filename> [<ltcblockhash> [<how many ltc blocks back>]]]" ""
+  ac "ltcstatusdump" "ltcstatusdump [<filename> [<ltcblockhash> [<how many ltc blocks back>]]]" "Dump the dalilcoin information about the current ltc status to a given file."
     (fun oc al ->
       let (fn,blkh,howfarback) =
 	match al with
@@ -1321,7 +1321,7 @@ let initialize_commands () =
 	with e -> Printf.fprintf f "Exception: %s\n" (Printexc.to_string e)
       end;
       close_out f);
-  ac "ltcstatus" "ltcstatus [<ltcblockhash>]" ""
+  ac "ltcstatus" "ltcstatus [<ltcblockhash>]" "Print the dalilcoin blocks burned into the ltc blockchain from the past week.\nThe topmost is the current best block.\nIt is legal to stake on top of any of the dalilcoin blocks listed by ltcstatus,\n but such a new block will only become the best block if no one stakes on top of the preferred blocks for a week.\nIn case multiple dalilcoin blocks were burned into the same ltc block, all these dalilcoin blocks are preferred equally.\nEventually all but one should be orphaned when someone stakes on top of that one."
     (fun oc al ->
       let h =
 	match al with
@@ -1363,7 +1363,7 @@ let initialize_commands () =
 		end)
 	    zl)
 	zll);
-  ac "ltcgettxinfo" "ltcgettxinfo <txid>" ""
+  ac "ltcgettxinfo" "ltcgettxinfo <txid>" "Get dalilcoin related information about an ltc burn tx."
     (fun oc al ->
       match al with
       | [h] ->
@@ -1378,7 +1378,7 @@ let initialize_commands () =
 	    with Not_found -> raise (Failure("problem"))
 	  end
       | _ -> raise BadCommandForm);
-  ac "ltcgetbestblockhash" "ltcgetbestblockhash" "get the current tip of the ltc blockchain"
+  ac "ltcgetbestblockhash" "ltcgetbestblockhash" "Get the current tip of the ltc blockchain."
     (fun oc al ->
       if al = [] then
 	begin
@@ -1390,7 +1390,7 @@ let initialize_commands () =
 	end
       else
 	raise BadCommandForm);
-  ac "ltcgetblock" "ltcgetblock <blockid>" "print dalilcoin related information about the given ltc block"
+  ac "ltcgetblock" "ltcgetblock <blockid>" "Print dalilcoin related information about the given ltc block."
     (fun oc al ->
       match al with
       | [h] ->
@@ -1403,7 +1403,7 @@ let initialize_commands () =
 	      Printf.fprintf oc "could not find ltc block %s\n" h
 	  end
       | _ -> raise BadCommandForm);
-  ac "ltclistunspent" "ltclistunspent" "list the current relevant utxos in the local ltc wallet"
+  ac "ltclistunspent" "ltclistunspent" "List the current relevant utxos in the local ltc wallet.\nThese utxos are used to fund ltc burn txs during the creation of dalilcoin blocks."
     (fun oc al ->
       if al = [] then
 	begin
@@ -1416,17 +1416,17 @@ let initialize_commands () =
 	end
       else
 	raise BadCommandForm);
-  ac "ltcsigntx" "ltcsigntx <txinhex>" "use the local ltc wallet to sign an ltc tx"
+  ac "ltcsigntx" "ltcsigntx <txinhex>" "Use the local ltc wallet to sign an ltc tx."
     (fun oc al ->
       match al with
       | [tx] -> Printf.fprintf oc "%s\n" (Ltcrpc.ltc_signrawtransaction tx)
       | _ -> raise BadCommandForm);
-  ac "ltcsendtx" "ltcsendtx <txinhex>" "use the local ltc wallet to send an ltc tx"
+  ac "ltcsendtx" "ltcsendtx <txinhex>" "Use the local ltc wallet to send an ltc tx."
     (fun oc al ->
       match al with
       | [tx] -> Printf.fprintf oc "%s\n" (Ltcrpc.ltc_sendrawtransaction tx)
       | _ -> raise BadCommandForm);
-  ac "ltccreateburn" "ltccreateburn <hash1> <hash2> <litoshis to burn>" "manually create an ltc burn tx to support a newly staked dalilcoin block"
+  ac "ltccreateburn" "ltccreateburn <hash1> <hash2> <litoshis to burn>" "Manually create an ltc burn tx to support a newly staked dalilcoin block."
     (fun oc al ->
       match al with
       | [h1;h2;toburn] ->
@@ -1451,12 +1451,12 @@ let initialize_commands () =
       closelog();
       Printf.fprintf oc "Shutting down threads. Please be patient.\n"; flush oc;
       !exitfn 0);
-  ac "dumpstate" "dumpstate <textfile>" "dump the current dalilcoin state to a file for debugging"
+  ac "dumpstate" "dumpstate <textfile>" "Dump the current dalilcoin state to a file for debugging."
     (fun oc al ->
       match al with
       | [fa] -> dumpstate fa
       | _ -> raise BadCommandForm);
-  ac "addnode" "addnode <address:port> [add|remove|onetry]" "add or remove a peer by giving an address or port number.\nThe address may be an ip or an onion address."
+  ac "addnode" "addnode <address:port> [add|remove|onetry]" "Add or remove a peer by giving an address or port number.\nThe address may be an ip or an onion address."
     (fun oc al ->
       let addnode_add n =
 	match tryconnectpeer n with
@@ -1479,13 +1479,13 @@ let initialize_commands () =
       | [n;"onetry"] ->
 	  ignore (tryconnectpeer n)
       | _ -> raise BadCommandForm);
-  ac "clearbanned" "clearbanned" "clear the list of banned peers"
+  ac "clearbanned" "clearbanned" "Clear the list of banned peers."
     (fun _ _ -> clearbanned());
-  ac "listbanned" "listbanned" "list the current banned peers"
+  ac "listbanned" "listbanned" "List the current banned peers."
     (fun oc _ -> Hashtbl.iter (fun n () -> Printf.fprintf oc "%s\n" n) bannedpeers);
   ac "bannode" "bannode [<address:port>] ... [<address:port>]" "ban the given peers"
     (fun _ al -> List.iter (fun n -> banpeer n) al);
-  ac "getinfo" "getinfo" "print a summary of the current dalilcoin node state including:\nnumber of connections, current best block, current difficulty, current balance"
+  ac "getinfo" "getinfo" "Print a summary of the current dalilcoin node state including:\nnumber of connections, current best block, current difficulty, current balance."
     (fun oc al ->
       remove_dead_conns();
       let ll = List.length !netconns in
@@ -1511,7 +1511,7 @@ let initialize_commands () =
 	with e ->
 	  Printf.fprintf oc "Exception: %s\n" (Printexc.to_string e)
       end);
-  ac "getpeerinfo" "getpeerinfo" "list the current peers and when the last message was received from each"
+  ac "getpeerinfo" "getpeerinfo" "List the current peers and when the last message was received from each."
     (fun oc al ->
       remove_dead_conns();
       let ll = List.length !netconns in
@@ -1531,26 +1531,26 @@ let initialize_commands () =
 	)
 	!netconns;
       flush oc);
-  ac "nettime" "nettime" "print the current network time (median of peers) and skew from local node"
+  ac "nettime" "nettime" "Print the current network time (median of peers) and skew from local node."
     (fun oc al ->
       let (tm,skew) = network_time() in
       Printf.fprintf oc "network time %Ld (median skew of %d)\n" tm skew;
       flush oc);
-  ac "invalidateblock" "invalidateblock <blockhash>" "manually invalidate a dalilcoin block\nThis should be used if someone is attacking the network and nodes decide to ignore their blocks."
+  ac "invalidateblock" "invalidateblock <blockhash>" "Manually invalidate a dalilcoin block\nThis should be used if someone is attacking the network and nodes decide to ignore their blocks."
     (fun oc al ->
       match al with
       | [h] ->
 	  let hh = hexstring_hashval h in
 	  recursively_invalidate_blocks hh
       | _ -> raise BadCommandForm);
-  ac "revalidateblock" "revalidateblock <blockhash>" "manually mark a previously manually invalidated block as being valid.\nThis will also mark the previous blocks as valid."
+  ac "revalidateblock" "revalidateblock <blockhash>" "Manually mark a previously manually invalidated block as being valid.\nThis will also mark the previous blocks as valid."
     (fun oc al ->
       match al with
       | [h] ->
 	  let hh = hexstring_hashval h in
 	  recursively_revalidate_blocks hh
       | _ -> raise BadCommandForm);
-  ac "rawblockheader" "rawblockheader <blockhash>" "print the given block header in hex"
+  ac "rawblockheader" "rawblockheader <blockhash>" "Print the given block header in hex."
     (fun oc al ->
       match al with
       | [hh] ->
@@ -1566,7 +1566,7 @@ let initialize_commands () =
 	      Printf.fprintf oc "Could not find header %s\n" hh
 	  end
       | _ -> raise BadCommandForm);
-  ac "rawblockdelta" "rawblockdelta <blockid>" "print the given block delta in hex"
+  ac "rawblockdelta" "rawblockdelta <blockid>" "Print the given block delta in hex."
     (fun oc al ->
       match al with
       | [hh] ->
@@ -1582,7 +1582,7 @@ let initialize_commands () =
 	      Printf.fprintf oc "Could not find delta %s\n" hh
 	  end
       | _ -> raise BadCommandForm);
-  ac "rawblock" "rawblock <blockid>" "print the block (header and delta) in hex"
+  ac "rawblock" "rawblock <blockid>" "Print the block (header and delta) in hex."
     (fun oc al ->
       match al with
       | [hh] ->
@@ -1602,7 +1602,7 @@ let initialize_commands () =
 	      Printf.fprintf oc "Could not find header %s\n" hh
 	  end
       | _ -> raise BadCommandForm);
-  ac "getblock" "getblock <blockhash>" "print information about the block, or request it from a peer if it is missing"
+  ac "getblock" "getblock <blockhash>" "Print information about the block, or request it from a peer if it is missing."
     (fun oc al ->
       match al with
       | [hh] ->
@@ -1694,7 +1694,7 @@ let initialize_commands () =
 		| NextStake(i,stkaddr,h,bday,obl,v,Some(toburn),_,_,_,_,_) -> true
 		| _ -> false)
 	      (Hashtbl.find_all nextstakechances_hypo prevblkh))));
-  ac "extraburn" "extraburn <ltc> or extraburn <litoshis> litoshis" "order the node to burn up to the given amount of ltc given a chance to stake by doing the burn (see nextstakingchances)"
+  ac "extraburn" "extraburn <ltc> or extraburn <litoshis> litoshis" "Order the node to burn up to the given amount of ltc given a chance to stake\nby doing the burn (see nextstakingchances)."
     (fun oc al ->
       match al with
       | [a] -> (extraburn := litoshis_of_ltc a; Hashtbl.clear nextstakechances)
@@ -1702,15 +1702,15 @@ let initialize_commands () =
       | _ -> raise BadCommandForm);
   ac "printassets" "printassets [<ledgerroot>] ... [<ledgerroot>]" "Print the assets in the given ledger roots.\nBy default the ledger root of the current best block is used."
     (fun oc al -> if al = [] then Commands.printassets oc else List.iter (fun h -> Commands.printassets_in_ledger oc (hexstring_hashval h)) al);
-  ac "printtx" "printtx <txid> [<txid>] ... [<txid>]" "print info about the given txs"
+  ac "printtx" "printtx <txid> [<txid>] ... [<txid>]" "Print info about the given txs."
     (fun oc al -> List.iter (fun h -> Commands.printtx oc (hexstring_hashval h)) al);
-  ac "importprivkey" "importprivkey <WIFkey> [staking|nonstaking|staking_fresh|nonstaking_fresh]" "import a private key for a p2pkh address into the wallet"
+  ac "importprivkey" "importprivkey <WIFkey> [staking|nonstaking|staking_fresh|nonstaking_fresh]" "Import a private key for a p2pkh address into the wallet."
     (fun oc al ->
       match al with
       | [w] -> Commands.importprivkey oc w "staking"
       | [w;cls] -> Commands.importprivkey oc w cls
       | _ -> raise BadCommandForm);
-  ac "importbtcprivkey" "importbtcprivkey <btcWIFkey> [staking|nonstaking|staking_fresh|nonstaking_fresh]" "import a btc private key for a p2pkh address into the wallet"
+  ac "importbtcprivkey" "importbtcprivkey <btcWIFkey> [staking|nonstaking|staking_fresh|nonstaking_fresh]" "Import a btc private key for a p2pkh address into the wallet."
     (fun oc al ->
       match al with
       | [w] -> Commands.importbtcprivkey oc w "staking"
@@ -1736,29 +1736,29 @@ let initialize_commands () =
 	  else
 	    raise BadCommandForm
       | _ -> raise BadCommandForm);
-  ac "importendorsement" "importendorsement <address> <address> <signature>" "importendorsement should be given three arguments: a b s where s is a signature made with the private key for address a endorsing to address b"
+  ac "importendorsement" "importendorsement <address> <address> <signature>" "Import a bitcoin signed endorsement message into the dalilcoin wallet.\nThis can be used to claim the dalilcoin airdrop without needing to import bitcoin private keys into the dalilcoin wallet.\nimportendorsement should be given three arguments: a b s where s is a signature made with the private key for address a endorsing to address b"
     (fun oc al ->
       match al with
       | [a;b;s] -> Commands.importendorsement oc a b s
       | _ -> raise BadCommandForm);
-  ac "btctodaliladdr" "btctodaliladdr <btcaddress> [<btcaddress>] .. [<btcaddress>]" "print the dalilcoin addresses corresponding to the given btc addresses"
+  ac "btctodaliladdr" "btctodaliladdr <btcaddress> [<btcaddress>] .. [<btcaddress>]" "Print the dalilcoin addresses corresponding to the given btc addresses."
     (fun oc al -> List.iter (Commands.btctodaliladdr oc) al);
   ac "printasset" "printasset <assethash>" "print information about the given asset"
     (fun oc al ->
       match al with
       | [h] -> Commands.printasset oc (hexstring_hashval h)
       | _ -> raise BadCommandForm);
-  ac "printhconselt" "printhconselt <hashval>" "print information about the given hconselt, which is an asset possibly followed by a hash referencing more assets"
+  ac "printhconselt" "printhconselt <hashval>" "Print information about the given hconselt, which is an asset possibly followed by a hash referencing more assets."
     (fun oc al ->
       match al with
       | [h] -> Commands.printhconselt oc (hexstring_hashval h)
       | _ -> raise BadCommandForm);
-  ac "printctreeelt" "printctreeelt <hashval>" "print information about a ctree element with the given Merkle root"
+  ac "printctreeelt" "printctreeelt <hashval>" "Print information about a ctree element with the given Merkle root."
     (fun oc al ->
       match al with
       | [h] -> Commands.printctreeelt oc (hexstring_hashval h)
       | _ -> raise BadCommandForm);
-  ac "printctreeinfo" "printctreeinfo [ledgerroot]" "print info about a ctree with the given Merkle root"
+  ac "printctreeinfo" "printctreeinfo [ledgerroot]" "Print info about a ctree with the given Merkle root."
     (fun oc al ->
       match al with
       | [] ->
@@ -1767,11 +1767,11 @@ let initialize_commands () =
 	  Commands.printctreeinfo oc currledgerroot
       | [h] -> Commands.printctreeinfo oc (hexstring_hashval h)
       | _ -> raise BadCommandForm);
-  ac "newofflineaddress" "newofflineaddress" "find an address in the watch wallet that was marked as offlinekey and fresh, print it and mark it as no longer fresh"
+  ac "newofflineaddress" "newofflineaddress" "Find an address in the watch wallet that was marked as offlinekey and fresh.\nPrint it and mark it as no longer fresh."
     (fun oc al ->
       let alpha = Commands.get_fresh_offline_address oc in
       Printf.fprintf oc "%s\n" (addr_daliladdrstr alpha));
-  ac "newaddress" "newaddress [ledgerroot]" ""
+  ac "newaddress" "newaddress [ledgerroot]" "If there is a key in the wallet classified as nonstaking_fresh, then print it and mark it as no longer fresh.\nOtherwise randomly generate a key, import the key into the wallet (as nonstaking) and print the correponding address.\nThe ledger root is used to ensure that the address is really empty (or was empty, given an old ledgerroot).\nSee also: newstakingaddress"
     (fun oc al ->
       match al with
       | [] ->
@@ -1787,7 +1787,7 @@ let initialize_commands () =
 	  let a = addr_daliladdrstr alpha in
 	  Printf.fprintf oc "%s\n" a
       | _ -> raise BadCommandForm);
-  ac "newstakingaddress" "newstakingaddress [ledgerroot]" ""
+  ac "newstakingaddress" "newstakingaddress [ledgerroot]" "If there is a key in the wallet classified as staking_fresh, then print it and mark it as no longer fresh.\nOtherwise randomly generate a key, import the key into the wallet (as staking) and print the correponding address.\nThe ledger root is used to ensure that the address is really empty (or was empty, given an old ledgerroot).\nSee also: newaddress"
     (fun oc al ->
       match al with
       | [] ->
@@ -1803,17 +1803,17 @@ let initialize_commands () =
 	  let a = addr_daliladdrstr alpha in
 	  Printf.fprintf oc "%s\n" a
       | _ -> raise BadCommandForm);
-  ac "stakewith" "stakewith <address>" "move an address in the wallet from nonstaking to staking"
+  ac "stakewith" "stakewith <address>" "Move an address in the wallet from nonstaking to staking.\nAttempts to spend assets from staking addresses might fail due to the asset being used to stake instead.\nSee also: donotstakewith"
     (fun oc al ->
       match al with
       | [alpha] -> Commands.reclassify_staking oc alpha true
       | _ -> raise BadCommandForm);
-  ac "donotstakewith" "donotstakewith <address>" "move an address in the wallet from staking to nonstaking"
+  ac "donotstakewith" "donotstakewith <address>" "Move an address in the wallet from staking to nonstaking.\nYou should mark an address as nonstaking if you want to ensure you can spend assets at the address.\nSee also: stakewith"
     (fun oc al ->
       match al with
       | [alpha] -> Commands.reclassify_staking oc alpha false
       | _ -> raise BadCommandForm);
-  ac "createtx" "createtx <inputs as json array> <outputs as json array>" "each input: {\"<addr>\":\"<assetid>\"}\neach output: {\"addr\":\"<addr>\",\"val\":<fraenks>,\"lock\":<height>,\"obligationaddress\":\"<addr>\"}\nwhere lock is optional (default null, unlocked output)\nand obligationaddress is optional (default null, meaning the holder address is implicitly the obligationaddress)"
+  ac "createtx" "createtx <inputs as json array> <outputs as json array>" "Create a simple tx spending some assets to create new currency assets.\neach input: {\"<addr>\":\"<assetid>\"}\neach output: {\"addr\":\"<addr>\",\"val\":<fraenks>,\"lock\":<height>,\"obligationaddress\":\"<addr>\"}\nwhere lock is optional (default null, unlocked output)\nand obligationaddress is optional (default null, meaning the holder address is implicitly the obligationaddress)\nSee also: creategeneraltx"
     (fun oc al ->
       match al with
       | [inp;outp] ->
@@ -1837,7 +1837,7 @@ let initialize_commands () =
 		Printf.fprintf oc "Problem parsing json object for tx outputs at position %d %s\n" i msg
 	  end
       | _ -> raise BadCommandForm);
-  ac "creategeneraltx" "creategeneraltx <tx as json object>" "create a general tx given as as a json object"
+  ac "creategeneraltx" "creategeneraltx <tx as json object>" "Create a general tx given as as a json object.\nEvery possible transaction can be represented this way,\nincluding txs publishing mathematical documents and collecting bounties.\nSee also: createtx and createsplitlocktx"
     (fun oc al ->
       try
 	match al with
@@ -1852,7 +1852,7 @@ let initialize_commands () =
       with
       | JsonParseFail(i,msg) ->
 	  Printf.fprintf oc "Problem parsing json object for tx at position %d %s\n" i msg);
-  ac "createsplitlocktx" "createsplitlocktx <current address> <assetid> <number of outputs> <lockheight> <fee> [<new holding address> [<new obligation address> [<ledger root>]]]" "create a tx to spend an asset into several assets locked until a given height\noptionally the new assets can be held at a new address, and may be controlled by a different obligation address"
+  ac "createsplitlocktx" "createsplitlocktx <current address> <assetid> <number of outputs> <lockheight> <fee> [<new holding address> [<new obligation address> [<ledger root>]]]" "Create a tx to spend an asset into several assets locked until a given height.\nOptionally the new assets can be held at a new address, and may be controlled by a different obligation address."
     (fun oc al ->
       match al with
       | (alp::aid::n::lkh::fee::r) ->
@@ -1896,17 +1896,17 @@ let initialize_commands () =
 		    | _ -> raise BadCommandForm
 	  end
       | _ -> raise BadCommandForm);
-  ac "signtx" "signtx <tx in hex>" ""
+  ac "signtx" "signtx <tx in hex>" "Sign a dalilcoin tx."
     (fun oc al ->
       match al with
       | [s] -> Commands.signtx oc (node_ledgerroot (get_bestnode_print_warnings oc true)) s
       | _ -> raise BadCommandForm);
-  ac "savetxtopool" "savetxtopool <tx in hex>" ""
+  ac "savetxtopool" "savetxtopool <tx in hex>" "Save a dalilcoin tx to the local pool without sending it to the network."
     (fun oc al ->
       match al with
       | [s] -> Commands.savetxtopool (node_blockheight (get_bestnode_print_warnings oc true)) (node_ledgerroot (get_bestnode_print_warnings oc true)) s
       | _ -> raise BadCommandForm);
-  ac "sendtx" "sendtx <tx in hex>" ""
+  ac "sendtx" "sendtx <tx in hex>" "Send a dalilcoin tx to other nodes on the network."
     (fun oc al ->
       match al with
       | [s] ->
@@ -1920,7 +1920,7 @@ let initialize_commands () =
 	  let BlocktreeNode(_,_,_,tr,sr,lr,_,_,_,_,_,_,_,_) = get_bestnode_print_warnings oc true in
 	  Commands.validatetx oc (node_blockheight (get_bestnode_print_warnings oc true)) tr sr lr s
       | _ -> raise BadCommandForm);
-  ac "preassetinfo" "preassetinfo <preasset as json>" ""
+  ac "preassetinfo" "preassetinfo <preasset as json>" "Print information about a preasset given in json form.\nTypes of assets are currency, bounties,\n ownership of objects, ownership of propositions, ownership of negations of propositions,\nrights to use an object, rights to use a proposition,\ncommitment markers published before publishing a document, theory or signature,\na theories, signatures and documents."
     (fun oc al ->
       match al with
       | [a] ->
@@ -1934,7 +1934,7 @@ let initialize_commands () =
 		Printf.fprintf oc "Problem parsing json object for preasset at position %d %s\n" i msg
 	  end
       | _ -> raise BadCommandForm);
-  ac "terminfo" "terminfo <term as json> [<type as json>, with default 'prop'] [<theoryid, default of empty theory>]" ""
+  ac "terminfo" "terminfo <term as json> [<type as json>, with default 'prop'] [<theoryid, default of empty theory>]" "Print information about a mathematical term given in json format."
     (fun oc al ->
       let (jtm,jtp,thyid) =
 	match al with
@@ -1999,7 +1999,7 @@ let initialize_commands () =
 	| JsonParseFail(i,msg) ->
 	    Printf.fprintf oc "Problem parsing json object for tm at position %d %s\n" i msg
       end);
-  ac "decodetx" "decode <raw tx in hex>" ""
+  ac "decodetx" "decode <raw tx in hex>" "Decode a dalilcoin tx."
     (fun oc al ->
       match al with
       | [a] ->
@@ -2008,7 +2008,7 @@ let initialize_commands () =
 	  print_jsonval oc (json_stx stx);
 	  Printf.fprintf oc "\n"
       | _ -> raise BadCommandForm);
-  ac "querybestblock" "querybestblock" ""
+  ac "querybestblock" "querybestblock" "Print the current best block in json format.\nIn case of a tie, only one of the current best blocks is returned.\nThis command is intended to support explorers.\nSee also: bestblock"
     (fun oc al ->
       let node = get_bestnode_print_warnings oc true in
       let h = node_prevblockhash node in
@@ -2023,7 +2023,7 @@ let initialize_commands () =
 	    print_jsonval oc (JsonObj([("height",JsonNum(Int64.to_string (Int64.sub blkh 1L)));("ledgerroot",JsonStr(hashval_hexstring lr))]));
 	    flush oc
       end);
-  ac "bestblock" "bestblock" ""
+  ac "bestblock" "bestblock" "Print the current best block in text format.\nIn case of a tie, only one of the current best blocks is returned.\nSee also: querybestblock"
     (fun oc al ->
       let node = get_bestnode_print_warnings oc true in
       let h = node_prevblockhash node in
@@ -2038,16 +2038,16 @@ let initialize_commands () =
 	    Printf.fprintf oc "Height: %Ld\nNo blocks yet.\nLedger root: %s\n" (Int64.sub blkh 1L) (hashval_hexstring lr);
 	    flush oc
       end);
-  ac "difficulty" "difficulty" ""
+  ac "difficulty" "difficulty" "Print the current difficulty."
     (fun oc al ->
       let node = get_bestnode_print_warnings oc true in
       let tar = node_targetinfo node in
       let blkh = node_blockheight node in
       Printf.fprintf oc "Current target (for block at height %Ld): %s\n" blkh (string_of_big_int tar);
       flush oc);
-  ac "blockchain" "blockchain" ""
+  ac "blockchain" "blockchain" "Print the blockchain up to the most recent 1000 blocks."
     (fun oc al -> pblockchain oc (get_bestnode_print_warnings oc true) None None 1000);
-  ac "reprocessblock" "reprocessblock <blockhash>" ""
+  ac "reprocessblock" "reprocessblock <blockhash>" "Manually reprocess a given block.\nThis is useful if either -ltcoffline is set or if part of the current ledger seems to be missing from the local node.\nIf the current node has the full ledger from before the block,\nthen processing the block should ensure the node has the resulting full ledger."
     (fun oc al ->
       match al with
       | [h] -> reprocessblock oc (hexstring_hashval h)
