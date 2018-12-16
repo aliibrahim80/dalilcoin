@@ -12,7 +12,7 @@ Dalilcoin changes the consensus protocol of Qeditas by using Proof of
 Burn to anchor Dalilcoin blocks into a Proof of Work blockchain
 (Litecoin's).  In addition, the target block time has been slowed
 considerably so that Dalilcoin is only expected to average 4 blocks
-per day.  Most of the code is due to the Qeditas developers and the
+per day.  Much of the code is due to the Qeditas developers and the
 (open source) copyright notices reflect this fact (and must continue
 to do so).  Additional copyright notices for Dalilcoin developers have
 been added to files changed after the Dalilcoin fork was created in
@@ -38,14 +38,13 @@ user's home directory. This can be changed as follows:
 
 ./configure -datadir=<fullpathtodir>
 
-The configure script will create the data directory and testnet subdirectory
-if it does not already exist.
+The configure script will create the data directory if it does not already exist.
 
 * Configuration file
 
-For dalilcoin (testnet) to run properly, it needs to communicate with a litecoin (testnet) daemon.
+For dalilcoin to run properly, it needs to communicate with a litecoin daemon.
 
-First set up your litecoin.conf file (either in .litecoin or .litecoin/testnet4) to contain the following lines:
+First set up your litecoin.conf file (in .litecoin) to contain the following lines:
 
 ```
 server=1
@@ -59,18 +58,14 @@ where of course `replacewithrealpassword` should be replaced with a
 serious password (to protect litecoins in your local wallet).
 You should put some litecoins in a segwit address in the local wallet.
 
-Now create a a file `dalilcoin.conf` in your dalilcoin data directory,
-or the testnet subdirectory.
+Now create a a file `dalilcoin.conf` in your dalilcoin data directory.
 
 ```
 ltcrpcuser=litecoinrpcusername
 ltcrpcpass=replacewithrealpassword
-ltcrpcport=19332
+ltcrpcport=9332
 ltcaddress=yourltcsegwitaddress
 ```
-
-If you are running on the mainnet instead of the testnet, change
-the value of `ltcrpcport` from 19332 to 9332.
 
 There are many other configuration parameters you might want to set
 in `dalilcoin.conf` (see `src/setconfig.ml`).  The ones above should suffice for dalilcoin
@@ -79,27 +74,20 @@ to interact with your litecoin node.
 Here are a few examples of other configuration parameters.
 
 If you want your node to listen for connections, give your IP and port
-number by setting `ip=xx.xx.xx.xx` and `port=..`. The default port number
-is 20805 for the mainnet and 20804 for the testnet. There is no default IP
-address, and if none is given then dalilcoin will not listen for incoming
-connections.
+number by setting `ip=xx.xx.xx.xx` and `port=..`. The default port
+number is 20805. There is no default IP address, and if none is given
+then dalilcoin will not listen for incoming connections. You can have
+dalilcoin listen for connections via a tor hidden service by setting
+`onion=xxyouronionaddrxx.onion` `onionremoteport=..` and
+`onionlocalport=..`.
 
-The node will attempt to stake (minting blocks for a reward) if
-`staking=1` is included. Other important configuration parameters for
-staking include `maxburn`, `maxburnrate` and `mintimebetweenburns`
-which control the amount of litecoin you are willing to burn to
-stake a block. By default no litecoins will be burned.
-The parameter `ltctxfee` determines the (fixed) transaction fee
-that will be used for burn transactions, denominated in litoshis.
-The default is 10,000 litoshis (0.0001 ltc).
-
-Connections will be created over tor (via socks proxies) if `socks=4`
-is included in the configuration file.
+Connections will only be created over tor (via socks proxies) if
+`socks=4` is included in the configuration file.
 
 After putting the dalilcoin/bin/ directory into your PATH,
-dalilcoin can be run on the testnet as follows:
+dalilcoin can be run as follows:
 
-dalilcoin -testnet
+dalilcoin
 
 This will likely take some time to sync with the ltc node. During this time it is
 searching through ltc blocks (after early 2018) for dalilcoin burn transactions
@@ -135,71 +123,24 @@ and try again. Sometimes it helps to exit the node and restart.
 > exit
 ```
 
-The only way to get an up-to-date full list of commands is to look through
-`do_command` function defained in the dalilcoin.ml file.
-
-Some of the important commands at the moment are as follows:
+A full list of commands is available via
 
 ```
-query
-querybestblock
-bestblock
-blockchain
-difficulty
-reprocessblock
-setbestblock
-setledgerroot
-requestblock
-ltcstatus
-exit
-addnode
-clearbanned
-listbanned
-getinfo
-getpeerinfo
-invalidateblock
-revalidateblock
-rawblockheader
-rawblockdelta
-rawblock
-getblock
-nextstakingchances
-extraburn
-printassets
-printtx
-importprivkey
-importbtcprivkey
-importwatchaddr
-importwatchbtcaddr
-importendorsement
-btctodaliladdr
-newaddress
-newofflineaddress
-newstakingaddress
-stakewith
-donotstakewith
-createtx
-creategeneraltx
-createsplitlocktx
-signtx
-validatetx
-decodetx
-sendtx
-preassetinfo
-terminfo
+> help
 ```
+
+and the help command can be used to ask for information about specific commands.
 
 Dalilcoin can also be run as a daemon and commands issued via a command line interface:
 
-nohup dalilcoin -testnet -daemon &> /dev/null &
+dalilcoin -daemon
 
-dalilcoincli -testnet "getinfo"
+dalilcoincli "getinfo"
 
 * Obtaining the Initial Ledger Tree
 
 Before running dalilcoin for the first time you have the option
 of initializing the database with the initial ledger tree.
-(The initial ledger tree is the same for the mainnet and testnet.)
 The initial ledger tree contains the initial distribution
 of Dalilcoin assets and has hash root
 d4b10e4b72eaa8a61427b805f206e828b22bb59192373b83fe0df501e68a5bed.
@@ -211,13 +152,10 @@ https://mega.nz/#!waQE1DiC!yRo9vTYPK9CZsfOxT-6eJ7vtl3WLeIMqK4LAcA2ASKc
 The sha256 hash of this file is
 1920e33fdaf3749d6cce55ab0150faf961ef22c5057c92e082c3f6209fb335d5
 
-After downloading the file cd to your Dalilcoin data directory (for the mainnet)
-or the testnet subdirectory of your Dalilcoin data directory (for the testnet).
+After downloading the file cd to your Dalilcoin data directory.
 Most likely this mean:
 
 cd ~/.dalilcoin
-or
-cd ~/.dalilcoin/testnet
 
 Move the downloaded file to here and untar it. For example:
 
@@ -247,71 +185,8 @@ This assumes you have a version of the initial ledger tree (see above).
 We first import 3 p2pkh addresses and one p2sh address. We give them
 as Bitcoin addresses and Dalilcoin prints the corresponding Dalilcoin address.
 Dalilcoin p2pkh addresses start with D. Dalilcoin p2sh addresses start with d.
-Testnet p2pkh addresses start with tD and testnet p2sh addresses start with td.
 
 Here is an example:
-
-```
-dalilcoin -testnet
-
-> importwatchbtcaddr 14M2d3UDXkkTL8AJmTUifUmAEwYo67cW2Q
-Importing as Dalilcoin address tDRMjAdpzoVSLTmPoSUHQM42gNjUB9UrYTV
-> importwatchbtcaddr 1LvNDhCXmiWwQ3yeukjMLZYgW7HT9wCMru
-Importing as Dalilcoin address tDhw4mHZK3TCpXhD9amY328pCduCqHe6gBT
-> importwatchbtcaddr 15muB9t6z5UZBCWTkTApgEUYnMZdcnumKo
-Importing as Dalilcoin address tDSnbikEtFpASJqjxRTyWMok4v9V1pWGuSK
-> importwatchbtcaddr 37GxXLE4tiFEKwsLzNGFdHyjVfUEbj6wt2
-Importing as Dalilcoin address tdbsqDtyhDNRJSRmc1TPTymDXFCZVquTpuy
-```
-
-We next ask Dalilcoin to print the assets. The initial ledger root
-d4b10e4b72eaa8a61427b805f206e828b22bb59192373b83fe0df501e68a5bed
-is the default ledger root for now. In the future, the default 
-ledger root will be the ledger root of the best block.
-
-```
-> printassets
-Assets in ledger with root d4b10e4b72eaa8a61427b805f206e828b22bb59192373b83fe0df501e68a5bed:
-Controlled p2pkh assets:
-Possibly controlled p2sh assets:
-Assets via endorsement:
-Watched assets:
-tDRMjAdpzoVSLTmPoSUHQM42gNjUB9UrYTV:
-737b615b1608bb483754b4dddc8e1aee692d89d51bd86491cd4c1d69b9bcd2f4: 0000000000000000000000000d5edd430a4ffe63fa96dd5c189989bd39b628cb [0] Currency 0.1 fraenks (10000000000 cants)
-tDhw4mHZK3TCpXhD9amY328pCduCqHe6gBT:
-5f6eea1d442bdc4683aab077382b3aeff14247117dc383dc4b3f07dc721f1081: 00000000000000000000000037cfcd67a77ded709ff0b03c1d80ed5fbed8b33f [0] Currency 0.0015 fraenks (150000000 cants)
-tDSnbikEtFpASJqjxRTyWMok4v9V1pWGuSK:
-5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4: 0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824 [0] Currency 0.0015 fraenks (150000000 cants)
-tdbsqDtyhDNRJSRmc1TPTymDXFCZVquTpuy:
-0a50e9aaae7517139d3c5c1453adae6499c70218b4ef4695579a953a38753eba: 000000000000000000000000ab6f7c6f2d94d3f7a36f39c64b46f4f6d5b492d0 [0] Currency 0.0015 fraenks (150000000 cants)
-Total p2pkh: 0.0000000000 fraenks
-Total p2sh: 0.0000000000 fraenks
-Total via endorsement: 0.0000000000 fraenks
-Total watched: 0.1045 fraenks
-```
-
-For each of the imported addresses, there is a currency asset.
-
-By Bitcoin Block 350,000
-
-14M2d3UDXkkTL8AJmTUifUmAEwYo67cW2Q had a balance of 0.1 bitcoins (10000000 satoshis)
-
-Hence the corresponding Dalilcoin testnet address tDRMjAdpzoVSLTmPoSUHQM42gNjUB9UrYTV
-has 0.1 fraenks (10000000000 cants). The number of cants is 1000 times more than the number of satoshis
-since Dalilcoin has three extra digits of precision.
-
-Similarly, by Bitcoin Block 350,000 the addresses
-1LvNDhCXmiWwQ3yeukjMLZYgW7HT9wCMru, 15muB9t6z5UZBCWTkTApgEUYnMZdcnumKo
-and 37GxXLE4tiFEKwsLzNGFdHyjVfUEbj6wt2 had balances of 0.0015 bitcoins
-(150000 satoshis).  Consequently, the corresponding Dalilcoin testnet addresseses
-have 0.0015 fraenks (150000000 cants) each.
-
-If the node does not have the full ledger tree, Dalilcoin may warn you that some data is missing as follows:
-
-Warning: The complete ledger is not in the local database and there are no connections to request missing data.
-
-At the moment Dalilcoin can only be run with the -testnet option, but once the mainnet is running, the following
-should work (assuming the ledger db director is in .dalilcoin instead of or in addition to .dalilcoin/testnet):
 
 ```
 dalilcoin
@@ -324,26 +199,53 @@ Importing as Dalilcoin address DpQ4k4STnJt6kVJLfm4ENSz51kGh8PsQVg
 Importing as Dalilcoin address DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy
 > importwatchbtcaddr 37GxXLE4tiFEKwsLzNGFdHyjVfUEbj6wt2
 Importing as Dalilcoin address dK1EDZZZF3dhqnii52aLqx7bzYNR3hFA5R
+```
 
+We next ask Dalilcoin to print the assets held at the wallet addresses
+in the current ledger. At the moment (Dec 2018) the ledger is the one
+after the block at height 580.
+
+```
 > printassets
-Assets in ledger with root d4b10e4b72eaa8a61427b805f206e828b22bb59192373b83fe0df501e68a5bed:
+Assets in ledger with root af6b3b954c20df2a8a7d8ce969671a0aa0af46908d1b4f8a19915eabc896a440:
 Controlled p2pkh assets:
 Possibly controlled p2sh assets:
 Assets via endorsement:
 Watched assets:
 dK1EDZZZF3dhqnii52aLqx7bzYNR3hFA5R:
-0a50e9aaae7517139d3c5c1453adae6499c70218b4ef4695579a953a38753eba: 000000000000000000000000ab6f7c6f2d94d3f7a36f39c64b46f4f6d5b492d0 [0] Currency 0.0015 fraenks (150000000 cants)
+0a50e9aaae7517139d3c5c1453adae6499c70218b4ef4695579a953a38753eba: (id 000000000000000000000000ab6f7c6f2d94d3f7a36f39c64b46f4f6d5b492d0) [0] Currency 0.0015 fraenks (150000000 cants)
 DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy:
-5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4: 0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824 [0] Currency 0.0015 fraenks (150000000 cants)
+5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4: (id 0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824) [0] Currency 0.0015 fraenks (150000000 cants)
 DpQ4k4STnJt6kVJLfm4ENSz51kGh8PsQVg:
-5f6eea1d442bdc4683aab077382b3aeff14247117dc383dc4b3f07dc721f1081: 00000000000000000000000037cfcd67a77ded709ff0b03c1d80ed5fbed8b33f [0] Currency 0.0015 fraenks (150000000 cants)
+5f6eea1d442bdc4683aab077382b3aeff14247117dc383dc4b3f07dc721f1081: (id 00000000000000000000000037cfcd67a77ded709ff0b03c1d80ed5fbed8b33f) [0] Currency 0.0015 fraenks (150000000 cants)
 DXpj9Qi9YM7cgZUzXTobhNCYkaY346HF8q:
-737b615b1608bb483754b4dddc8e1aee692d89d51bd86491cd4c1d69b9bcd2f4: 0000000000000000000000000d5edd430a4ffe63fa96dd5c189989bd39b628cb [0] Currency 0.1 fraenks (10000000000 cants)
+737b615b1608bb483754b4dddc8e1aee692d89d51bd86491cd4c1d69b9bcd2f4: (id 0000000000000000000000000d5edd430a4ffe63fa96dd5c189989bd39b628cb) [0] Currency 0.1 fraenks (10000000000 cants)
 Total p2pkh: 0.0000000000 fraenks
 Total p2sh: 0.0000000000 fraenks
 Total via endorsement: 0.0000000000 fraenks
 Total watched: 0.1045 fraenks
 ```
+
+For each of the imported addresses, there is a currency asset.
+
+By Bitcoin Block 350,000
+
+14M2d3UDXkkTL8AJmTUifUmAEwYo67cW2Q had a balance of 0.1 bitcoins (10000000 satoshis)
+
+Hence the corresponding Dalilcoin address DXpj9Qi9YM7cgZUzXTobhNCYkaY346HF8q
+has 0.1 fraenks (10000000000 cants). The number of cants is 1000 times more
+than the number of satoshis since Dalilcoin has three extra digits of precision.
+(The particular addresses used here came from the Qeditas README
+and still contain their airdropped dalilcoin fraenks as of Dec 2018.)
+
+Similarly, by Bitcoin Block 350,000 the addresses
+1LvNDhCXmiWwQ3yeukjMLZYgW7HT9wCMru, 15muB9t6z5UZBCWTkTApgEUYnMZdcnumKo
+and 37GxXLE4tiFEKwsLzNGFdHyjVfUEbj6wt2 had balances of 0.0015 bitcoins
+(150000 satoshis).  Consequently, the corresponding Dalilcoin addresseses
+have 0.0015 fraenks (150000000 cants) each.
+
+If the node does not have the full ledger tree, Dalilcoin may warn you that some data is missing.
+If data is missing and there are connections to peers, the node will try to request the missing data.
 
 * Endorsements
 
@@ -357,7 +259,7 @@ DiTnhYiCPSjzw8qX185j25FWeJjRL9fErf, a fact that can be determined
 using the btcdaliladdr command:
 
 ```
-btctodaliladdr 1Ez6BBUGNrNqahWqF7kqzBp88fkBKfoRmj
+> btctodaliladdr 1Ez6BBUGNrNqahWqF7kqzBp88fkBKfoRmj
 Dalilcoin address DiTnhYiCPSjzw8qX185j25FWeJjRL9fErf corresponds to Bitcoin address 1Ez6BBUGNrNqahWqF7kqzBp88fkBKfoRmj
 ```
 
@@ -426,7 +328,7 @@ given. The output is given in json format. Here is an example:
 
 ```
 query 15muB9t6z5UZBCWTkTApgEUYnMZdcnumKo
-{"response":"bitcoin address","daliladdress":"DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy","info":{"ledgerroot":"b20921d94ddca00cd88dadda5fb031e5230adaa3653c3674c3273a111a29ae6f","block":{"block":"2ec902ffe51a2a955838b259854d0c6a047954e47a4b96bb41ac85a053b1b4da","height":52,"ltcblock":"439765a4f73e991e81818c46d80b6eae811c7da733e65f21cf98ddea3e35da17","ltcburntx":"446157432358d4798a45ac72ef45bb0f5d65ca43e60e220b9325ba2532acc145","ltcmedtm":0,"ltcburned":0},"address":"DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy","total":0.0015,"contents":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824 [0] Currency 0.0015 fraenks; coinage 163350000000\n","currentassets":[{"type":"asset","assethash":"5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4","assetid":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824","bday":0,"preasset":{"type":"preasset","preassettype":"currency","val":{"cants":150000000,"fraenks":"0.0015"}}}]}}
+{"response":"bitcoin address","daliladdress":"DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy","info":{"ledgerroot":"af6b3b954c20df2a8a7d8ce969671a0aa0af46908d1b4f8a19915eabc896a440","block":{"block":"5b47277f4383c6543b32978fa3998228b1f9aa482e47788bcfb5242f51094176","height":580,"ltcblock":"818c59d812a79623746806f4904dc3d87879eb76020a06c385394d1429387b0a","ltcburntx":"4461e47cfa8a7c1a02b718ff055a1dc9abb7bfda90cc250abcf554f8bedc2987","ltcmedtm":0,"ltcburned":0},"address":"DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy","total":0.0015,"contents":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824 [0] Currency 0.0015 fraenks; coinage 163350000000\n","currentassets":[{"type":"asset","assethash":"5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4","assetid":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824","bday":0,"preasset":{"type":"preasset","preassettype":"currency","val":{"cants":150000000,"fraenks":"0.0015"}}}]}}
 ```
 
 The result indicates 15muB9t6z5UZBCWTkTApgEUYnMZdcnumKo is a Bitcoin
@@ -439,5 +341,30 @@ Here is the same example giving the Dalilcoin address to the query command:
 
 ```
 query DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy
-{"response":"daliladdress","info":{"ledgerroot":"b20921d94ddca00cd88dadda5fb031e5230adaa3653c3674c3273a111a29ae6f","block":{"block":"2ec902ffe51a2a955838b259854d0c6a047954e47a4b96bb41ac85a053b1b4da","height":52,"ltcblock":"439765a4f73e991e81818c46d80b6eae811c7da733e65f21cf98ddea3e35da17","ltcburntx":"446157432358d4798a45ac72ef45bb0f5d65ca43e60e220b9325ba2532acc145","ltcmedtm":0,"ltcburned":0},"address":"DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy","total":0.0015,"contents":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824 [0] Currency 0.0015 fraenks; coinage 163350000000\n","currentassets":[{"type":"asset","assethash":"5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4","assetid":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824","bday":0,"preasset":{"type":"preasset","preassettype":"currency","val":{"cants":150000000,"fraenks":"0.0015"}}}]}}
+{"response":"daliladdress","info":{"ledgerroot":"af6b3b954c20df2a8a7d8ce969671a0aa0af46908d1b4f8a19915eabc896a440","block":{"block":"5b47277f4383c6543b32978fa3998228b1f9aa482e47788bcfb5242f51094176","height":580,"ltcblock":"818c59d812a79623746806f4904dc3d87879eb76020a06c385394d1429387b0a","ltcburntx":"4461e47cfa8a7c1a02b718ff055a1dc9abb7bfda90cc250abcf554f8bedc2987","ltcmedtm":0,"ltcburned":0},"address":"DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy","total":0.0015,"contents":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824 [0] Currency 0.0015 fraenks; coinage 163350000000\n","currentassets":[{"type":"asset","assethash":"5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4","assetid":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824","bday":0,"preasset":{"type":"preasset","preassettype":"currency","val":{"cants":150000000,"fraenks":"0.0015"}}}]}}
 ```
+
+* Staking
+
+The node will attempt to stake (minting blocks for a reward) if
+`staking=1` is included. Other important configuration parameters for
+staking include `maxburn`, `maxburnrate` and `mintimebetweenburns`
+which control the amount of litecoin you are willing to burn to stake
+a block. By default no litecoins will be burned.  The parameter
+`ltctxfee` determines the (fixed) transaction fee that will be used
+for burn transactions, denominated in litoshis.  The default is 1,000
+litoshis (0.00001 ltc). The command `nextstakingchances` will indicate
+the next opportunities the node has to stake, possibly by burning
+extra ltc.  The command `extraburn` can be used to dynamically
+temporarily increase the number of litecoins you are willing to burn
+in order to stake.
+
+When private keys are imported into the dalilcoin wallet, the key can
+be marked as staking or nonstaking. Only addresses corresponding to
+staking keys will be used to stake.  The commands `stakewith` and
+`donotstakewith` can be used to move addresses between these two
+classifications. You should not be staking with the address if you
+want to be able to spend assets from an address.
+
+For more information about how to stake, see the file doc/howtostake.md.
+
