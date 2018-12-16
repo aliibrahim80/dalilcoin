@@ -432,8 +432,7 @@ You can generally set the burn parameters maxburn (an integer, using
 litoshis as the unit) and maxburnrate (an integer, using litoshis as
 the unit) to automatically control how much litecoin you are willing
 to burn in order to stake.  Also, the parameter ltctxfee sets the
-number of litoshis to use as a litcoin tx fee. The default is 10000
-(0.0001 ltc), though recent changes to litecoin's policies
-seem to make 1000 (0.00001 ltc) sufficient.
+number of litoshis to use as a litcoin tx fee. The default is 1000
+(0.00001 ltc).
 
 

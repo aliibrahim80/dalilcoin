@@ -23,20 +23,26 @@ be used in linux using the command line.
 
 * Installation
 
+```
 ./configure
 make
+```
 
 Instead of make, it is also possible to use the makebytecode script:
 
+```
 ./configure
 ./makebytecode
+```
 
 The configure script can be given a number of parameters.
 
 For example, the default data directory is .dalilcoin in the
 user's home directory. This can be changed as follows:
 
+```
 ./configure -datadir=<fullpathtodir>
+```
 
 The configure script will create the data directory if it does not already exist.
 
@@ -87,7 +93,9 @@ Connections will only be created over tor (via socks proxies) if
 After putting the dalilcoin/bin/ directory into your PATH,
 dalilcoin can be run as follows:
 
+```
 dalilcoin
+```
 
 This will likely take some time to sync with the ltc node. During this time it is
 searching through ltc blocks (after early 2018) for dalilcoin burn transactions
@@ -133,9 +141,13 @@ and the help command can be used to ask for information about specific commands.
 
 Dalilcoin can also be run as a daemon and commands issued via a command line interface:
 
+```
 dalilcoin -daemon
+```
 
+```
 dalilcoincli "getinfo"
+```
 
 * Obtaining the Initial Ledger Tree
 
