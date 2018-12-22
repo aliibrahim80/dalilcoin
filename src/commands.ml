@@ -1955,7 +1955,6 @@ let requestfullledger oc h =
 	match c with
 	| CHash(h) ->
 	    begin
-	      Utils.log_string (Printf.sprintf "rfl lev %d h %s\n" lev (hashval_hexstring h));
 	      if lev = 0 then
 		begin
 		  incr topcnt;
@@ -1970,7 +1969,6 @@ let requestfullledger oc h =
 	      begin
 		try
 		  let c2 = DbCTreeElt.dbget h in
-		  Utils.log_string (Printf.sprintf "rfl lev0 trav beneath %s\n" (hashval_hexstring h));
 		  requestfullctree_top cn oc c2 (lev+1) pl
 		with Not_found -> (** if we do not have a subtree beneath the root, then request the element and its inventory nbhd ***)
 		  incr cntm;
