@@ -13,6 +13,33 @@ open Ser
 type md160 = int32 * int32 * int32 * int32 * int32
 type hashval = md256
 
+type addr = int * int32 * int32 * int32 * int32 * int32
+type p2pkhaddr = int32 * int32 * int32 * int32 * int32
+type p2shaddr = int32 * int32 * int32 * int32 * int32
+type payaddr = bool * int32 * int32 * int32 * int32 * int32
+type termaddr = int32 * int32 * int32 * int32 * int32
+type pubaddr = int32 * int32 * int32 * int32 * int32
+
+let hashcaching = ref false
+
+let hashcache_int32 : (int32,hashval) Hashtbl.t = Hashtbl.create 100 (** always on **)
+let hashcache_int64 : (int64,hashval) Hashtbl.t = Hashtbl.create 100 (** always on **)
+let hashcache_tag : (hashval * int32,hashval) Hashtbl.t = Hashtbl.create 100
+let hashcache_pair : (hashval * hashval,hashval) Hashtbl.t = Hashtbl.create 100
+let hashcache_payaddr : (payaddr,hashval) Hashtbl.t = Hashtbl.create 100
+
+let clear_hashcache () =
+  Hashtbl.clear hashcache_tag;
+  Hashtbl.clear hashcache_pair;
+  Hashtbl.clear hashcache_payaddr
+
+let hashcache_on () =
+  hashcaching := true
+
+let hashcache_off () =
+  hashcaching := false;
+  clear_hashcache()
+
 let hash160 s = ripemd160_md256 (sha256str s)
 
 let hashinit () =
@@ -26,54 +53,57 @@ let getcurrhashval () =
 
 (*** x:int32 ***)
 let hashint32 x =
-  hashinit();
-  currblock.(0) <- 1l;
-  currblock.(1) <- x;
-  currblock.(2) <- 0x80000000l;
-  currblock.(3) <- 0l;
-  currblock.(4) <- 0l;
-  currblock.(5) <- 0l;
-  currblock.(6) <- 0l;
-  currblock.(7) <- 0l;
-  currblock.(8) <- 0l;
-  currblock.(9) <- 0l;
-  currblock.(10) <- 0l;
-  currblock.(11) <- 0l;
-  currblock.(12) <- 0l;
-  currblock.(13) <- 0l;
-  currblock.(14) <- 0l;
-  currblock.(15) <- 64l;
-  sha256round();
-  getcurrhashval()
+  try
+    Hashtbl.find hashcache_int32 x
+  with Not_found ->
+    hashinit();
+    currblock.(0) <- 1l;
+    currblock.(1) <- x;
+    currblock.(2) <- 0x80000000l;
+    currblock.(3) <- 0l;
+    currblock.(4) <- 0l;
+    currblock.(5) <- 0l;
+    currblock.(6) <- 0l;
+    currblock.(7) <- 0l;
+    currblock.(8) <- 0l;
+    currblock.(9) <- 0l;
+    currblock.(10) <- 0l;
+    currblock.(11) <- 0l;
+    currblock.(12) <- 0l;
+    currblock.(13) <- 0l;
+    currblock.(14) <- 0l;
+    currblock.(15) <- 64l;
+    sha256round();
+    let h = getcurrhashval() in
+    Hashtbl.add hashcache_int32 x h;
+    h
 
 (*** x:int64 ***)
 let hashint64 x =
-  hashinit();
-  currblock.(0) <- 2l;
-  currblock.(1) <- Int64.to_int32 (Int64.shift_right_logical x 32);
-  currblock.(2) <- Int64.to_int32 x;
-  currblock.(3) <- 0x80000000l;
-  currblock.(4) <- 0l;
-  currblock.(5) <- 0l;
-  currblock.(6) <- 0l;
-  currblock.(7) <- 0l;
-  currblock.(8) <- 0l;
-  currblock.(9) <- 0l;
-  currblock.(10) <- 0l;
-  currblock.(11) <- 0l;
-  currblock.(12) <- 0l;
-  currblock.(13) <- 0l;
-  currblock.(14) <- 0l;
-  currblock.(15) <- 96l;
-  sha256round();
-  getcurrhashval()
-
-type addr = int * int32 * int32 * int32 * int32 * int32
-type p2pkhaddr = int32 * int32 * int32 * int32 * int32
-type p2shaddr = int32 * int32 * int32 * int32 * int32
-type payaddr = bool * int32 * int32 * int32 * int32 * int32
-type termaddr = int32 * int32 * int32 * int32 * int32
-type pubaddr = int32 * int32 * int32 * int32 * int32
+  try
+    Hashtbl.find hashcache_int64 x
+  with Not_found ->
+    hashinit();
+    currblock.(0) <- 2l;
+    currblock.(1) <- Int64.to_int32 (Int64.shift_right_logical x 32);
+    currblock.(2) <- Int64.to_int32 x;
+    currblock.(3) <- 0x80000000l;
+    currblock.(4) <- 0l;
+    currblock.(5) <- 0l;
+    currblock.(6) <- 0l;
+    currblock.(7) <- 0l;
+    currblock.(8) <- 0l;
+    currblock.(9) <- 0l;
+    currblock.(10) <- 0l;
+    currblock.(11) <- 0l;
+    currblock.(12) <- 0l;
+    currblock.(13) <- 0l;
+    currblock.(14) <- 0l;
+    currblock.(15) <- 96l;
+    sha256round();
+    let h = getcurrhashval() in
+    Hashtbl.add hashcache_int64 x h;
+    h
 
 let p2pkhaddr_payaddr x =
   let (x0,x1,x2,x3,x4) = x in
@@ -262,26 +292,31 @@ let hashaddr x =
   getcurrhashval()
 
 let hashpayaddr x =
-  let (b,x0,x1,x2,x3,x4) = x in
-  hashinit();
-  currblock.(0) <- if b then 4l else 3l;
-  currblock.(1) <- x0;
-  currblock.(2) <- x1;
-  currblock.(3) <- x2;
-  currblock.(4) <- x3;
-  currblock.(5) <- x4;
-  currblock.(6) <- 0x80000000l;
-  currblock.(7) <- 0l;
-  currblock.(8) <- 0l;
-  currblock.(9) <- 0l;
-  currblock.(10) <- 0l;
-  currblock.(11) <- 0l;
-  currblock.(12) <- 0l;
-  currblock.(13) <- 0l;
-  currblock.(14) <- 0l;
-  currblock.(15) <- 192l;
-  sha256round();
-  getcurrhashval()
+  try
+    Hashtbl.find hashcache_payaddr x
+  with Not_found ->
+    let (b,x0,x1,x2,x3,x4) = x in
+    hashinit();
+    currblock.(0) <- if b then 4l else 3l;
+    currblock.(1) <- x0;
+    currblock.(2) <- x1;
+    currblock.(3) <- x2;
+    currblock.(4) <- x3;
+    currblock.(5) <- x4;
+    currblock.(6) <- 0x80000000l;
+    currblock.(7) <- 0l;
+    currblock.(8) <- 0l;
+    currblock.(9) <- 0l;
+    currblock.(10) <- 0l;
+    currblock.(11) <- 0l;
+    currblock.(12) <- 0l;
+    currblock.(13) <- 0l;
+    currblock.(14) <- 0l;
+    currblock.(15) <- 192l;
+    sha256round();
+    let h = getcurrhashval() in
+    if !hashcaching then Hashtbl.add hashcache_payaddr x h;
+    h
 
 let hashtermaddr x =
   let (x0,x1,x2,x3,x4) = x in
@@ -329,44 +364,49 @@ let hashpubaddr x =
 
 (*** x and y are hashvals ***)
 let hashpair x y =
-  let (x0,x1,x2,x3,x4,x5,x6,x7) = x in
-  let (y0,y1,y2,y3,y4,y5,y6,y7) = y in
-  hashinit();
-  currblock.(0) <- 7l;
-  currblock.(1) <- x0;
-  currblock.(2) <- x1;
-  currblock.(3) <- x2;
-  currblock.(4) <- x3;
-  currblock.(5) <- x4;
-  currblock.(6) <- x5;
-  currblock.(7) <- x6;
-  currblock.(8) <- x7;
-  currblock.(9) <- y0;
-  currblock.(10) <- y1;
-  currblock.(11) <- y2;
-  currblock.(12) <- y3;
-  currblock.(13) <- y4;
-  currblock.(14) <- y5;
-  currblock.(15) <- y6;
-  sha256round();
-  currblock.(0) <- y7;
-  currblock.(1) <- 0x80000000l;
-  currblock.(2) <- 0l;
-  currblock.(3) <- 0l;
-  currblock.(4) <- 0l;
-  currblock.(5) <- 0l;
-  currblock.(6) <- 0l;
-  currblock.(7) <- 0l;
-  currblock.(8) <- 0l;
-  currblock.(9) <- 0l;
-  currblock.(10) <- 0l;
-  currblock.(11) <- 0l;
-  currblock.(12) <- 0l;
-  currblock.(13) <- 0l;
-  currblock.(14) <- 0l;
-  currblock.(15) <- 544l;
-  sha256round();
-  getcurrhashval()
+  try
+    Hashtbl.find hashcache_pair (x,y)
+  with Not_found ->
+    let (x0,x1,x2,x3,x4,x5,x6,x7) = x in
+    let (y0,y1,y2,y3,y4,y5,y6,y7) = y in
+    hashinit();
+    currblock.(0) <- 7l;
+    currblock.(1) <- x0;
+    currblock.(2) <- x1;
+    currblock.(3) <- x2;
+    currblock.(4) <- x3;
+    currblock.(5) <- x4;
+    currblock.(6) <- x5;
+    currblock.(7) <- x6;
+    currblock.(8) <- x7;
+    currblock.(9) <- y0;
+    currblock.(10) <- y1;
+    currblock.(11) <- y2;
+    currblock.(12) <- y3;
+    currblock.(13) <- y4;
+    currblock.(14) <- y5;
+    currblock.(15) <- y6;
+    sha256round();
+    currblock.(0) <- y7;
+    currblock.(1) <- 0x80000000l;
+    currblock.(2) <- 0l;
+    currblock.(3) <- 0l;
+    currblock.(4) <- 0l;
+    currblock.(5) <- 0l;
+    currblock.(6) <- 0l;
+    currblock.(7) <- 0l;
+    currblock.(8) <- 0l;
+    currblock.(9) <- 0l;
+    currblock.(10) <- 0l;
+    currblock.(11) <- 0l;
+    currblock.(12) <- 0l;
+    currblock.(13) <- 0l;
+    currblock.(14) <- 0l;
+    currblock.(15) <- 544l;
+    sha256round();
+    let h = getcurrhashval() in
+    if !hashcaching then Hashtbl.add hashcache_pair (x,y) h;
+    h
 
 let hashpubkey x y =
   let (x0,x1,x2,x3,x4,x5,x6,x7) = x in
@@ -431,26 +471,31 @@ let hashpubkeyc p x =
   getcurrhashval()
 
 let hashtag x tg =
-  let (x0,x1,x2,x3,x4,x5,x6,x7) = x in
-  hashinit();
-  currblock.(0) <- 8l;
-  currblock.(1) <- tg;
-  currblock.(2) <- x0;
-  currblock.(3) <- x1;
-  currblock.(4) <- x2;
-  currblock.(5) <- x3;
-  currblock.(6) <- x4;
-  currblock.(7) <- x5;
-  currblock.(8) <- x6;
-  currblock.(9) <- x7;
-  currblock.(10) <- 0x80000000l;
-  currblock.(11) <- 0l;
-  currblock.(12) <- 0l;
-  currblock.(13) <- 0l;
-  currblock.(14) <- 0l;
-  currblock.(15) <- 320l;
-  sha256round();
-  getcurrhashval()
+  try
+    Hashtbl.find hashcache_tag (x,tg)
+  with Not_found ->
+    let (x0,x1,x2,x3,x4,x5,x6,x7) = x in
+    hashinit();
+    currblock.(0) <- 8l;
+    currblock.(1) <- tg;
+    currblock.(2) <- x0;
+    currblock.(3) <- x1;
+    currblock.(4) <- x2;
+    currblock.(5) <- x3;
+    currblock.(6) <- x4;
+    currblock.(7) <- x5;
+    currblock.(8) <- x6;
+    currblock.(9) <- x7;
+    currblock.(10) <- 0x80000000l;
+    currblock.(11) <- 0l;
+    currblock.(12) <- 0l;
+    currblock.(13) <- 0l;
+    currblock.(14) <- 0l;
+    currblock.(15) <- 320l;
+    sha256round();
+    let h = getcurrhashval() in
+    if !hashcaching then Hashtbl.add hashcache_tag (x,tg) h;
+    h
 
 let hashlist hl =
   let l = List.length hl in

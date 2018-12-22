@@ -42,6 +42,8 @@ type msgtype =
   | Asset
   | GetInvNbhd
   | GetElementsBelow
+  | CompleteCTree
+  | CompleteHList
 
 val msgtype_of_int : int -> msgtype
 val int_of_msgtype : msgtype -> int

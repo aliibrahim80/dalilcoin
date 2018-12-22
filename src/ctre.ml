@@ -17,6 +17,9 @@ open Cryptocurr
 open Tx
 open Config
 
+let reqhlist : (hashval,addr) Hashtbl.t = Hashtbl.create 1000
+let reqctree : (hashval,bool list) Hashtbl.t = Hashtbl.create 1000
+
 let datadir () = if !testnet then (Filename.concat !datadir "testnet") else !datadir
 
 let intention_minage = 4L (** one day, at 6 hour block times **)
@@ -2556,9 +2559,16 @@ Hashtbl.add msgtype_handler GetHConsElement
 Hashtbl.add msgtype_handler HConsElement
     (fun (sin,sout,cs,ms) ->
       let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
-(*      Utils.log_string (Printf.sprintf "HConsElement %s %f\n" (hashval_hexstring h) (Unix.time())); *)
       let i = int_of_msgtype GetHConsElement in
-      if not (DbHConsElt.dbexists h) then (*** if we already have it, abort ***)
+      if DbHConsElt.dbexists h then (*** if we already have it, abort, but still call hook if necessary ***)
+	begin
+	  let hei = int_of_msgtype HConsElement in
+	  try
+	    Hashtbl.find cs.itemhooks (hei,h) ();
+	    Hashtbl.remove cs.itemhooks (hei,h)
+	  with Not_found -> ()
+	end
+      else
 	let tm = Unix.time() in
 	if liberally_accept_elements_p tm || recently_requested (i,h) tm cs.invreq then (*** only continue if it was requested or we're liberally accepting elements to get the full ledger ***)
           let (hk,_) = sei_prod sei_hashval (sei_option (sei_prod sei_hashval sei_int8)) seis r in
@@ -2600,9 +2610,18 @@ Hashtbl.add msgtype_handler GetCTreeElement
 Hashtbl.add msgtype_handler CTreeElement
     (fun (sin,sout,cs,ms) ->
       let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
-(*      Utils.log_string (Printf.sprintf "CTreeElement %s %f\n" (hashval_hexstring h) (Unix.time())); *)
       let i = int_of_msgtype GetCTreeElement in
-      if not (DbCTreeElt.dbexists h) then (*** if we already have it, abort ***)
+      if DbCTreeElt.dbexists h then (*** if we already have it, abort, but still call hook if necessary ***)
+	begin
+	  let cei = int_of_msgtype CTreeElement in
+	  let cci = int_of_msgtype CompleteCTree in
+	  try
+	    Hashtbl.find cs.itemhooks (cei,h) ();
+	    Hashtbl.remove cs.itemhooks (cei,h);
+	    Hashtbl.remove cs.itemhooks (cci,h)
+	  with Not_found -> ()
+	end
+      else
 	let tm = Unix.time () in
 	if liberally_accept_elements_p tm || recently_requested (i,h) tm cs.invreq then (*** only continue if it was requested or we're liberally accepting to get the full ledger ***)
           let (c,_) = sei_ctree seis r in
@@ -2611,9 +2630,11 @@ Hashtbl.add msgtype_handler CTreeElement
   	      DbCTreeElt.dbput h c;
 	      Hashtbl.remove cs.invreq (i,h);
 	      let cei = int_of_msgtype CTreeElement in
+	      let cci = int_of_msgtype CompleteCTree in
 	      try
 		Hashtbl.find cs.itemhooks (cei,h) ();
-		Hashtbl.remove cs.itemhooks (cei,h)
+		Hashtbl.remove cs.itemhooks (cei,h);
+		Hashtbl.remove cs.itemhooks (cci,h)
 	      with Not_found -> ()
 	    end
           else (*** otherwise, it seems to be a misbehaving peer --  ignore for now ***)
@@ -2621,52 +2642,201 @@ Hashtbl.add msgtype_handler CTreeElement
 	else (*** if something unrequested was sent, then seems to be a misbehaving peer ***)
 	  Utils.log_string (Printf.sprintf "misbehaving peer? [unrequested CTreeElement]\n"));;
 
-let rec send_elements_below_hconselt tm cs h =
-  try
-    let i = int_of_msgtype GetHConsElement in
-    let hk = DbHConsElt.dbget h in
-    if not (recently_sent (i,h) tm cs.sentinv) then (*** don't resend ***)
-      begin
-	let hksb = Buffer.create 100 in
-	seosbf (seo_prod seo_hashval (seo_option (seo_prod seo_hashval seo_int8)) seosb hk (seo_hashval seosb h (hksb,None)));
-	let hkser = Buffer.contents hksb in
-	ignore (queue_msg cs HConsElement hkser);
-	Hashtbl.replace cs.sentinv (i,h) tm
-      end;
-    match hk with
-    | (ah,r) ->
-	let i = int_of_msgtype GetAsset in
-	if not (recently_sent (i,ah) tm cs.sentinv) then (*** don't resend ***)
-	  begin
-	    try
-	      let a = DbAsset.dbget ah in
-	      let asb = Buffer.create 100 in
-	      seosbf (seo_asset seosb a (seo_hashval seosb ah (asb,None)));
-	      let aser = Buffer.contents asb in
-	      ignore (queue_msg cs Asset aser);
-	      Hashtbl.replace cs.sentinv (i,ah) tm
-	    with Not_found -> ();
-	  end;
-	match r with
-	| None -> ()
-	| Some(hr,l) -> send_elements_below_hconselt tm cs hr
-  with Not_found -> ();;
+Hashtbl.add msgtype_handler CompleteHList
+    (fun (sin,sout,cs,ms) ->
+      let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
+      try
+	let alpha = Hashtbl.find reqhlist h in
+	Hashtbl.remove reqhlist h;
+	let tm = Unix.time () in
+	begin
+	  if liberally_accept_elements_p tm then (*** only continue if we're liberally accepting to get the full ledger ***)
+            let (hl,_) = sei_hlist seis r in
+	    hashcache_on();
+	    match hlist_hashroot hl with
+	    | Some(k,_) when h = k ->
+		ignore (save_hlist_elements hl alpha);
+		hashcache_off()
+	    | _ -> (*** otherwise, it seems to be a misbehaving peer --  ignore for now ***)
+		Utils.log_string (Printf.sprintf "misbehaving peer? [malformed CompleteHList]\n")
+	end;
+	let chi = int_of_msgtype CompleteHList in
+	try
+	  Hashtbl.find cs.itemhooks (chi,h) ();
+	  Hashtbl.remove cs.itemhooks (chi,h)
+	with Not_found -> ()
+      with Not_found ->
+	hashcache_off();
+	Utils.log_string (Printf.sprintf "Got CompleteHList %s but do not know addr\n" (hashval_hexstring h)));;
 
-let rec send_elements_below_ctreeelt tm cs h =
+Hashtbl.add msgtype_handler CompleteCTree
+    (fun (sin,sout,cs,ms) ->
+      let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
+      try
+	let pl = Hashtbl.find reqctree h in
+	Hashtbl.remove reqctree h;
+	let tm = Unix.time () in
+	begin
+	  if liberally_accept_elements_p tm then (*** only continue if we're liberally accepting to get the full ledger ***)
+            let (c,_) = sei_ctree seis r in
+	    hashcache_on();
+	    if ctree_hashroot c = h then
+	      ignore (save_ctree_elements_a c 0 pl)
+            else (*** otherwise, it seems to be a misbehaving peer --  ignore for now ***)
+	      Utils.log_string (Printf.sprintf "misbehaving peer? [malformed CompleteCTree]\n");
+	    hashcache_off()
+	end;
+	let cei = int_of_msgtype CTreeElement in
+	Hashtbl.remove cs.itemhooks (cei,h);
+	let cci = int_of_msgtype CompleteCTree in
+	try
+	  Hashtbl.find cs.itemhooks (cci,h) ();
+	  Hashtbl.remove cs.itemhooks (cci,h)
+	with Not_found -> ()
+      with Not_found ->
+	hashcache_off();
+	Utils.log_string (Printf.sprintf "Got CompleteCTree %s but do not have parent list\n" (hashval_hexstring h)));;
+
+let rec completely_expand_hconselt h =
+  match DbHConsElt.dbget h with
+  | (h1,Some(h2,l2)) ->
+      let a = DbAsset.dbget h1 in
+      let hr = completely_expand_hconselt h2 in
+      HCons(a,hr)
+  | (h1,None) ->
+      let a = DbAsset.dbget h1 in
+      HCons(a,HNil);;
+
+let rec completely_expand_hlist hl n =
+  match hl with
+  | HHash(h,l) ->
+      if l > n then raise Not_found;
+      (completely_expand_hconselt h,n-l)
+  | HCons(a,hl) ->
+      let (hr,n2) = completely_expand_hlist hl (n-1) in
+      (HCons(a,hr),n2)
+  | HConsH(ah,hl) ->
+      let a = DbAsset.dbget ah in
+      let (hr,n2) = completely_expand_hlist hl (n-1) in
+      (HCons(a,hr),n2)
+  | HNil -> (HNil,n);;
+
+let completely_expand_nehlist nhl n =
+  match nhl with
+  | NehHash(h,l) ->
+      if l > n then raise Not_found;
+      begin
+	match DbHConsElt.dbget h with
+	| (h1,Some(h2,l2)) ->
+	    let a = DbAsset.dbget h1 in
+	    let hr = completely_expand_hconselt h2 in
+	    (NehCons(a,hr),n-l)
+	| (h1,None) ->
+	    let a = DbAsset.dbget h1 in
+	    (NehCons(a,HNil),n-l)
+      end
+  | NehCons(a,hl) ->
+      let (hr,n2) = completely_expand_hlist hl (n-1) in
+      (NehCons(a,hr),n2)
+  | NehConsH(ah,hl) ->
+      let a = DbAsset.dbget ah in
+      let (hr,n2) = completely_expand_hlist hl (n-1) in
+      (NehCons(a,hr),n2);;
+
+let rec completely_expand_ctre c n =
+  match c with
+  | CLeaf(bl,nhl) ->
+      let (nhl2,n2) = completely_expand_nehlist nhl n in
+      (CLeaf(bl,nhl2),n2)
+  | CHash(h) ->
+      let c2 = DbCTreeElt.dbget h in
+      completely_expand_ctre c2 n
+  | CLeft(c0) ->
+      let (c02,n2) = completely_expand_ctre c0 n in
+      (CLeft(c02),n2)
+  | CRight(c1) ->
+      let (c12,n2) = completely_expand_ctre c1 n in
+      (CRight(c12),n2)
+  | CBin(c0,c1) ->
+      let (c02,n2) = completely_expand_ctre c0 n in
+      let (c12,n3) = completely_expand_ctre c1 n2 in
+      (CBin(c02,c12),n3);;
+
+let send_elements_below_hconselt tm cs h =
+  try
+    let hl = completely_expand_hconselt h in
+    let i = int_of_msgtype CompleteHList in
+    if not (recently_sent (i,h) tm cs.sentinv) then (*** don't resend ***)
+      let hsb = Buffer.create 100 in
+      seosbf (seo_hlist seosb hl (seo_hashval seosb h (hsb,None)));
+      let hser = Buffer.contents hsb in
+      ignore (queue_msg cs CompleteHList hser);
+      Hashtbl.replace cs.sentinv (i,h) tm
+  with Not_found ->
+    try
+      let i = int_of_msgtype GetHConsElement in
+      let hk = DbHConsElt.dbget h in
+      if not (recently_sent (i,h) tm cs.sentinv) then (*** don't resend ***)
+	begin
+	  let hksb = Buffer.create 100 in
+	  seosbf (seo_prod seo_hashval (seo_option (seo_prod seo_hashval seo_int8)) seosb hk (seo_hashval seosb h (hksb,None)));
+	  let hkser = Buffer.contents hksb in
+	  ignore (queue_msg cs HConsElement hkser);
+	  Hashtbl.replace cs.sentinv (i,h) tm
+	end;
+      match hk with
+      | (ah,r) ->
+	  let i = int_of_msgtype GetAsset in
+	  if not (recently_sent (i,ah) tm cs.sentinv) then (*** don't resend ***)
+	    begin
+	      try
+		let a = DbAsset.dbget ah in
+		let asb = Buffer.create 100 in
+		seosbf (seo_asset seosb a (seo_hashval seosb ah (asb,None)));
+		let aser = Buffer.contents asb in
+		ignore (queue_msg cs Asset aser);
+		Hashtbl.replace cs.sentinv (i,ah) tm
+	      with Not_found -> ();
+	    end;
+	  match r with
+	  | None -> ()
+	  | Some(hr,l) ->
+	      if DbHConsElt.dbexists hr then
+		let tosend = ref [(int_of_msgtype HConsElement,hr)] in
+		collect_hcons_inv_nbhd 1 hr tosend;
+		send_inv_to_one !tosend cs
+    with Not_found -> ();;
+
+let send_elements_below_ctreeelt tm cs h =
   try
     let c = DbCTreeElt.dbget h in
-    begin
-      let i = int_of_msgtype GetCTreeElement in
+    try
+      let (c2,_) = completely_expand_ctre c 3000 in (*** if we get to the point that the full ctree has <= 3000 assets, just send the whole ctree ***)
+      let i = int_of_msgtype CompleteCTree in
       if not (recently_sent (i,h) tm cs.sentinv) then (*** don't resend ***)
 	let csb = Buffer.create 100 in
-	seosbf (seo_ctree seosb c (seo_hashval seosb h (csb,None)));
+	seosbf (seo_ctree seosb c2 (seo_hashval seosb h (csb,None)));
 	let cser = Buffer.contents csb in
-	ignore (queue_msg cs CTreeElement cser);
+	ignore (queue_msg cs CompleteCTree cser);
 	Hashtbl.replace cs.sentinv (i,h) tm
-    end;
-    send_elements_below_ctree tm cs c
-  with Not_found -> ()
-and send_elements_below_ctree tm cs c =
+    with Not_found ->
+      begin
+	let tosend = ref [] in
+	collect_ctree_inv_nbhd c tosend;
+	if not (!tosend = []) then send_inv_to_one !tosend cs;
+	let i = int_of_msgtype GetCTreeElement in
+	if not (recently_sent (i,h) tm cs.sentinv) then (*** don't resend ***)
+	  begin
+	    let csb = Buffer.create 100 in
+	    seosbf (seo_ctree seosb c (seo_hashval seosb h (csb,None)));
+	    let cser = Buffer.contents csb in
+	    ignore (queue_msg cs CTreeElement cser);
+	    Hashtbl.replace cs.sentinv (i,h) tm;
+	  end;
+      end
+  with Not_found -> ();;
+
+let rec send_elements_below_ctree tm cs c =
   match c with
   | CHash(h) -> send_elements_below_ctreeelt tm cs h
   | CLeaf(_,NehHash(h,_)) -> send_elements_below_hconselt tm cs h

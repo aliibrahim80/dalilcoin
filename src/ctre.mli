@@ -11,6 +11,10 @@ open Mathdata
 open Assets
 open Tx
 
+val reqhlist : (hashval,addr) Hashtbl.t
+val reqctree : (hashval,bool list) Hashtbl.t
+
+
 val datadir : unit -> string
 
 val reward_maturation : int64

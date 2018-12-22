@@ -91,3 +91,7 @@ val merkle_root : hashval list -> hashval option
 val hashval_rev : hashval -> hashval
 
 val hashval_from_json : jsonval -> hashval
+
+val clear_hashcache : unit -> unit
+val hashcache_on : unit -> unit
+val hashcache_off : unit -> unit

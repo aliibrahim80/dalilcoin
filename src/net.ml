@@ -49,6 +49,8 @@ type msgtype =
   | Asset
   | GetInvNbhd
   | GetElementsBelow
+  | CompleteCTree
+  | CompleteHList
 
 let msgtype_of_int i =
   try
@@ -56,7 +58,7 @@ let msgtype_of_int i =
       [Version;Verack;Addr;Inv;GetSTx;GetHeaders;GetHeader;GetBlock;GetBlockdelta;
        STx;Block;Headers;Blockdelta;GetAddr;Alert;Ping;Pong;
        GetCTreeElement;GetHConsElement;GetAsset;CTreeElement;HConsElement;Asset;GetInvNbhd;
-       GetElementsBelow]
+       GetElementsBelow;CompleteCTree;CompleteHList]
       i
   with Failure("nth") -> raise Not_found
 
@@ -87,6 +89,8 @@ let int_of_msgtype mt =
   | Asset -> 22
   | GetInvNbhd -> 23
   | GetElementsBelow -> 24
+  | CompleteCTree -> 25
+  | CompleteHList -> 26
 
 let inv_of_msgtype mt =
   try
@@ -130,6 +134,8 @@ let string_of_msgtype mt =
   | Asset -> "Asset"
   | GetInvNbhd -> "GetInvNbhd"
   | GetElementsBelow -> "GetElementsBelow"
+  | CompleteCTree -> "CompleteCTree"
+  | CompleteHList -> "CompleteHList"
 
 let myaddr () =
   match !Config.ip with
