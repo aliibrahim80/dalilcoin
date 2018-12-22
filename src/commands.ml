@@ -1927,6 +1927,7 @@ let requestfullledger oc h =
   let cntm = ref 0 in
   let topcnt = ref 0 in
   let source_peers = ref [] in
+  let silent = ref false in
   let gini = int_of_msgtype GetInvNbhd in
   let gcei = int_of_msgtype GetCTreeElement in
   let cei = int_of_msgtype CTreeElement in
@@ -1958,7 +1959,7 @@ let requestfullledger oc h =
 	      if lev = 0 then
 		begin
 		  incr topcnt;
-		  if !topcnt mod 6 = 0 then
+		  if !topcnt mod 6 = 0 && not !silent then
 		    begin
 		      Printf.fprintf oc "%d%% through tree traversal.\n" (!topcnt * 100 / 512);
 		      flush oc
@@ -1990,6 +1991,7 @@ let requestfullledger oc h =
 			  if not (recently_requested (gcei,h) tm cs.invreq) then
 			    begin
 			      incr cntr;
+			      silent := true;
 			      Hashtbl.replace cs.itemhooks (cei,h)
 				(fun () ->
 				  try
@@ -2020,6 +2022,7 @@ let requestfullledger oc h =
 			if not (recently_requested (gebi,h) tm cs.invreq) && not !rq then
 			  begin
 			    incr cntr;
+			    silent := true;
 			    Utils.log_string (Printf.sprintf "Placing hook for CTreeElement %d %s\n" cei (hashval_hexstring h));
 			    Hashtbl.replace cs.itemhooks (cei,h)
 			      (fun () ->
@@ -2059,6 +2062,7 @@ let requestfullledger oc h =
 			if not (recently_requested (gebi,h) tm cs.invreq) && not !rq then
 			  begin
 			    incr cntr;
+			    silent := true;
 			    Hashtbl.replace cs.itemhooks (chi,h)
 			      (fun () ->
 				cn());
@@ -2106,7 +2110,9 @@ let requestfullledger oc h =
 	  requestfullctree_top (fun () -> ()) oc c 0 [];
 	  if !cntm = 0 then
 	    Printf.fprintf oc "Verified node already has full ledger.\n"
-	  else if !cntr > 0 then
+	  else if !cntr = 1 then
+	    Printf.fprintf oc "Made a request and will process received missing elements in the background.\n"
+	  else if !cntr > 1 then
 	    Printf.fprintf oc "Made %d requests and will process received missing elements in the background.\n" !cntr
 	  else
 	    Printf.fprintf oc "Some elements were missing but no requests were made.\n";
