@@ -2023,7 +2023,6 @@ let requestfullledger oc h =
 			  begin
 			    incr cntr;
 			    silent := true;
-			    Utils.log_string (Printf.sprintf "Placing hook for CTreeElement %d %s\n" cei (hashval_hexstring h));
 			    Hashtbl.replace cs.itemhooks (cei,h)
 			      (fun () ->
 				try
