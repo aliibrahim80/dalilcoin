@@ -1177,6 +1177,23 @@ let initialize_commands () =
 	      artificialledgerroot := Some(h)
 	  end
       | _ -> raise BadCommandForm);
+  ac "verifyfullledger" "verifyfullledger [<ledgerroot>]" "Ensure the node has the full ledger with the given ledger root. This may take serveral hours."
+    (fun oc al ->
+      match al with
+      | [a] ->
+	  begin
+	    let h = hexstring_hashval a in
+	    Commands.verifyfullledger oc h
+	  end
+      | [] ->
+	  begin
+	    try
+	      let BlocktreeNode(_,_,pbh,_,_,ledgerroot,csm,tar,tmstmp,_,blkh,_,_,_) = get_bestnode_print_warnings oc true in
+	      Commands.verifyfullledger oc ledgerroot
+	    with e ->
+	      Printf.fprintf oc "Exception: %s\n" (Printexc.to_string e)
+	  end
+      | _ -> raise BadCommandForm);
   ac "requestfullledger" "requestfullledger [<ledgerroot>]" "try to request the full ledger from peers\nThis is an experimental command and can take several hours.\nCurrently it is more likely to be successful if the node already has most of the ledger.\nIf you have very little of the full ledger and you want it, consider downloading the initial full ledger from\nhttps://mega.nz/#!waQE1DiC!yRo9vTYPK9CZsfOxT-6eJ7vtl3WLeIMqK4LAcA2ASKc"
     (fun oc al ->
       match al with

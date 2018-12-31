@@ -1239,7 +1239,6 @@ Hashtbl.add msgtype_handler Inv
 	  ()
       end;
       if i = int_of_msgtype Headers then log_string (Printf.sprintf "Headers, dbexists %b, archived %b\n" (DbBlockHeader.dbexists h) (DbArchived.dbexists h));
-(*      log_string (Printf.sprintf "Inv %d %s\n" i (hashval_hexstring h)); *)
       if i = int_of_msgtype Headers && not (DbArchived.dbexists h) then
 	begin
 	  try

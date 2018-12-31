@@ -68,6 +68,8 @@ val query_blockheight : int64 -> jsonval
 
 val preassetinfo_report : out_channel -> preasset -> unit
 
+val verifyfullledger : out_channel -> hashval -> unit
+
 val requestfullledger : out_channel -> hashval -> unit
 
 val dumpwallet : string -> unit

@@ -2516,8 +2516,10 @@ let rec collect_hcons_inv_nbhd m h tosend =
       try
 	match DbHConsElt.dbget h with
 	| (ah,None) ->
+	    tosend := (int_of_msgtype HConsElement,h)::!tosend;
 	    if DbAsset.dbexists ah then tosend := (int_of_msgtype Asset,ah)::!tosend
 	| (ah,Some(k,_)) ->
+	    tosend := (int_of_msgtype HConsElement,h)::!tosend;
 	    if DbAsset.dbexists ah then tosend := (int_of_msgtype Asset,ah)::!tosend;
 	    collect_hcons_inv_nbhd (m-1) k tosend
       with Not_found -> ()
@@ -2530,16 +2532,38 @@ let rec collect_hlist_inv_nbhd hl tosend =
   | HCons(_,hr) -> collect_hlist_inv_nbhd hr tosend
   | HConsH(ah,hr) ->
       if DbAsset.dbexists ah then tosend := (int_of_msgtype Asset,ah)::!tosend;
-      collect_hlist_inv_nbhd hr tosend
+      collect_hlist_inv_nbhd hr tosend;;
+
+(** just go deeper as long as it is non branching; sometimes there are CHash nodes optionally above single leaves **)
+let rec collect_ctree_inv_nbhd_2 c tosend =
+  match c with
+  | CHash(h) ->
+      begin
+	try 
+	  let c = DbCTreeElt.dbget h in
+	  tosend := (int_of_msgtype CTreeElement,h)::!tosend;
+	  collect_ctree_inv_nbhd_2 c tosend
+	with Not_found -> ()
+      end
+  | CLeft(c0) -> collect_ctree_inv_nbhd_2 c0 tosend
+  | CRight(c1) -> collect_ctree_inv_nbhd_2 c1 tosend
+  | CBin(c0,c1) -> ()
+  | CLeaf(_,hl) -> collect_hlist_inv_nbhd (nehlist_hlist hl) tosend;;
 
 let rec collect_ctree_inv_nbhd c tosend =
   match c with
-  | CHash(h) -> if DbCTreeElt.dbexists h then tosend := (int_of_msgtype CTreeElement,h)::!tosend
+  | CHash(h) ->
+      begin
+	try 
+	  let c = DbCTreeElt.dbget h in
+	  tosend := (int_of_msgtype CTreeElement,h)::!tosend;
+	  collect_ctree_inv_nbhd_2 c tosend
+	with Not_found -> ()
+      end
   | CLeft(c0) -> collect_ctree_inv_nbhd c0 tosend
   | CRight(c1) -> collect_ctree_inv_nbhd c1 tosend
   | CBin(c0,c1) -> collect_ctree_inv_nbhd c0 tosend; collect_ctree_inv_nbhd c1 tosend
-  | CLeaf(_,hl) -> collect_hlist_inv_nbhd (nehlist_hlist hl) tosend
-  | _ -> ();;
+  | CLeaf(_,hl) -> collect_hlist_inv_nbhd (nehlist_hlist hl) tosend;;
 
 Hashtbl.add msgtype_handler GetHConsElement
     (fun (sin,sout,cs,ms) ->

@@ -1902,42 +1902,316 @@ let preassetinfo_report oc u =
 	    createsnegprops
 	end
 
-let rec have_full_hlist_h_p h =
-  try
-    match DbHConsElt.dbget h with
-    | (ah,None) -> DbAsset.dbexists ah
-    | (ah,Some(hr,_)) -> if DbAsset.dbexists ah then have_full_hlist_h_p hr else false
-  with Not_found -> false
-
-let rec have_full_ctree_h_p h =
-  try
-    have_full_ctree_p (DbCTreeElt.dbget h)
-  with Not_found -> false
-and have_full_ctree_p c =
+let rec ctree_tagged_hashes c pl par r =
   match c with
-  | CHash(h) -> have_full_ctree_h_p h
-  | CLeaf(_,NehHash(h,_)) -> have_full_hlist_h_p h
-  | CLeaf(_,_) -> raise (Failure("Bug: Unexpected ctree elt case of nehhlist other than hash"))
-  | CLeft(c0) -> have_full_ctree_p c0
-  | CRight(c1) -> have_full_ctree_p c1
-  | CBin(c0,c1) -> have_full_ctree_p c0 && have_full_ctree_p c1
+  | CHash(h) -> (0,pl,par,h)::r
+  | CLeaf(bl,NehHash(h,_)) -> (1,(List.rev bl) @ pl,par,h)::r
+  | CLeaf(_,_) -> raise (Failure "Bug: Unexpected ctree elt case of nehhlist other than hash")
+  | CLeft(c0) -> ctree_tagged_hashes c0 (false::pl) par r
+  | CRight(c1) -> ctree_tagged_hashes c1 (true::pl) par r
+  | CBin(c0,c1) -> ctree_tagged_hashes c0 (false::pl) par (ctree_tagged_hashes c1 (true::pl) par r)
+
+exception MissingAsset of hashval
+exception MissingHConsElt of hashval
+exception MissingCTreeElt of hashval
+
+let rec verifyhcons (aid,k) =
+  if not (DbAsset.dbexists aid) then raise (MissingAsset(aid));
+  match k with
+  | None -> ()
+  | Some(k,_) -> verifyhlist_h k
+and verifyhlist_h h =
+  try
+    let hc = DbHConsElt.dbget h in
+    verifyhcons hc
+  with Not_found ->
+    raise (MissingHConsElt(h))
+
+let rec verifyledger c =
+  match c with
+  | CHash(h) -> verifyledger_h h
+  | CLeaf(bl,NehHash(h,_)) ->  verifyhlist_h h
+  | CLeaf(_,_) -> raise (Failure "Bug: Unexpected ctree elt case of nehhlist other than hash")
+  | CLeft(c0) ->
+      verifyledger c0
+  | CRight(c1) ->
+      verifyledger c1
+  | CBin(c0,c1) ->
+      verifyledger c0;
+      verifyledger c1
+and verifyledger_h h =
+  try
+    let c = DbCTreeElt.dbget h in
+    verifyledger c
+  with Not_found ->
+    raise (MissingCTreeElt(h))
+
+let verifyfullledger oc h =
+  try
+    let c = DbCTreeElt.dbget h in
+    let cnt = ref 0 in
+    let cl = ctree_tagged_hashes c [] [h] [] in
+    let ncl = List.length cl in
+    let perc = ref 0 in
+    let rec verify_tagged_hashes thl =
+      match thl with
+      | [] -> ()
+      | (i,_,_,h)::thr ->
+	  incr cnt;
+	  let p = (!cnt * 100) / ncl in
+	  if p > !perc then
+	    begin
+	      Printf.fprintf oc "%d%% through the traversal.\n" p;
+	      flush oc;
+	      perc := p;
+	    end;
+	  if i = 0 then
+	    verifyledger_h h
+	  else
+	    verifyhlist_h h;
+	  verify_tagged_hashes thr
+    in
+    try
+      Printf.fprintf oc "Verifying ledger %s. This may take a while.\n" (hashval_hexstring h);
+      flush oc;
+      verify_tagged_hashes cl;
+      Printf.fprintf oc "Ledger is complete.\n";
+      flush oc
+    with
+    | MissingAsset(h) ->
+	Printf.fprintf oc "Ledger is not complete. Asset %s is missing.\n" (hashval_hexstring h);
+	flush oc
+    | MissingHConsElt(h) ->
+	Printf.fprintf oc "Ledger is not complete. HConsElt %s is missing.\n" (hashval_hexstring h);
+	flush oc
+    | MissingCTreeElt(h) ->
+	Printf.fprintf oc "Ledger is not complete. CTreeElt %s is missing.\n" (hashval_hexstring h);
+	flush oc
+  with Not_found ->
+    Printf.fprintf oc "Do not have the root of ledger %s\n" (hashval_hexstring h);
+    flush oc
+
+let rec req_par_inv_nbhd par cnt =
+  let gini = int_of_msgtype GetInvNbhd in
+  let cei = int_of_msgtype CTreeElement in
+  match par with
+  | [] -> cnt()
+  | h::parr ->
+      req_par_inv_nbhd parr
+	(fun () ->
+	  let invrq = ref false in
+	  let tm = Unix.time() in
+	  List.iter
+	    (fun (_,_,(_,_,_,gcs)) ->
+	      match !gcs with
+	      | Some(cs) ->
+		  if not cs.banned && Hashtbl.mem cs.rinv (cei,h) && not (recently_requested (gini,h) tm cs.invreq) && not !invrq then
+		    begin
+		      Hashtbl.add cs.invreqhooks (cei,h) cnt;
+		      let msb = Buffer.create 20 in
+		      seosbf (seo_prod seo_int8 seo_hashval seosb (cei,h) (msb,None));
+		      let ms = Buffer.contents msb in
+		      ignore (queue_msg cs GetInvNbhd ms);
+		      Hashtbl.add cs.invreq (gini,h) tm;
+		      invrq := true
+		    end;
+	      | None -> ())
+	    !netconns;
+	  if not !invrq then cnt())
+
+let rec requestfullctree_subtop cnt thl =
+  match thl with
+  | [] -> cnt()
+  | (i,pl,par,h)::thr when i = 0 ->
+      begin
+	try
+	  let c = DbCTreeElt.dbget h in
+	  let thl2 = ctree_tagged_hashes c pl (h::par) [] in
+	  requestfullctree_subsubtop cnt thr thl2
+	with Not_found -> (** should not happen **)
+	  cnt()
+      end
+  | (i,pl,par,h)::thr ->
+      begin
+	try
+	  begin
+	    try
+	      verifyhlist_h h;
+	      requestfullctree_subtop cnt thr
+	    with
+	    | MissingAsset(_) -> raise Not_found
+	    | MissingHConsElt(_) -> raise Not_found
+	  end
+	with Not_found -> (** the hlist is incomplete, just request all of it **)
+	  let gebi = int_of_msgtype GetElementsBelow in
+	  let hei = int_of_msgtype HConsElement in
+	  let chi = int_of_msgtype CompleteHList in
+	  let tm = Unix.time() in
+	  liberally_accept_elements_until (tm +. 21600.0); (** liberally accept elements for the next four hours **)
+	  req_par_inv_nbhd par
+	    (fun () ->
+	      let tm = Unix.time() in
+	      let rq = ref false in
+	      List.iter
+		(fun (_,_,(_,sin,sout,gcs)) ->
+		  match !gcs with
+		  | Some(cs) ->
+		      if Hashtbl.mem cs.rinv (hei,h) && not (recently_requested (gebi,h) tm cs.invreq) && not !rq then
+			begin
+			  Hashtbl.replace cs.itemhooks (chi,h) cnt;
+			  Hashtbl.add reqhlist h (bitseq_addr (List.rev pl));
+			  let msb = Buffer.create 20 in
+			  seosbf (seo_prod seo_int8 seo_hashval seosb (hei,h) (msb,None));
+			  let ms = Buffer.contents msb in
+			  ignore (queue_msg cs GetElementsBelow ms);
+			  Hashtbl.add cs.invreq (gebi,h) tm;
+			  rq := true
+			end
+		  | None -> ())
+		!netconns;
+	      if not !rq then cnt())
+      end
+and requestfullctree_subsubtop cnt thr thl2 =
+  match thl2 with
+  | [] -> requestfullctree_subtop cnt thr
+  | (i,pl,par,h)::thr2 when i = 0 ->
+      begin
+	try
+	  begin
+	    try
+	      verifyledger_h h;
+	      requestfullctree_subsubtop cnt thr thr2
+	    with
+	    | MissingAsset(_) -> raise Not_found
+	    | MissingHConsElt(_) -> raise Not_found
+	    | MissingCTreeElt(_) -> raise Not_found
+	  end
+	with Not_found ->
+	  let cei = int_of_msgtype CTreeElement in
+	  let cci = int_of_msgtype CompleteCTree in
+	  let gebi = int_of_msgtype GetElementsBelow in
+	  let cn = cnt in
+	  let cnt2 = (fun () ->
+	    requestfullctree_subsubtop cn ((i,pl,par,h)::thr) thr2) in
+	  let cnt3 = (fun () ->
+	    requestfullctree_subsubtop cn thr thr2) in
+	  let tm = Unix.time() in
+	  liberally_accept_elements_until (tm +. 21600.0); (** liberally accept elements for the next four hours **)
+	  req_par_inv_nbhd par
+	    (fun () ->
+	      let tm = Unix.time() in
+	      let rq = ref false in
+	      List.iter
+		(fun (_,_,(_,sin,sout,gcs)) ->
+		  match !gcs with
+		  | Some(cs) ->
+		      if Hashtbl.mem cs.rinv (cei,h) && not (recently_requested (gebi,h) tm cs.invreq) && not !rq then
+			begin
+			  Hashtbl.replace cs.itemhooks (cei,h) cnt2;
+			  Hashtbl.replace cs.itemhooks (cci,h) cnt3;
+			  Hashtbl.add reqctree h pl;
+			  let msb = Buffer.create 20 in
+			  seosbf (seo_prod seo_int8 seo_hashval seosb (cei,h) (msb,None));
+			  let ms = Buffer.contents msb in
+			  ignore (queue_msg cs GetElementsBelow ms);
+			  Hashtbl.add cs.invreq (gebi,h) tm;
+			  rq := true
+			end
+		  | None -> ())
+		!netconns;
+	      if not !rq then cnt());
+      end
+  | (i,pl,par,h)::thr2 ->
+      requestfullctree_subsubtop cnt ((i,pl,par,h)::thr) thr2
+	
+let rec requestfullctree_top oc h c =
+  let htop = h in
+  let ctop = c in
+  let thl = ctree_tagged_hashes c [] [h] [] in
+  let mhl = List.filter
+      (fun (i,_,_,h) ->
+	(i = 0 && not (DbCTreeElt.dbexists h))
+      || (i = 1 && not (DbHConsElt.dbexists h)))
+      thl
+  in
+  if mhl = [] then
+    begin (*** have all the subtop elts ***)
+      Printf.fprintf oc "The node has all the sub elements of the root of %s.\n" (hashval_hexstring h);
+      Printf.fprintf oc "The process of verifying and checking all lower parts is beginning, and this may take a very long time.\n";
+      Printf.fprintf oc "It will take place in the background.\nIf you quit dalilcoin, then call requestfullledger again next time you start dalilcoin.\n";
+      flush oc;
+      ignore (Thread.create (fun () -> requestfullctree_subtop (fun () -> ()) thl) ())
+    end
+  else (*** some subtop elts are missing so try to get these first; request the top nbhd inv if haven't recently ***)
+    let cei = int_of_msgtype CTreeElement in
+    let source_peers = ref [] in
+    List.iter
+      (fun (_,_,(_,sin,sout,gcs)) ->
+	match !gcs with
+	| Some(cs) ->
+	    if Hashtbl.mem cs.rinv (cei,h) then source_peers := (sin,sout,gcs)::!source_peers
+	| None -> ())
+      !netconns;
+    if !source_peers = [] then
+      begin
+	Printf.fprintf oc "Some sub elements (%d) of the root are missing and no current peers seem to have the root.\nConnect to different peers and try again.\n" (List.length mhl);
+	flush oc
+      end
+    else
+      let gini = int_of_msgtype GetInvNbhd in
+      let gcei = int_of_msgtype GetCTreeElement in
+      let ghei = int_of_msgtype GetHConsElement in
+      let hei = int_of_msgtype HConsElement in
+      let tm = Unix.time() in
+      List.iter
+	(fun (_,_,gcs) ->
+	  match !gcs with
+	  | Some(cs) ->
+	      if not cs.banned && Hashtbl.mem cs.rinv (cei,h) && not (recently_requested (gini,h) tm cs.invreq) then
+		begin
+		  Printf.printf "rfl_top req gini %s %f\n" (hashval_hexstring h) (Unix.time());
+		  Printf.printf "rfl_top setting inv hooks %s %f\n" (hashval_hexstring h) (Unix.time());
+		  List.iter
+		    (fun (i,pl,par,h) ->
+		      Hashtbl.add cs.invreqhooks ((if i = 0 then cei else hei),h)
+			(fun () ->
+			  if not cs.banned && i = 0 && not (recently_requested (gcei,h) tm cs.invreq) then
+			    let msb = Buffer.create 20 in
+			    Hashtbl.add cs.itemhooks (cei,h)
+			      (fun () ->
+				try
+				  ignore (List.find
+					    (fun (i,pl,par,h) ->
+					      (i = 0 && not (DbCTreeElt.dbexists h)) || (i = 1 && not (DbHConsElt.dbexists h)))
+					    mhl) (** if a subtop elt is still missing, then do nothing here; the last one to come will trigger calling top again **)
+				with Not_found -> (** should have all the subtop elts now, so call top again **)
+				  requestfullctree_top !Utils.log htop ctop);
+			    seosbf (seo_hashval seosb h (msb,None));
+			    let ms = Buffer.contents msb in
+			    ignore (queue_msg cs GetCTreeElement ms);
+			    Hashtbl.add cs.invreq (gcei,h) tm
+			  else if not cs.banned && i = 1 && not (recently_requested (ghei,h) tm cs.invreq) then
+			    let msb = Buffer.create 20 in
+			    seosbf (seo_hashval seosb h (msb,None));
+			    let ms = Buffer.contents msb in
+			    ignore (queue_msg cs GetHConsElement ms);
+			    Hashtbl.add cs.invreq (ghei,h) tm))
+		    mhl;
+		  Printf.printf "rfl_top done setting inv hooks %s %f\n" (hashval_hexstring h) (Unix.time());
+		  let msb = Buffer.create 20 in
+		  seosbf (seo_prod seo_int8 seo_hashval seosb (cei,h) (msb,None));
+		  let ms = Buffer.contents msb in
+		  ignore (queue_msg cs GetInvNbhd ms);
+		  Hashtbl.add cs.invreq (gini,h) tm;
+		end;
+	  | None -> ())
+	!source_peers;
+      ()
 
 let requestfullledger oc h =
-  let cntr = ref 0 in
-  let cntm = ref 0 in
-  let topcnt = ref 0 in
   let source_peers = ref [] in
-  let silent = ref false in
-  let gini = int_of_msgtype GetInvNbhd in
   let gcei = int_of_msgtype GetCTreeElement in
   let cei = int_of_msgtype CTreeElement in
-  let ghei = int_of_msgtype GetHConsElement in
-  let hei = int_of_msgtype HConsElement in
-  let gai = int_of_msgtype GetAsset in
-  let ai = int_of_msgtype Asset in
-  let gebi = int_of_msgtype GetElementsBelow in
-  let cci = int_of_msgtype CompleteCTree in
-  let chi = int_of_msgtype CompleteHList in
   List.iter
     (fun (_,_,(_,sin,sout,gcs)) ->
       match !gcs with
@@ -1952,206 +2226,45 @@ let requestfullledger oc h =
     end
   else
     begin
-      let rec requestfullctree_top cn oc c lev pl =
-	match c with
-	| CHash(h) ->
-	    begin
-	      if lev = 0 then
-		begin
-		  incr topcnt;
-		  if !topcnt mod 6 = 0 && not !silent then
-		    begin
-		      Printf.fprintf oc "%d%% through tree traversal.\n" (!topcnt * 100 / 512);
-		      flush oc
-		    end;
-		end
-	    end;
-	    if lev = 0 then
-	      begin
-		try
-		  let c2 = DbCTreeElt.dbget h in
-		  requestfullctree_top cn oc c2 (lev+1) pl
-		with Not_found -> (** if we do not have a subtree beneath the root, then request the element and its inventory nbhd ***)
-		  incr cntm;
-		  let tm = Unix.time() in
-		  let rq = ref false in
-		  List.iter
-		    (fun (_,_,gcs) ->
-		      match !gcs with
-		      | None -> ()
-		      | Some(cs) ->
-			  if not (recently_requested (gini,h) tm cs.invreq) then
-			    begin
-			      let msb = Buffer.create 20 in
-			      seosbf (seo_prod seo_int8 seo_hashval seosb (cei,h) (msb,None));
-			      let ms = Buffer.contents msb in
-			      ignore (queue_msg cs GetInvNbhd ms);
-			      Hashtbl.add cs.invreq (gini,h) tm;
-			    end;
-			  if not (recently_requested (gcei,h) tm cs.invreq) then
-			    begin
-			      incr cntr;
-			      silent := true;
-			      Hashtbl.replace cs.itemhooks (cei,h)
-				(fun () ->
-				  try
-				    let c = DbCTreeElt.dbget h in
-				    requestfullctree_top cn !Utils.log c 1 pl
-				  with Not_found -> Utils.log_string "WARNING: Got ctree element, but hook did not find it in database afterwards.");
-			      let msb = Buffer.create 20 in
-			      seosbf (seo_hashval seosb h (msb,None));
-			      let ms = Buffer.contents msb in
-			      ignore (queue_msg cs GetCTreeElement ms);
-			      Hashtbl.add cs.invreq (gcei,h) tm;
-			      rq := true
-			    end)
-		    !source_peers;
-		  if not !rq then cn()
-	      end
-	    else if not (have_full_ctree_h_p h) then (*** at lower levels, if a subtree is incomplete, try to request the whole thing at once ***)
-	      begin
-		incr cntm;
-		let tm = Unix.time() in
-		let rq = ref false in
-		liberally_accept_elements_until (tm +. 21600.0); (** liberally accept elements for the next four hours **)
-		List.iter
-		  (fun (_,_,gcs) ->
-		    match !gcs with
-		    | None -> ()
-		    | Some(cs) ->
-			if not (recently_requested (gebi,h) tm cs.invreq) && not !rq then
-			  begin
-			    incr cntr;
-			    silent := true;
-			    Hashtbl.replace cs.itemhooks (cei,h)
-			      (fun () ->
-				try
-				  let c = DbCTreeElt.dbget h in
-				  requestfullctree_top cn !Utils.log c (lev+1) pl
-				with Not_found -> Utils.log_string "WARNING: Got ctree element, but hook did not find it in database afterwards.");
-			    Hashtbl.replace cs.itemhooks (cci,h)
-			      (fun () ->
-				cn());
-			    Hashtbl.add reqctree h pl;
-			    let msb = Buffer.create 20 in
-			    seosbf (seo_prod seo_int8 seo_hashval seosb (cei,h) (msb,None));
-			    let ms = Buffer.contents msb in
-			    ignore (queue_msg cs GetElementsBelow ms);
-			    Hashtbl.add cs.invreq (gebi,h) tm;
-			    rq := true;
-			  end)
-		  !source_peers;
-		if not !rq then cn()
-	      end
-	    else
-	      cn();
-	| CLeaf(_,NehHash(h,_)) ->
-	    if not (have_full_hlist_h_p h) then
-	      begin
-		incr cntm;
-		let tm = Unix.time() in
-		let rq = ref false in
-		liberally_accept_elements_until (tm +. 21600.0); (** liberally accept elements for the next four hours **)
-		List.iter
-		  (fun (_,_,gcs) ->
-		    match !gcs with
-		    | None -> ()
-		    | Some(cs) ->
-			Hashtbl.add reqhlist h (bitseq_addr (List.rev pl));
-			if not (recently_requested (gebi,h) tm cs.invreq) && not !rq then
-			  begin
-			    incr cntr;
-			    silent := true;
-			    Hashtbl.replace cs.itemhooks (chi,h)
-			      (fun () ->
-				cn());
-			    let msb = Buffer.create 20 in
-			    seosbf (seo_prod seo_int8 seo_hashval seosb (hei,h) (msb,None));
-			    let ms = Buffer.contents msb in
-			    ignore (queue_msg cs GetElementsBelow ms);
-			    Hashtbl.add cs.invreq (gebi,h) tm;
-			    rq := false
-			  end)
-		  !source_peers;
-		if not !rq then cn()
-	      end
-	    else
-	      cn()
-	| CLeaf(_,_) -> Printf.fprintf oc "Bug: Unexpected ctree elt case of nehhlist other than hash"
-	| CLeft(c0) -> requestfullctree_top cn oc c0 lev (false::pl)
-	| CRight(c1) -> requestfullctree_top cn oc c1 lev (true::pl)
-	| CBin(c0,c1) ->
-	    let cn () = requestfullctree_top cn oc c1 lev (true::pl) in
-	    requestfullctree_top cn oc c0 lev (false::pl)
-      in
-      begin
-	try
-	  let c = DbCTreeElt.dbget h in
-	  (** have the root at least, request its nbhd in case we need it **)
-	  Printf.fprintf oc "Checking for missing elements of %s to request from peers. This may take a long time.\n" (hashval_hexstring h);
-	  flush oc;
-	  let tm = Unix.time() in
-	  List.iter
-	    (fun (_,_,gcs) ->
-	      match !gcs with
-	      | None -> ()
-	      | Some(cs) ->
-		  if not (recently_requested (gini,h) tm cs.invreq) then
-		    begin
-		      let msb = Buffer.create 20 in
-		      seosbf (seo_prod seo_int8 seo_hashval seosb (cei,h) (msb,None));
-		      let ms = Buffer.contents msb in
-		      ignore (queue_msg cs GetInvNbhd ms);
-		      Hashtbl.add cs.invreq (gini,h) tm;
-		    end)
-	    !source_peers;
-	  (*** now traverse one level deep and request 'GetElementsBelow' for any incomplete part ***)
-	  requestfullctree_top (fun () -> ()) oc c 0 [];
-	  if !cntm = 0 then
-	    Printf.fprintf oc "Verified node already has full ledger.\n"
-	  else if !cntr = 1 then
-	    Printf.fprintf oc "Made a request and will process received missing elements in the background.\n"
-	  else if !cntr > 1 then
-	    Printf.fprintf oc "Made %d requests and will process received missing elements in the background.\n" !cntr
-	  else
-	    Printf.fprintf oc "Some elements were missing but no requests were made.\n";
-	  flush oc;
-	with Not_found ->
-	  (** do not have the root, request its nbhd and it with a hook to continue, if we haven't already **)
-	  Printf.fprintf oc "Requesting the ledger root first, and then will request the rest of the ledger in the background.\n";
-	  flush oc;
-	  let tm = Unix.time() in
-	  List.iter
-	    (fun (_,_,gcs) ->
-	      match !gcs with
-	      | None -> ()
-	      | Some(cs) ->
-		  if not (recently_requested (gini,h) tm cs.invreq) then
-		    begin
-		      let msb = Buffer.create 20 in
-		      seosbf (seo_prod seo_int8 seo_hashval seosb (cei,h) (msb,None));
-		      let ms = Buffer.contents msb in
-		      ignore (queue_msg cs GetInvNbhd ms);
-		      Hashtbl.add cs.invreq (gini,h) tm;
-		    end;
-		  if not (recently_requested (gcei,h) tm cs.invreq) then
-		    begin
-		      Hashtbl.replace cs.itemhooks (cei,h)
-			(fun () ->
-			  try
-			    let c = DbCTreeElt.dbget h in
-			    requestfullctree_top (fun () -> ()) !Utils.log c 0 []
-			  with Not_found -> Utils.log_string "WARNING: Got ctree element, but hook did not find it in database afterwards.");
-		      let msb = Buffer.create 20 in
-		      seosbf (seo_hashval seosb h (msb,None));
-		      let ms = Buffer.contents msb in
-		      ignore (queue_msg cs GetCTreeElement ms);
-		      Hashtbl.add cs.invreq (gcei,h) tm;
-		    end)
-	    !source_peers
-      end
+      try
+	let c = DbCTreeElt.dbget h in
+	requestfullctree_top oc h c
+      with Not_found ->
+	let tm = Unix.time() in
+	let rq = ref false in
+	List.iter
+	  (fun (_,_,gcs) ->
+	    match !gcs with
+	    | None -> ()
+	    | Some(cs) ->
+		if not (recently_requested (gcei,h) tm cs.invreq) && not !rq then
+		  begin
+		    Hashtbl.replace cs.itemhooks (cei,h)
+		      (fun () ->
+			try
+			  let c = DbCTreeElt.dbget h in
+			  requestfullctree_top !Utils.log h c
+			with Not_found -> Utils.log_string "WARNING: Got ctree element, but hook did not find it in database afterwards.");
+		    let msb = Buffer.create 20 in
+		    seosbf (seo_hashval seosb h (msb,None));
+		    let ms = Buffer.contents msb in
+		    ignore (queue_msg cs GetCTreeElement ms);
+		    Hashtbl.add cs.invreq (gcei,h) tm;
+		    rq := true
+		  end)
+	  !source_peers;
+	if !rq then
+	  begin
+	    Printf.fprintf oc "Requesting the root of ledger %s and will then continue in the background.\n" (hashval_hexstring h);
+	    flush oc;
+	  end
+	else
+	  begin
+	    Printf.fprintf oc "Was unable to request the root of ledger %s. Connect to different peers and try again later\n" (hashval_hexstring h);
+	    flush oc;
+	  end
     end
-
+    
 let dumpwallet fn =
   let f = open_out fn in
   Printf.fprintf f "1. Wallet keys and address:\n";
