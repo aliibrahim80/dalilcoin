@@ -180,7 +180,7 @@ let newpeers : string list ref = ref []
 let addknownpeer lasttm n =
   if not (n = "") && not (n = myaddr()) && not (List.mem n (getfallbacknodes())) && not (Hashtbl.mem bannedpeers n) then
     try
-      let oldtm = Hashtbl.find knownpeers n in
+      let _ (* oldtm *) = Hashtbl.find knownpeers n in
       Hashtbl.replace knownpeers n lasttm
     with Not_found ->
       Hashtbl.add knownpeers n lasttm;
@@ -390,7 +390,7 @@ let connectpeer_socks4 proxyport ip port =
   output_byte sout x3;
   output_byte sout 0;
   flush sout;
-  let z = input_byte sin in
+  let _ (* z *) = input_byte sin in
   let cd = input_byte sin in
   if not (cd = 90) then raise RequestRejected;
   for i = 1 to 6 do
@@ -553,54 +553,53 @@ let handle_msg replyto mt sin sout cs mh m =
 		if n = !this_nodes_nonce then
 		  raise SelfConnection
 		else if (try ignore (List.find (fun (_,_,(_,_,_,gcs)) -> match !gcs with Some(cs) -> cs.nonce = Some(n) | None -> false) !netconns); true with Not_found -> false) then
-		  raise DupConnection
+		  raise DupConnection;
+		cs.nonce <- Some(n); (** remember the nonce to prevent duplicate connections to the same node **)
+		let minvers = if vers > Version.protocolversion then Version.protocolversion else vers in
+		let mytm = Int64.of_float (Unix.time()) in
+		let tmskew = Int64.sub tm mytm in
+		if tmskew > 7200L then
+		  raise (ProtocolViolation("Peer rejected due to excessive time skew"))
 		else
-		  cs.nonce = Some(n); (** remember the nonce to prevent duplicate connections to the same node **)
-		  let minvers = if vers > Version.protocolversion then Version.protocolversion else vers in
-		  let mytm = Int64.of_float (Unix.time()) in
-		  let tmskew = Int64.sub tm mytm in
-		  if tmskew > 7200L then
-		    raise (ProtocolViolation("Peer rejected due to excessive time skew"))
+		  let tmskew = Int64.to_int tmskew in
+		  if cs.handshakestep = 1 then
+		    begin
+		      ignore (queue_msg cs Verack "");
+		      let vm = Buffer.create 100 in
+		      seosbf
+			(seo_prod
+			   (seo_prod6 seo_int32 seo_int64 seo_int64 seo_string seo_string seo_int64)
+			   (seo_prod6 seo_string seo_int64 seo_int64 seo_int64 seo_bool (seo_option (seo_prod seo_int64 seo_hashval)))
+			   seosb
+			   ((minvers,0L,mytm,addr_from,myaddr(),!this_nodes_nonce),
+			    (Version.useragent,0L,0L,0L,true,None))
+			   (vm,None));
+		      ignore (queue_msg cs Version (Buffer.contents vm));
+		      cs.handshakestep <- 3;
+		      cs.peertimeskew <- tmskew;
+		      cs.useragent <- ua;
+		      cs.protvers <- minvers;
+		      cs.addrfrom <- addr_from;
+		      cs.first_header_height <- fhh;
+		      cs.first_full_height <- ffh;
+		      cs.last_height <- lh
+		    end
+		  else if cs.handshakestep = 4 then
+		    begin
+		      ignore (queue_msg cs Verack "");
+		      cs.handshakestep <- 5;
+		      cs.peertimeskew <- tmskew;
+		      cs.useragent <- ua;
+		      cs.protvers <- minvers;
+		      cs.addrfrom <- addr_from;
+		      cs.first_header_height <- fhh;
+		      cs.first_full_height <- ffh;
+		      cs.last_height <- lh;
+		      addknownpeer mytm addr_from;
+		      !send_inv_fn 128 sout cs
+		    end
 		  else
-		    let tmskew = Int64.to_int tmskew in
-		    if cs.handshakestep = 1 then
-		      begin
-			ignore (queue_msg cs Verack "");
-			let vm = Buffer.create 100 in
-			seosbf
-			  (seo_prod
-			     (seo_prod6 seo_int32 seo_int64 seo_int64 seo_string seo_string seo_int64)
-			     (seo_prod6 seo_string seo_int64 seo_int64 seo_int64 seo_bool (seo_option (seo_prod seo_int64 seo_hashval)))
-			     seosb
-			     ((minvers,0L,mytm,addr_from,myaddr(),!this_nodes_nonce),
-			      (Version.useragent,0L,0L,0L,true,None))
-			     (vm,None));
-			queue_msg cs Version (Buffer.contents vm);
-			cs.handshakestep <- 3;
-			cs.peertimeskew <- tmskew;
-			cs.useragent <- ua;
-			cs.protvers <- minvers;
-			cs.addrfrom <- addr_from;
-			cs.first_header_height <- fhh;
-			cs.first_full_height <- ffh;
-			cs.last_height <- lh
-		      end
-		    else if cs.handshakestep = 4 then
-		      begin
-			queue_msg cs Verack "";
-			cs.handshakestep <- 5;
-			cs.peertimeskew <- tmskew;
-			cs.useragent <- ua;
-			cs.protvers <- minvers;
-			cs.addrfrom <- addr_from;
-			cs.first_header_height <- fhh;
-			cs.first_full_height <- ffh;
-			cs.last_height <- lh;
-			addknownpeer mytm addr_from;
-			!send_inv_fn 128 sout cs
-		      end
-		    else
-		      raise (ProtocolViolation "Handshake failed")
+		    raise (ProtocolViolation "Handshake failed")
 	      end
 	  | Verack ->
 	      begin
@@ -796,7 +795,7 @@ let initialize_conn_2 n s sin sout =
 	(Version.useragent,fhh,ffh,lh,relay,lastchkpt))
        (vm,None));
   let cs = { conntime = tm; realaddr = n; connmutex = Mutex.create(); sendqueue = Queue.create(); sendqueuenonempty = Condition.create(); nonce = None; handshakestep = 2; peertimeskew = 0; protvers = Version.protocolversion; useragent = ""; addrfrom = ""; banned = false; lastmsgtm = tm; sentinv = Hashtbl.create 100; rinv = Hashtbl.create 1000; invreq = Hashtbl.create 100; invreqhooks = Hashtbl.create 100; itemhooks = Hashtbl.create 100; first_header_height = fhh; first_full_height = ffh; last_height = lh } in
-  queue_msg cs Version (Buffer.contents vm);
+  ignore (queue_msg cs Version (Buffer.contents vm));
   let sgcs = (s,sin,sout,ref (Some(cs))) in
   let clth = Thread.create connlistener sgcs in
   let csth = Thread.create connsender sgcs in
@@ -989,7 +988,7 @@ let broadcast_requestdata mt h =
 (*	    || mt = GetCTreeElement || mt = GetHConsElement || mt = GetAsset *)
 	   then
              begin
-               queue_msg cs mt ms;
+               ignore (queue_msg cs mt ms);
 	       Hashtbl.replace cs.invreq (i,h) tm
              end
        | None -> ())
@@ -1010,7 +1009,7 @@ let broadcast_requestinv mt h =
 (*	    || mt = GetCTreeElement || mt = GetHConsElement || mt = GetAsset *)
 	   then
              begin
-               queue_msg cs GetInvNbhd ms;
+               ignore (queue_msg cs GetInvNbhd ms);
 	       Hashtbl.replace cs.invreq (i,h) tm
              end
        | None -> ())
@@ -1037,7 +1036,7 @@ let find_and_send_requestdata mt h =
 	      else
 		begin
 		  log_string (Printf.sprintf "sending request %s %s to %s\n" (string_of_msgtype mt) (hashval_hexstring h) cs.addrfrom);
-		  let mh = queue_msg cs mt ms in
+		  let _ (* mh *) = queue_msg cs mt ms in
 		  Hashtbl.replace cs.invreq (i,h) tm;
 		  raise Exit
 		end
@@ -1082,7 +1081,7 @@ let find_and_send_requestmissingheaders () =
 			seosbf (seo_hashval seosb h (msb,None)))
 		      !rhl;
 		    let ms = Buffer.contents msb in
-		    let mh = queue_msg cs GetHeaders ms in
+		    let _ (* mh *) = queue_msg cs GetHeaders ms in
 		    ()
 		  end
 	      end
@@ -1114,7 +1113,6 @@ Hashtbl.add msgtype_handler GetAddr
       let tm = Unix.time() in
       if not (recently_sent (i,(0l,0l,0l,0l,0l,0l,0l,0l)) tm cs.sentinv) then (*** ignore GetAddr message if we recently sent addresses ***)
 	begin
-	  let pc = ref 0 in
 	  Hashtbl.replace cs.sentinv (i,(0l,0l,0l,0l,0l,0l,0l,0l)) tm;
 	  let tm64 = Int64.of_float tm in
 	  let yesterday = Int64.sub tm64 86400L in
@@ -1129,7 +1127,6 @@ Hashtbl.add msgtype_handler GetAddr
 		  oldpeers := nodeaddr::!oldpeers)
 	    knownpeers;
 	  let cpl = List.length !currpeers in
-	  let opl = List.length !oldpeers in
 	  if cpl > 65535 then
 	    begin
 	      oldpeers := [];
@@ -1166,11 +1163,8 @@ Hashtbl.add msgtype_handler Addr
       let tm = Unix.time() in
       if recently_requested (i,(0l,0l,0l,0l,0l,0l,0l,0l)) tm cs.invreq then (*** ignore Addr message unless it was recently requested ***)
 	let c = ref (ms,String.length ms,None,0,0) in
-	let m = ref 0 in
-	let bhl = ref [] in
 	let (n,cn) = sei_varintb seis !c in (*** < 65536 other addresses ***)
 	c := cn;
-	let numc = ref (List.length !netconns) in
 	for j = 1 to n do
 	  let (nodeaddr,cn) = sei_string seis !c in
 	  if not (Hashtbl.mem knownpeers nodeaddr) then newpeers := nodeaddr::!newpeers

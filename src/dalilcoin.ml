@@ -422,7 +422,6 @@ let compute_staking_chances n fromtm totm =
     log_string (Printf.sprintf "%d staking assets\n" (List.length !Commands.stakingassets));
     if not (!Commands.stakingassets = []) then
       let nextstake i stkaddr h bday obl v toburn =
-	let deltm = Int64.to_int32 (Int64.sub i tmstamp) in
 	Hashtbl.add nextstakechances prevblkh (NextStake(i,stkaddr,h,bday,obl,v,toburn,ref None,thyroot,thytree,sigroot,sigtree));
 	raise Exit
       in
@@ -534,7 +533,6 @@ let stakingthread () =
 		    else
 		      begin (** go ahead and form the block; then publish it at the right time **)
 			let prevledgerroot = node_ledgerroot best in
-			let csm0 = node_stakemod best in
 			let tar0 = node_targetinfo best in
 			let deltm = Int64.to_int32 (Int64.sub tm pbhtm) in
 			let tar = retarget tar0 deltm in
@@ -803,7 +801,6 @@ let stakingthread () =
 			    let bds = Buffer.length s in
 			    if bds > maxblockdeltasize blkh then
 			      (log_string (Printf.sprintf "New block is too big (%d bytes)\n" bds); raise Not_found); (** in this case, probably the best option would be to switch back to an empty block **)
-			    let prevledgerroot = node_ledgerroot best in
 			    let csm0 = node_stakemod best in
 			    let tar0 = node_targetinfo best in
 			    if valid_blockheader blkh csm0 tar0 bhnew tm (match toburn with Some(burn) -> burn | _ -> 0L) then
@@ -828,9 +825,9 @@ let stakingthread () =
 				  update_signatures sigroot sigtree sigt2;
 			      | None ->
 				  log_string (Printf.sprintf "New block is not valid\n");
-				  verbose_blockcheck := Some(!Utils.log);
+				  verbose_blockcheck := Some(!Utils.log); (* the next two calls are intended to log info about why the block is invalid *)
 				  ignore (valid_block thytree sigtree blkh csm0 tar0 (bhnew,bdnew) tm (match toburn with Some(burn) -> burn | _ -> 0L));
-				  valid_blockheader blkh csm0 tar0 bhnew tm (match toburn with Some(burn) -> burn | _ -> 0L);
+				  ignore (valid_blockheader blkh csm0 tar0 bhnew tm (match toburn with Some(burn) -> burn | _ -> 0L));
 				  verbose_blockcheck := None;
 				  let datadir = if !Config.testnet then (Filename.concat !Config.datadir "testnet") else !Config.datadir in dumpstate (Filename.concat datadir "stakedinvalidblockstate");
 				  Hashtbl.remove nextstakechances pbhh1;
@@ -1538,7 +1535,6 @@ let initialize_commands () =
 	  match !gcs with
 	  | Some(cs) ->
 	      Printf.fprintf oc "%s (%s): %s\n" cs.realaddr cs.addrfrom cs.useragent;
-	      let snc = Int64.sub (Int64.of_float (Unix.time())) (Int64.of_float cs.conntime) in
 	      let snc1 = sincetime (Int64.of_float cs.conntime) in
 	      let snc2 = sincetime (Int64.of_float cs.lastmsgtm) in
 	      Printf.fprintf oc "Connected for %s; last message %s ago.\n" snc1 snc2;
@@ -2303,7 +2299,6 @@ let initialize () =
 	      try
 		while true do
 		  let (a,_) = sei_asset seic (assetfile,None) in
-		  let aid = assetid a in
 		  let h = hashasset a in
 		  DbAsset.dbput h a
 		done
@@ -2441,8 +2436,6 @@ let initialize () =
 	    | GetHeaders ->
 		begin
 		  let c = ref (ms,String.length ms,None,0,0) in
-		  let m = ref 0 in
-		  let bhl = ref [] in
 		  let (n,cn) = sei_int8 seis !c in (*** peers can request at most 255 headers at a time **)
 		  c := cn;
 		  Printf.fprintf sout "GetHeaders requesting these %d headers:\n" n;

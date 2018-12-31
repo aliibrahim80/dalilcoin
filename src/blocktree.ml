@@ -619,8 +619,6 @@ and validate_block_of_node newnode thyroot sigroot csm tinf blkhght h blkdel cs 
 	    processing_deltas := h::!processing_deltas;
 	    DbBlockDelta.dbput h blkdel;
 	    process_delta_real h blkhght blk;
-	    let (bn,cwl) = get_bestnode true in
-	    let BlocktreeNode(_,_,_,_,_,_,_,_,_,bestcumulstk,_,_,_,_) = bn in
 	    update_theories thyroot thytree tht2;
 	    update_signatures sigroot sigtree sigt2;
 	    (*** construct a transformed tree consisting of elements ***)
@@ -637,7 +635,6 @@ and validate_block_of_node newnode thyroot sigroot csm tinf blkhght h blkdel cs 
 	    let b = Buffer.create 1000 in
 	    seosbf (seo_blockdelta seosb blkdel (b,None));
 	    log_string (Printf.sprintf "Block delta for %s was invalid; full delta = %s\n" (hashval_hexstring h) (string_hexstring (Buffer.contents b)));
-	    let tm = Unix.time() in
 	    cs.banned <- true;
 	    Hashtbl.add bannedpeers cs.addrfrom ();
 	    vs := InvalidBlock
@@ -957,7 +954,6 @@ let rec blacklist_from h n =
   List.iter (fun (k,c) -> blacklist_from k c) !chl
 
 let publish_stx txh stx1 =
-  let (tx1,txsigs1) = stx1 in
   if not (Hashtbl.mem stxpool txh) then Hashtbl.add stxpool txh stx1;
   DbSTx.dbput txh stx1;
   Hashtbl.add published_stx txh ();
@@ -1244,7 +1240,6 @@ Hashtbl.add msgtype_handler Inv
 	  try
 	    let (blkhd1,blkhs1) as bh = DbBlockHeader.dbget h in
 	    if not (Hashtbl.mem blkheadernode (Some(h))) then
-	      let (bhd,bhs) = bh in
 	      process_new_header_a h (hashval_hexstring h) bh blkhd1 blkhs1 false false
 	  with Not_found ->
 	    try

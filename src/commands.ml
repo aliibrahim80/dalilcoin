@@ -78,7 +78,6 @@ let save_txpool () =
 let load_wallet () =
   let wallfn = Filename.concat (datadir()) "wallet" in
   if not (Sys.file_exists wallfn) then
-    let s = open_out_bin wallfn in
     begin
       walletkeys_staking := [];
       walletkeys_nonstaking := [];
@@ -618,8 +617,6 @@ let assets_at_address_in_ledger_json raiseempty alpha par ledgerroot blkh =
 	  end
 	else
 	  jal := [("address",JsonStr(alphas));("contents",JsonStr("empty"))]
-    | _ ->
-	jal := [("address",JsonStr(alphas));("contents",JsonStr("no information"))]
   end;
   let rec assets_at_address_in_ledger_json_history alpha par =
     match par with
@@ -728,8 +725,6 @@ let printassets_in_ledger oc ledgerroot =
 	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot1)
       | (None,_) ->
 	  Printf.fprintf oc "%s: empty\n" z;
-      | _ ->
-	  Printf.fprintf oc "%s: no information\n" z;
     )
     !al1;
   Printf.fprintf oc "Possibly controlled p2sh assets:\n";
@@ -741,8 +736,6 @@ let printassets_in_ledger oc ledgerroot =
 	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot2)
       | (None,_) ->
 	  Printf.fprintf oc "%s: empty\n" z;
-      | _ ->
-	  Printf.fprintf oc "%s: no information\n" z;
     )
     !al2;
   Printf.fprintf oc "Assets via endorsement:\n";
@@ -754,8 +747,6 @@ let printassets_in_ledger oc ledgerroot =
 	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot3)
       | (None,_) ->
 	  Printf.fprintf oc "%s: empty\n" (addr_daliladdrstr alpha2);
-      | _ ->
-	  Printf.fprintf oc "%s: no information\n" (addr_daliladdrstr alpha2);
     )
     !al3;
   Printf.fprintf oc "Watched assets:\n";
@@ -767,8 +758,6 @@ let printassets_in_ledger oc ledgerroot =
 	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot4)
       | (None,_) ->
 	  Printf.fprintf oc "%s: empty\n" (addr_daliladdrstr alpha);
-      | _ ->
-	  Printf.fprintf oc "%s: no information\n" (addr_daliladdrstr alpha);
     )
     !al4;
   Printf.fprintf oc "Total p2pkh: %s fraenks\n" (fraenks_of_cants !tot1);
@@ -928,7 +917,6 @@ let printctreeelt oc h =
 let printctreeinfo oc h =
   try
     let c = DbCTreeElt.dbget h in
-    let n = ref 0 in
     let v = ref 0L in
     let b = ref 0L in
     let e = ref 1 in
@@ -1379,7 +1367,7 @@ let signtx oc lr taustr =
   let (tausgout1,co) = signtx_outs taue tauout tausgout [] [] true in
   let stau = (tau,(tausgin1,tausgout1)) in
   let s = Buffer.create 100 in
-  seosbf (seo_stx seosb (tau,(tausgin1,tausgout1)) (s,None));
+  seosbf (seo_stx seosb stau (s,None));
   let hs = string_hexstring (Buffer.contents s) in
   Printf.fprintf oc "%s\n" hs;
   if ci && co then
@@ -1696,7 +1684,10 @@ let query_at_block q pbh ledgerroot blkh =
 	begin
 	  try
 	    let (prevh,tm,hght,txhhs) = Ltcrpc.DbLtcBlock.dbget h in
-	    let j = JsonObj([("type",JsonStr("ltcblock"))]) in
+	    let j = JsonObj([("type",JsonStr("ltcblock"));
+			     ("tm",JsonNum(Int64.to_string tm));
+			     ("height",JsonNum(Int64.to_string hght));
+			     ("txhhs",JsonArr(List.map (fun txh -> JsonStr(hashval_hexstring txh)) txhhs))]) in
 	    dbentries := j::!dbentries
 	  with Not_found -> ()
 	end;
