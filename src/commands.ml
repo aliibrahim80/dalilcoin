@@ -1349,7 +1349,7 @@ let rec signtx_outs taue outpl sl rl rsl co =
 
 let signtx oc lr taustr =
   let s = hexstring_string taustr in
-  let (((tauin,tauout) as tau,(tausgin,tausgout) as tausg),_) = sei_stx seis (s,String.length s,None,0,0) in (*** may be partially signed ***)
+  let (((tauin,tauout) as tau,(tausgin,tausgout)),_) = sei_stx seis (s,String.length s,None,0,0) in (*** may be partially signed ***)
   let unsupportederror alpha h = Printf.printf "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
   let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
   let rec get_propowns tauin al =

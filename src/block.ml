@@ -794,7 +794,7 @@ let rec collect_header_inv_nbhd m h tosend =
   if m > 0 then
     begin
       try
-	let (bhd,_) as bh = DbBlockHeader.dbget h in
+	let (bhd,_) = DbBlockHeader.dbget h in
 	collect_header_inv_nbhd_2 m h bhd tosend
       with Not_found -> ()
     end
