@@ -149,36 +149,41 @@ dalilcoin -daemon
 dalilcoincli "getinfo"
 ```
 
-* Obtaining the Initial Ledger Tree
+* Obtaining the Database with the Ledger Tree
 
-Before running dalilcoin for the first time you have the option
-of initializing the database with the initial ledger tree.
-The initial ledger tree contains the initial distribution
-of Dalilcoin assets and has hash root
-d4b10e4b72eaa8a61427b805f206e828b22bb59192373b83fe0df501e68a5bed.
+You can either run dalilcoin as a lite client or with the full
+ledger tree. You can obtail the database with the full ledger
+tree as of Block 600 (Dec 31 2018) as the file db2018.tgz (1GB) at:
 
-The full tree is available as the file db.tgz
-(900MB) at:
+https://mega.nz/#!Ab4yTaYb!PvJshyDf7nsXh_ejSAVDGLRCLytgR8griEFNLV1EAWI
+
+The sha256 hash of this file is
+7b662b832ab6840383f8af8183e9e96af2f68e2fbc03e93bb132c072f4187d5a
+
+Alternatively, you can download the initial database with
+the initial ledger tree as the file db.tgz (900MB) at:
+
 https://mega.nz/#!waQE1DiC!yRo9vTYPK9CZsfOxT-6eJ7vtl3WLeIMqK4LAcA2ASKc
 
 The sha256 hash of this file is
 1920e33fdaf3749d6cce55ab0150faf961ef22c5057c92e082c3f6209fb335d5
 
-After downloading the file cd to your Dalilcoin data directory.
+After downloading one of these files cd to your Dalilcoin data directory.
+
 Most likely this mean:
 
 cd ~/.dalilcoin
 
 Move the downloaded file to here and untar it. For example:
 
-tar xzvf db.tgz
+tar xzvf db2018.tgz
 
 It will create a db subdirectory with all the necessary information.
 
 If you have already run dalilcoin and already have the db subdirectory,
-you should delete the db subdirectory before untar'ing db.tgz.
+you should delete the db subdirectory before untar'ing db2018.tgz.
 
-An alternative to downloading the db.tgz file is to use the command
+An alternative to downloading the db2018.tgz file is to use the command
 requestfullledger to try to obtain the full ledger (piece by piece)
 from peer nodes on the network. The requestfullledger command is very
 slow and should be expected to run for several hours. The command
