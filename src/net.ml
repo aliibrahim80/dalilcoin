@@ -145,9 +145,12 @@ let myaddr () =
       else
 	ip ^ ":" ^ (string_of_int !Config.port)
   | None ->
-      match !Config.onion with
-      | Some(onionaddr) -> onionaddr ^ ":" ^ (string_of_int !Config.onionremoteport)
-      | None -> ""
+      if !socks = None then (** if socks is not set, then do not reveal the hidden service address **)
+	""
+      else
+	match !Config.onion with
+	| Some(onionaddr) -> onionaddr ^ ":" ^ (string_of_int !Config.onionremoteport)
+	| None -> ""
 
 let fallbacknodes = [
 "87.121.52.180:20805";
