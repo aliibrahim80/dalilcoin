@@ -1,5 +1,5 @@
 (* Copyright (c) 2015-2016 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -801,7 +801,7 @@ let rec collect_header_inv_nbhd m h tosend =
 and collect_header_inv_nbhd_2 m h bhd tosend =
   tosend := (int_of_msgtype Headers,h)::!tosend;
   if DbCTreeElt.dbexists bhd.newledgerroot then tosend := (int_of_msgtype CTreeElement,bhd.newledgerroot)::!tosend;
-  if DbBlockDelta.dbexists h then tosend := (int_of_msgtype Blockdelta,bhd.newledgerroot)::!tosend;
+  if DbBlockDelta.dbexists h then tosend := (int_of_msgtype Blockdelta,h)::!tosend;
   begin
     match bhd.prevblockhash with
     | Some(k,_) -> collect_header_inv_nbhd (m-1) k tosend
