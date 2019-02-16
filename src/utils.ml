@@ -1,5 +1,5 @@
 (* Copyright (c) 2016 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -30,10 +30,10 @@ let log_string x =
     end
 
 (***
- era ranges from 1 and 43 (roughly 1 + 41*4 = 165 years until final era when reward drops to 0
- era 1 is for the first 70000 blocks (1 to 70000)
- era 2 is for the next 210000 blocks (70001 to 280000)
- and so on until 8680001 when the final (unlimited) era of 43 begins.
+ era ranges from 1 and 43
+ era 1 is for the first 70000 blocks (1 to 70000) -- block reward of 25, roughly first 48 years with a 6 hour block time.
+ era 2 is for the next 210000 blocks (70001 to 280000) -- reward halves, each era lasting roughly 144 years with a 6 hour block time.
+ and so on until 8680001 when the final (unlimited) era of 43 begins -- block reward 0 starting in roughly 6000 years with a 6 hour block time.
  ***)
 let era blkh =
   if blkh < 8680001L then
