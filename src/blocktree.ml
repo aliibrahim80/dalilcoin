@@ -413,17 +413,11 @@ let initialize_dlc_from_ltc lblkh =
 	      let (burned,_,_) = DbLtcBurnTx.dbget ltx in
 	      if not (Hashtbl.mem blkheadernode (Some(bh))) then
 		begin
-		  Printf.printf "trying to build node for %s\nlbh %s\nltx %s\nltm %Ld\nlhght %Ld\n" (hashval_hexstring bh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght;
 		  let (bhd,_) = DbBlockHeader.dbget bh in
-		  Printf.printf "trying to build node for %s 2\n" (hashval_hexstring bh);
 		  let blkh = Hashtbl.find headersrecknown bh in
-		  Printf.printf "trying to build node for %s 3 %Ld\n" (hashval_hexstring bh) blkh;
-		  Printf.printf "trying to build node for %s 4 %Ld\n" (hashval_hexstring bh) burned;
 		  let pob = Poburn(lbh,ltx,ltm,burned) in
 		  let par = try Some(Hashtbl.find blkheadernode (fstohash bhd.prevblockhash)) with Not_found -> None in
-		  Printf.printf "trying to build node for %s 5\n" (hashval_hexstring bh);
 		  let newcsm = poburn_stakemod pob in
-		  Printf.printf "trying to build node for %s 6\n" (hashval_hexstring bh);
 		  let vstat = if Hashtbl.mem deltasrecknown bh then ValidBlock else Waiting(Unix.time(),None) in
 		  let blacklisted =
 		    match par with
@@ -434,17 +428,7 @@ let initialize_dlc_from_ltc lblkh =
 			with Not_found -> false
 		  in
 		  let n = BlocktreeNode(par,ref [],Some(bh,pob),bhd.newtheoryroot,bhd.newsignaroot,bhd.newledgerroot,newcsm,bhd.tinfo,bhd.timestamp,zero_big_int,Int64.add blkh 1L,ref vstat,ref blacklisted,ref []) in
-		  Printf.printf "built node for %s\n" (hashval_hexstring bh);
 		  Hashtbl.add blkheadernode (Some(bh)) n;
-		  begin
-		    Printf.printf "double checking pob for %s\n" (hashval_hexstring bh);
-		    let BlocktreeNode(par,_,pbh,_,_,plr,csm,tar,tm,_,blkh,_,_,chl) = Hashtbl.find blkheadernode (Some(bh)) in
-		    match pbh with
-		    | Some(h,Poburn(lblkh,ltxh,lmedtm,burned)) ->
-			Printf.printf "Burned %Ld at median time %Ld with ltc tx %s in block %s\n" burned lmedtm (hashval_hexstring ltxh) (hashval_hexstring lblkh);
-		    | None ->
-			Printf.printf "None?\n";
-		  end;
 		  begin
 		    match par with
 		    | Some(BlocktreeNode(_,_,_,_,_,_,_,_,_,_,_,_,_,chlr)) -> chlr := (bh,n)::!chlr
@@ -465,10 +449,7 @@ let initialize_dlc_from_ltc lblkh =
       end
     with Not_found -> ()
   in
-  Printf.printf "ss start %f\n" (Unix.gettimeofday());
-  handlerecent lblkh;
-  Printf.printf "ss end %f\n" (Unix.gettimeofday());
-  Hashtbl.iter (fun h _ -> match h with Some(h) -> Printf.printf "node for %s\n" (hashval_hexstring h) | None -> Printf.printf "node for None\n") blkheadernode
+  handlerecent lblkh
 
 let collect_inv m cnt tosend txinv =
   let (lastchangekey,ctips0l) = ltcdacstatus_dbget !ltc_bestblock in
