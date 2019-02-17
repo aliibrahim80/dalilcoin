@@ -575,7 +575,6 @@ let find_and_send_requestmissingblocks cs =
 	  | [] -> raise Exit (*** impossible ***)
 	  | (blkh,h)::mhr ->
 	      mhl := mhr;
-	      Printf.printf "putting into invreq %d %s %f\n" i (hashval_hexstring h) tm;
 	      if (((blkh >= cs.first_header_height) && (blkh <= cs.last_height)) || Hashtbl.mem cs.rinv (ii,h)) && not (recently_requested (i,h) tm cs.invreq) then
 		begin
 		  incr j;
