@@ -1,5 +1,5 @@
 (* Copyright (c) 2015-2016 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -24,8 +24,16 @@ let stxpool : (hashval,stx) Hashtbl.t = Hashtbl.create 1000;;
 let published_stx : (hashval,unit) Hashtbl.t = Hashtbl.create 1000;;
 let unconfirmed_spent_assets : (hashval,hashval) Hashtbl.t = Hashtbl.create 100;;
 
-let artificialledgerroot = ref None
-let artificialbestblock = ref None
+let artificialledgerroot = ref None;;
+let artificialbestblock = ref None;;
+
+let recentheaders : (hashval,unit) Hashtbl.t = Hashtbl.create 1000;;
+let headersrecknown : (hashval,int64) Hashtbl.t = Hashtbl.create 1000;;
+let deltasrecknown : (hashval,unit) Hashtbl.t = Hashtbl.create 1000;;
+let blockprev : (hashval,hashval option) Hashtbl.t = Hashtbl.create 1000;;
+let blocksucc : (hashval,hashval) Hashtbl.t = Hashtbl.create 1000;;
+let missingheader : (hashval,unit) Hashtbl.t = Hashtbl.create 1000;;
+let missingdelta : (hashval,unit) Hashtbl.t = Hashtbl.create 1000;;
 
 let processing_deltas : hashval list ref = ref [];;
 let delayed_deltas : (hashval,blockdelta) Hashtbl.t = Hashtbl.create 100;;
@@ -286,6 +294,152 @@ let init_sigtrees () =
     with End_of_file ->
       close_in ch
 
+let initialize_dlc_from_ltc lblkh =
+  let ldone : (hashval,unit) Hashtbl.t = Hashtbl.create 1000 in
+  let ddone : (hashval,unit) Hashtbl.t = Hashtbl.create 1000 in
+  let blockstats h =
+    if not (Hashtbl.mem ddone h) then
+      begin
+	Hashtbl.add ddone h ();
+	try
+	  begin
+	    match Hashtbl.find blockprev h with
+	    | Some(k) ->
+		if DbBlockHeader.dbexists h then
+		  begin
+		    try
+		      Hashtbl.add headersrecknown h (Int64.add 1L (Hashtbl.find headersrecknown k))
+		    with Not_found -> ()
+		  end
+		else
+		  Hashtbl.add missingheader h ();
+		if DbBlockDelta.dbexists h then
+		  begin
+		    if Hashtbl.mem headersrecknown k && Hashtbl.mem deltasrecknown k then Hashtbl.add deltasrecknown h ();
+		  end
+		else
+		  Hashtbl.add missingdelta h ();
+	    | None ->
+		if DbBlockHeader.dbexists h then
+		  begin
+		    Hashtbl.add headersrecknown h 1L;
+		    if DbBlockDelta.dbexists h then Hashtbl.add deltasrecknown h ();
+		  end
+		else
+		  Hashtbl.add missingheader h ();
+		if not (DbBlockDelta.dbexists h) then Hashtbl.add missingdelta h ();
+	  end
+	with Not_found -> ()
+      end
+  in
+  let rec blockstats_ltx_2 ltxh dnxt2 =
+    if not (Hashtbl.mem ldone ltxh) then
+      begin
+	Hashtbl.add ldone ltxh ();
+	try
+	  let (burned,lprevtx,dnxt) = DbLtcBurnTx.dbget ltxh in
+	  if lprevtx = (0l,0l,0l,0l,0l,0l,0l,0l) then
+	    Hashtbl.add blockprev dnxt None
+	  else
+	    blockstats_ltx_2 lprevtx dnxt;
+	  Hashtbl.add blockprev dnxt2 (Some(dnxt));
+	  Hashtbl.add blocksucc dnxt dnxt2;
+	  blockstats dnxt
+	with Not_found ->
+	  Printf.printf "Missing ltc burntx %s\n" (hashval_hexstring ltxh)
+      end
+  in
+  let blockstats_ltx ltxh =
+    if not (Hashtbl.mem ldone ltxh) then
+      begin
+	Hashtbl.add ldone ltxh ();
+	try
+	  let (burned,lprevtx,dnxt) = DbLtcBurnTx.dbget ltxh in
+	  if lprevtx = (0l,0l,0l,0l,0l,0l,0l,0l) then
+	    Hashtbl.add blockprev dnxt None
+	  else
+	    blockstats_ltx_2 lprevtx dnxt;
+	  blockstats dnxt
+	with Not_found ->
+	  Printf.printf "Missing ltc burntx %s\n" (hashval_hexstring ltxh)
+      end
+  in
+  let handlerecent2 bds =
+    List.iter
+      (fun bdl ->
+	List.iter
+	  (fun (bh,lbh,ltx,ltm,lhght) ->
+	    blockstats_ltx ltx;
+	    Hashtbl.replace recentheaders bh ())
+	  bdl)
+      bds
+  in
+  let handlerecent3 bds =
+    List.iter
+      (fun bdl ->
+	List.iter
+	  (fun (bh,lbh,ltx,ltm,lhght) ->
+	    try
+	      let (burned,_,_) = DbLtcBurnTx.dbget ltx in
+	      if not (Hashtbl.mem blkheadernode (Some(bh))) then
+		begin
+		  Printf.printf "trying to build node for %s\nlbh %s\nltx %s\nltm %Ld\nlhght %Ld\n" (hashval_hexstring bh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght;
+		  let (bhd,_) = DbBlockHeader.dbget bh in
+		  Printf.printf "trying to build node for %s 2\n" (hashval_hexstring bh);
+		  let blkh = Hashtbl.find headersrecknown bh in
+		  Printf.printf "trying to build node for %s 3 %Ld\n" (hashval_hexstring bh) blkh;
+		  Printf.printf "trying to build node for %s 4 %Ld\n" (hashval_hexstring bh) burned;
+		  let pob = Poburn(lbh,ltx,ltm,burned) in
+		  let par = try Some(Hashtbl.find blkheadernode (fstohash bhd.prevblockhash)) with Not_found -> None in
+		  Printf.printf "trying to build node for %s 5\n" (hashval_hexstring bh);
+		  let newcsm = poburn_stakemod pob in
+		  Printf.printf "trying to build node for %s 6\n" (hashval_hexstring bh);
+		  let vstat = if Hashtbl.mem deltasrecknown bh then ValidBlock else Waiting(Unix.time(),None) in
+		  let blacklisted =
+		    match par with
+		    | Some(BlocktreeNode(_,_,_,_,_,_,_,_,_,_,_,_,rb,_)) when !rb -> true
+		    | _ ->
+			try
+			  DbBlacklist.dbget bh
+			with Not_found -> false
+		  in
+		  let n = BlocktreeNode(par,ref [],Some(bh,pob),bhd.newtheoryroot,bhd.newsignaroot,bhd.newledgerroot,newcsm,bhd.tinfo,bhd.timestamp,zero_big_int,Int64.add blkh 1L,ref vstat,ref blacklisted,ref []) in
+		  Printf.printf "built node for %s\n" (hashval_hexstring bh);
+		  Hashtbl.add blkheadernode (Some(bh)) n;
+		  begin
+		    Printf.printf "double checking pob for %s\n" (hashval_hexstring bh);
+		    let BlocktreeNode(par,_,pbh,_,_,plr,csm,tar,tm,_,blkh,_,_,chl) = Hashtbl.find blkheadernode (Some(bh)) in
+		    match pbh with
+		    | Some(h,Poburn(lblkh,ltxh,lmedtm,burned)) ->
+			Printf.printf "Burned %Ld at median time %Ld with ltc tx %s in block %s\n" burned lmedtm (hashval_hexstring ltxh) (hashval_hexstring lblkh);
+		    | None ->
+			Printf.printf "None?\n";
+		  end;
+		  begin
+		    match par with
+		    | Some(BlocktreeNode(_,_,_,_,_,_,_,_,_,_,_,_,_,chlr)) -> chlr := (bh,n)::!chlr
+		    | None -> ()
+		  end
+		end
+	    with Not_found -> ())
+	  bdl)
+      (List.rev bds)
+  in
+  let rec handlerecent lbh =
+    try
+      let lds =  DbLtcDacStatus.dbget lbh in
+      begin
+	match lds with
+	| LtcDacStatusPrev(lbh2) -> handlerecent lbh2
+	| LtcDacStatusNew(bds) -> handlerecent2 bds; handlerecent3 bds
+      end
+    with Not_found -> ()
+  in
+  Printf.printf "ss start %f\n" (Unix.gettimeofday());
+  handlerecent lblkh;
+  Printf.printf "ss end %f\n" (Unix.gettimeofday());
+  Hashtbl.iter (fun h _ -> match h with Some(h) -> Printf.printf "node for %s\n" (hashval_hexstring h) | None -> Printf.printf "node for None\n") blkheadernode
+
 let collect_inv m cnt tosend txinv =
   let (lastchangekey,ctips0l) = ltcdacstatus_dbget !ltc_bestblock in
   let inclh : (hashval,unit) Hashtbl.t = Hashtbl.create 5000 in
@@ -308,45 +462,18 @@ let collect_inv m cnt tosend txinv =
 	  ctips)
       ctips0l
   in
-  let rec collect_inv_r3 m cnt tosend ctips ctipsr txinv =
-    if !cnt < m then
-      begin
-	match ctips with
-	| (bh,_,_,_,_)::ctipr ->
-	    if not (Hashtbl.mem inclh bh) then
-	      begin
-		if DbBlockHeader.dbexists bh then
-		  begin
-		    Hashtbl.add inclh bh ();
-		    tosend := (int_of_msgtype Headers,bh)::!tosend; incr cnt;
-		    if DbBlockDelta.dbexists bh then (tosend := (int_of_msgtype Blockdelta,bh)::!tosend; incr cnt)
-		  end;
-	      end;
-	    collect_inv_r3 m cnt tosend ctipr ctipsr txinv
-	| [] -> collect_inv_r2 m cnt tosend ctipsr txinv
-      end
-  and collect_inv_r2 m cnt tosend ctipsl txinv =
-    if !cnt < m then
-      begin
-	match ctipsl with
-	| (ctips::ctipsr) -> collect_inv_r3 m cnt tosend ctips ctipsr txinv
-	| [] ->
-	    if not (txinv = []) then collect_inv_r1 m cnt tosend [] txinv
-      end
-  and collect_inv_r1 m cnt tosend ctipsl txinv =
+  let rec collect_inv_stxs m cnt tosend ctipsl txinv =
     if !cnt < m then
       begin
 	match txinv with
 	| (txid::txinvr) ->
 	    tosend := (int_of_msgtype STx,txid)::!tosend; incr cnt;
-	    collect_inv_r1 m cnt tosend ctipsl txinvr
-	| []  ->
-	    if not (ctipsl = []) then
-	      collect_inv_r2 m cnt tosend ctipsl txinv
+	    collect_inv_stxs m cnt tosend ctipsl txinvr
+	| []  -> ()
       end
   in
   collect_inv_rec_blocks tosend;
-  collect_inv_r1 m cnt tosend ctips0l txinv
+  collect_inv_stxs m cnt tosend ctips0l txinv
 
 let send_inv m sout cs =
   let cnt = ref 0 in
@@ -874,27 +1001,6 @@ and add_known_header_to_blocktree h =
   end;
   process_new_header_a h (hashval_hexstring h) bh bhd bhs false true
 
-(*** during initialization, go as far back as necessary in history ***)
-let rec traverse_ltc_history lb =
-  try
-    let (prevh,tm,hght,burntxhs) = DbLtcBlock.dbget lb in
-    let stopatcheckpoint = ref false in
-    let makenodes = ref [] in
-    List.iter
-      (fun burntxh ->
-	try
-	  let (burned,lprevtx,dnxt) = DbLtcBurnTx.dbget burntxh in
-	  if hashval_hexstring dnxt = !Config.lastcheckpoint then stopatcheckpoint := true;
-	  if (DbBlockHeader.dbexists dnxt) then
-	    makenodes := (dnxt,(Poburn(lb,burntxh,tm,burned)))::!makenodes
-	  else if not (DbBlockHeader.dbexists dnxt || DbBlacklist.dbexists dnxt || DbArchived.dbexists dnxt) then
-	    missingheaders := dnxt :: !missingheaders (*** earliest headers should be earlier on the missingheaders list ***)
-	with _ -> ())
-      burntxhs;
-    if not !stopatcheckpoint && not (!Config.ltcblockcheckpoint = hashval_hexstring prevh) then traverse_ltc_history prevh; (*** allow for a checkpoint to avoid needing to go back too far ***)
-    List.iter (fun (h,pob) -> try ignore (create_new_node_b h pob false) with _ -> ()) !makenodes
-  with Not_found -> ()
-
 let process_delta h =
   let bh = DbBlockHeader.dbget h in
   let bd = DbBlockDelta.dbget h in
@@ -968,7 +1074,6 @@ let initblocktree () =
   lastcheckpointnode := !genesisblocktreenode;
   Hashtbl.add blkheadernode None !genesisblocktreenode;
   try
-    traverse_ltc_history !ltc_bestblock;
     if !missingheaders = [] then
       ignore (get_bestnode true)
     else
@@ -1147,7 +1252,24 @@ Hashtbl.add msgtype_handler Headers
 	      else
 		try
 		  let (pob,_) = find_dalilcoin_header_ltc_burn h in
-		  process_new_header_ab h (hashval_hexstring h) bh bhd bhs a false false pob
+		  process_new_header_ab h (hashval_hexstring h) bh bhd bhs a false false pob;
+		  begin
+		    let gbdi = int_of_msgtype GetBlockdelta in
+		    if Hashtbl.mem cs.rinv (gbdi,h) && not (recently_requested (gbdi,h) tm cs.invreq) && not (DbBlockDelta.dbexists h) then
+		      begin (** request delta **)
+			let tm = Unix.time() in
+			let msb = Buffer.create 20 in
+			seosbf (seo_hashval seosb h (msb,None));
+			let ms = Buffer.contents msb in
+			ignore (queue_msg cs GetBlockdelta ms);
+			Hashtbl.replace cs.invreq (gbdi,h) tm
+		      end;
+		    try
+		      let hk = Hashtbl.find cs.itemhooks (int_of_msgtype Headers,h) in
+		      Hashtbl.remove cs.itemhooks (int_of_msgtype Headers,h);
+		      hk()
+		    with Not_found -> ()
+		  end
 		with Not_found -> (*** before the pob has been completed; should not have been requested yet ***)
 		  log_string (Printf.sprintf "Header %s was requested and received before the proof-of-burn was confirmed; ignoring it and waiting\n" (hashval_hexstring h));
 	    with
@@ -1219,6 +1341,7 @@ Hashtbl.add msgtype_handler GetInvNbhd
 Hashtbl.add msgtype_handler Inv
   (fun (sin,sout,cs,ms) ->
     let c = ref (ms,String.length ms,None,0,0) in
+    let hkl = ref [] in
     let hl = ref [] in
     let (n,cn) = sei_int32 seis !c in
 (*    log_string (Printf.sprintf "Inv msg %ld entries\n" n); *)
@@ -1229,7 +1352,7 @@ Hashtbl.add msgtype_handler Inv
       Hashtbl.replace cs.rinv (i,h) ();
       begin
 	try
-	  Hashtbl.find cs.invreqhooks (i,h) (); (*** execute any hook functions waiting on this inventory message ***)
+	  hkl := (Hashtbl.find cs.invreqhooks (i,h))::!hkl; (*** collect hook functions waiting on this inventory message to execute at the end ***)
 	  Hashtbl.remove cs.invreqhooks (i,h)
 	with Not_found ->
 	  ()
@@ -1248,7 +1371,7 @@ Hashtbl.add msgtype_handler Inv
 	    with Not_found ->
 	      ()
 	end
-      else if i = int_of_msgtype Blockdelta && (DbBlockHeader.dbexists h) && not (DbBlockDelta.dbexists h) && not (DbArchived.dbexists h) && not (DbBlacklist.dbexists h) && Hashtbl.mem tovalidate h then
+      else if i = int_of_msgtype Blockdelta && DbBlockHeader.dbexists h && not (DbBlockDelta.dbexists h) && not (DbArchived.dbexists h) && not (DbBlacklist.dbexists h) && Hashtbl.mem tovalidate h then
 	begin
 	  try
 	    let tm = Unix.time() in
@@ -1272,6 +1395,7 @@ Hashtbl.add msgtype_handler Inv
 	    end
 	end
     done;
+    List.iter (fun hk -> ignore (Thread.create hk ())) !hkl;
     req_header_batches sout cs 0 !hl []);;
 
 Hashtbl.add msgtype_handler GetBlockdelta

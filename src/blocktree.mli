@@ -1,5 +1,5 @@
 (* Copyright (c) 2015-2016 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -18,6 +18,8 @@ val unconfirmed_spent_assets : (hashval,hashval) Hashtbl.t
 
 val artificialledgerroot : hashval option ref
 val artificialbestblock : hashval option ref
+
+val initialize_dlc_from_ltc : hashval -> unit
 
 val processing_deltas : hashval list ref
 val save_processing_deltas : unit -> unit

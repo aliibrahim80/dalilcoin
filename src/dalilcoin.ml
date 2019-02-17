@@ -1,5 +1,5 @@
 (* Copyright (c) 2015-2017 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -49,6 +49,7 @@ let rec pblockchain s n c lr m =
     end;
   Printf.fprintf s "Target: %s\n" (string_of_big_int tar);
   Printf.fprintf s "Difficulty: %s\n" (string_of_big_int (difficulty tar));
+  Printf.fprintf s "Stake Modifier: %s\n" (hashval_hexstring csm);
   Printf.fprintf s "Timestamp: %Ld\n" tm;
   match c with
   | Some(h,Poburn(lblkh,ltxh,lmedtm,burned)) ->
@@ -2550,6 +2551,7 @@ let initialize () =
       begin
 	if not !Config.daemon then (Printf.fprintf sout "Syncing with ltc\n"; flush sout);
 	ltc_init sout;
+	initialize_dlc_from_ltc !ltc_bestblock;
       end;
     Printf.fprintf sout "Initializing blocktree\n"; flush sout;
     initblocktree();
