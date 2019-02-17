@@ -1,14 +1,17 @@
 (* Copyright (c) 2015-2016 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
 open Big_int
 open Hash
 
+val sync_last_height : int64 ref
+
 val shutdown_close : Unix.file_descr -> unit
 
-val missingheaders : hashval list ref
+val missingheaders : (int64 * hashval) list ref
+val missingdeltas : (int64 * hashval) list ref
 
 exception GettingRemoteData
 exception RequestRejected
@@ -111,8 +114,8 @@ val network_time : unit -> int64 * int
 
 val queue_msg : connstate -> msgtype -> string -> hashval
 val queue_reply : connstate -> hashval -> msgtype -> string -> hashval
+val find_and_send_requestmissingblocks : connstate -> unit
 val find_and_send_requestdata : msgtype -> hashval -> unit
-val find_and_send_requestmissingheaders : unit -> unit
 val broadcast_requestdata : msgtype -> hashval -> unit
 val broadcast_requestinv : msgtype -> hashval -> unit
 val broadcast_inv : (int * hashval) list -> unit

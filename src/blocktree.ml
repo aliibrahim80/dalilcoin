@@ -312,22 +312,52 @@ let initialize_dlc_from_ltc lblkh =
 		    with Not_found -> ()
 		  end
 		else
-		  Hashtbl.add missingheader h ();
+		  begin
+		    Hashtbl.add missingheader h ();
+		    try
+		      let blkh = Hashtbl.find headersrecknown k in
+		      missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(blkh,h)] !missingheaders
+		    with Not_found -> ()
+		  end;
 		if DbBlockDelta.dbexists h then
 		  begin
-		    if Hashtbl.mem headersrecknown k && Hashtbl.mem deltasrecknown k then Hashtbl.add deltasrecknown h ();
+		    try
+		      let blkh = Hashtbl.find headersrecknown k in
+		      if Hashtbl.mem deltasrecknown k then
+			begin
+			  Hashtbl.add deltasrecknown h ();
+			  sync_last_height := max !sync_last_height (Int64.add 1L blkh);
+			end
+		    with Not_found -> ()
 		  end
 		else
-		  Hashtbl.add missingdelta h ();
+		  begin
+		    Hashtbl.add missingdelta h ();
+		    try
+		      let blkh = Hashtbl.find headersrecknown k in
+		      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(blkh,h)] !missingdeltas
+		    with Not_found -> ()
+		  end
 	    | None ->
 		if DbBlockHeader.dbexists h then
 		  begin
 		    Hashtbl.add headersrecknown h 1L;
-		    if DbBlockDelta.dbexists h then Hashtbl.add deltasrecknown h ();
+		    if DbBlockDelta.dbexists h then
+		      begin
+			Hashtbl.add deltasrecknown h ();
+			sync_last_height := max !sync_last_height 1L;
+		      end;
 		  end
 		else
-		  Hashtbl.add missingheader h ();
-		if not (DbBlockDelta.dbexists h) then Hashtbl.add missingdelta h ();
+		  begin
+		    Hashtbl.add missingheader h ();
+		    missingheaders := (1L,h)::!missingheaders
+		  end;
+		if not (DbBlockDelta.dbexists h) then
+		  begin
+		    Hashtbl.add missingdelta h ();
+		    missingdeltas := (1L,h)::!missingdeltas
+		  end
 	  end
 	with Not_found -> ()
       end
@@ -742,6 +772,7 @@ and validate_block_of_node newnode thyroot sigroot csm tinf blkhght h blkdel cs 
 	match valid_block thytree sigtree blkhght csm tinf blk lmedtm burned with
 	| Some(tht2,sigt2) ->
 	    vs := ValidBlock;
+	    sync_last_height := blkhght;
 	    Hashtbl.remove tovalidate h;
 	    processing_deltas := h::!processing_deltas;
 	    DbBlockDelta.dbput h blkdel;
@@ -835,6 +866,7 @@ and process_new_header_ab h hh blkh1 blkhd1 blkhs1 a initialization knownvalid p
 		      match valid_block thytree sigtree blkhght csm currtinfo blk lmedtm burned with
 		      | Some(tht2,sigt2) ->
 			  validated := ValidBlock;
+			  sync_last_height := blkhght;
 			  update_theories thyroot thytree tht2;
 			  update_signatures sigroot sigtree sigt2
 		      | None -> (*** should not have happened, delete it from the database and request it again. ***)
@@ -959,6 +991,7 @@ and possibly_handle_delayed_delta h bh n =
 	      match valid_block thytree sigtree blkhght csm currtinfo (bh,blkdel) lmedtm burned with
 	      | Some(tht2,sigt2) ->
 		  vsp := ValidBlock;
+		  sync_last_height := blkhght;
 		  update_theories thyroot thytree tht2;
 		  update_signatures sigroot sigtree sigt2;
 		  DbBlockDelta.dbput h blkdel;
@@ -1074,12 +1107,11 @@ let initblocktree () =
   lastcheckpointnode := !genesisblocktreenode;
   Hashtbl.add blkheadernode None !genesisblocktreenode;
   try
-    if !missingheaders = [] then
+    if !missingheaders = [] && !missingdeltas = [] then
       ignore (get_bestnode true)
     else
       begin
-	log_string (Printf.sprintf "%d headers are missing.\n" (List.length !missingheaders));
-	find_and_send_requestmissingheaders()
+	log_string (Printf.sprintf "There are missing blocks.\n")
       end
   with
   | _ -> ();;
@@ -1197,7 +1229,7 @@ Hashtbl.add msgtype_handler Headers
 	  end
 	else
 	  begin
-	    missingheaders := List.filter (fun mh -> not (mh = h)) !missingheaders; (*** remove from missing list ***)
+	    missingheaders := List.filter (fun (_,mh) -> not (mh = h)) !missingheaders; (*** remove from missing list ***)
 	    try
 	      let a = blockheader_stakeasset bhd in
 	      let validsofar = ref true in
@@ -1253,6 +1285,38 @@ Hashtbl.add msgtype_handler Headers
 		try
 		  let (pob,_) = find_dalilcoin_header_ltc_burn h in
 		  process_new_header_ab h (hashval_hexstring h) bh bhd bhs a false false pob;
+		  begin (** update hash tables and put missing children onto missing list, if they aren't there **)
+		    if not (Hashtbl.mem headersrecknown h) then
+		      begin
+			match bhd.prevblockhash with
+			| None -> ()
+			| Some(pbh,_) ->
+			    try
+			      let pblkh = Hashtbl.find headersrecknown pbh in
+			      Hashtbl.add headersrecknown h (Int64.add 1L pblkh)
+			    with Not_found -> ()
+		      end;
+		    try
+		      let blkh = Hashtbl.find headersrecknown h in
+		      begin
+			if not (DbBlockDelta.dbexists h) then
+			  begin
+			    try
+			      ignore (List.find (fun (_,j) -> j = h) !missingdeltas)
+			    with Not_found ->
+			      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(blkh,h)] !missingdeltas
+			  end
+		      end;
+		      let blkh2 = Int64.add 1L blkh in
+		      List.iter
+			(fun k ->
+			  try
+			    ignore (List.find (fun (_,j) -> j = k) !missingheaders)
+			  with Not_found ->
+			    missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(blkh2,k)] !missingheaders)
+			(Hashtbl.find_all blocksucc h)
+		    with Not_found -> ()
+		  end;
 		  begin
 		    let gbdi = int_of_msgtype GetBlockdelta in
 		    if Hashtbl.mem cs.rinv (gbdi,h) && not (recently_requested (gbdi,h) tm cs.invreq) && not (DbBlockDelta.dbexists h) then

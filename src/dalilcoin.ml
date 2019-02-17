@@ -245,17 +245,6 @@ let initnetwork sout =
   (*** empty placeholder for now ***)
   ();;
 
-let missingheaders_th : Thread.t option ref = ref None;;
-
-let missingheadersthread () = (*** every five minutes check if there are headers known to be missing and if so try to request them ***)
-  while true do
-    try
-      if not (!missingheaders = []) then find_and_send_requestmissingheaders();
-      Thread.delay 300.0
-    with _ ->
-      Thread.delay 300.0
-  done;;
-
 let ltc_listener_th : Thread.t option ref = ref None;;
 
 let ltc_init sout =
@@ -2555,7 +2544,6 @@ let initialize () =
       end;
     Printf.fprintf sout "Initializing blocktree\n"; flush sout;
     initblocktree();
-    missingheaders_th := Some(Thread.create missingheadersthread ());
     begin
       let pdf = Filename.concat datadir "processingdeltas" in
       if Sys.file_exists pdf then

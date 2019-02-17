@@ -1,5 +1,5 @@
 (* Copyright (c) 2015-2016 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -20,6 +20,7 @@ let shutdown_close s =
     with _ -> ()
 
 let missingheaders = ref [];;
+let missingdeltas = ref [];;
 
 let netblkh : int64 ref = ref 0L
 
@@ -535,6 +536,76 @@ let network_time () =
     let mskew = List.nth !offsets m in
     (Int64.add mytm (Int64.of_int mskew),mskew)
 
+let sync_last_height = ref 0L
+
+let recently_requested (i,h) nw ir =
+  try
+    let tm = Hashtbl.find ir (i,h) in
+    if nw -. tm < 991.0 then
+      true
+    else
+      (Hashtbl.remove ir (i,h);
+       false)
+  with Not_found -> false
+
+let recently_sent (i,h) nw isnt =
+  try
+    let tm = Hashtbl.find isnt (i,h) in
+    if nw -. tm < 353.0 then
+      true
+    else
+      (Hashtbl.remove isnt (i,h);
+       false)
+  with Not_found -> false
+  
+let find_and_send_requestmissingblocks cs =
+  let i = int_of_msgtype GetHeaders in
+  let ii = int_of_msgtype Headers in
+  let di = int_of_msgtype GetBlockdelta in
+  let dii = int_of_msgtype Blockdelta in
+  let tm = Unix.time() in
+  if not cs.banned then
+    begin
+      let rhl = ref [] in
+      let mhl = ref !missingheaders in
+      let j = ref 0 in
+      while (!j < 256 && not (!mhl = [])) do
+	match !mhl with
+	| [] -> raise Exit (*** impossible ***)
+	| (blkh,h)::mhr ->
+	    mhl := mhr;
+	    if (((blkh >= cs.first_header_height) && (blkh <= cs.last_height)) || Hashtbl.mem cs.rinv (ii,h)) && not (recently_requested (i,h) tm cs.invreq) then
+	      begin
+		incr j;
+		rhl := h::!rhl
+	      end
+      done;
+      if not (!rhl = []) then
+	begin
+	  let msb = Buffer.create 100 in
+	  seosbf (seo_int8 seosb !j (msb,None));
+	  List.iter
+	    (fun h ->
+	      Hashtbl.replace cs.invreq (i,h) tm;
+	      seosbf (seo_hashval seosb h (msb,None)))
+	    !rhl;
+	  let ms = Buffer.contents msb in
+	  let _ (* mh *) = queue_msg cs GetHeaders ms in
+	  ()
+	end;
+      match !missingdeltas with
+      | ((blkh,h)::_) ->
+	  if (((blkh >= cs.first_full_height) && (blkh <= cs.last_height)) || Hashtbl.mem cs.rinv (dii,h)) && not (recently_requested (di,h) tm cs.invreq) then
+	    begin
+	      let msb = Buffer.create 100 in
+	      seosbf (seo_hashval seosb h (msb,None));
+	      let ms = Buffer.contents msb in
+	      Hashtbl.replace cs.invreq (di,h) tm;
+	      ignore (queue_msg cs GetBlockdelta ms)
+	    end
+      | _ -> ()
+    end;;
+
 let handle_msg replyto mt sin sout cs mh m =
   match replyto with
   | Some(h) ->
@@ -575,7 +646,7 @@ let handle_msg replyto mt sin sout cs mh m =
 			   (seo_prod6 seo_string seo_int64 seo_int64 seo_int64 seo_bool (seo_option (seo_prod seo_int64 seo_hashval)))
 			   seosb
 			   ((minvers,0L,mytm,addr_from,myaddr(),!this_nodes_nonce),
-			    (Version.useragent,0L,0L,0L,true,None))
+			    (Version.useragent,0L,0L,!sync_last_height,true,None))
 			   (vm,None));
 		      ignore (queue_msg cs Version (Buffer.contents vm));
 		      cs.handshakestep <- 3;
@@ -599,7 +670,8 @@ let handle_msg replyto mt sin sout cs mh m =
 		      cs.first_full_height <- ffh;
 		      cs.last_height <- lh;
 		      addknownpeer mytm addr_from;
-		      !send_inv_fn 32 sout cs
+		      !send_inv_fn 32 sout cs;
+		      find_and_send_requestmissingblocks cs;
 		    end
 		  else
 		    raise (ProtocolViolation "Handshake failed")
@@ -613,7 +685,8 @@ let handle_msg replyto mt sin sout cs mh m =
 		    let mytm = Int64.of_float (Unix.time()) in
 		    cs.handshakestep <- 5;
 		    addknownpeer mytm cs.addrfrom;
-		    !send_inv_fn 32 sout cs
+		    !send_inv_fn 32 sout cs;
+		    find_and_send_requestmissingblocks cs;
 		  end
 		else
 		  raise (ProtocolViolation("Unexpected Verack"))
@@ -621,16 +694,20 @@ let handle_msg replyto mt sin sout cs mh m =
 	  | _ -> raise (ProtocolViolation "Handshake failed")
 	end
       else
-      try
-	let f = Hashtbl.find msgtype_handler mt in
 	try
-	  f(sin,sout,cs,m)
-	with e -> log_string (Printf.sprintf "Call to handler for message type %s raised %s\n" (string_of_msgtype mt) (Printexc.to_string e))
-      with Not_found ->
-	match mt with
-	| Version -> raise (ProtocolViolation "Version message after handshake")
-	| Verack -> raise (ProtocolViolation "Verack message after handshake")
-	| _ -> raise (Failure ("No handler found for message type " ^ (string_of_msgtype mt)))
+	  begin
+	    let f = Hashtbl.find msgtype_handler mt in
+	    try
+	      f(sin,sout,cs,m);
+	    with e ->
+	      log_string (Printf.sprintf "Call to handler for message type %s raised %s\n" (string_of_msgtype mt) (Printexc.to_string e));
+	  end;
+	  find_and_send_requestmissingblocks cs;
+	with Not_found ->
+	  match mt with
+	  | Version -> raise (ProtocolViolation "Version message after handshake")
+	  | Verack -> raise (ProtocolViolation "Verack message after handshake")
+	  | _ -> raise (Failure ("No handler found for message type " ^ (string_of_msgtype mt)))
 
 let connlistener (s,sin,sout,gcs) =
   try
@@ -785,7 +862,7 @@ let initialize_conn_2 n s sin sout =
   let tm = Unix.time() in
   let fhh = 0L in
   let ffh = 0L in
-  let lh = 0L in
+  let lh = !sync_last_height in
   let relay = true in
   let lastchkpt = None in
   let vm = Buffer.create 100 in
@@ -893,26 +970,6 @@ let onionlistener l =
     | _ -> ()
   done
 
-let recently_requested (i,h) nw ir =
-  try
-    let tm = Hashtbl.find ir (i,h) in
-    if nw -. tm < 991.0 then
-      true
-    else
-      (Hashtbl.remove ir (i,h);
-       false)
-  with Not_found -> false
-
-let recently_sent (i,h) nw isnt =
-  try
-    let tm = Hashtbl.find isnt (i,h) in
-    if nw -. tm < 353.0 then
-      true
-    else
-      (Hashtbl.remove isnt (i,h);
-       false)
-  with Not_found -> false
-  
 let netseeker_loop () =
   while true do
     try
@@ -1048,49 +1105,6 @@ let find_and_send_requestdata mt h =
     if not !alrreq then raise Not_found
   with Exit ->
     ();;
-
-let find_and_send_requestmissingheaders () =
-  let i = int_of_msgtype GetHeaders in
-  let ii = int_of_msgtype Headers in
-  let tm = Unix.time() in
-  try
-    List.iter
-      (fun (lth,sth,(fd,sin,sout,gcs)) ->
-	match !gcs with
-	| Some(cs) ->
-	    if not cs.banned then
-	      begin
-		let rhl = ref [] in
-		let mhl = ref !missingheaders in
-		let j = ref 0 in
-		while (!j < 256 && not (!mhl = [])) do
-		  match !mhl with
-		  | [] -> raise Exit (*** impossible ***)
-		  | h::mhr ->
-		      mhl := mhr;
-		      if Hashtbl.mem cs.rinv (ii,h) && not (recently_requested (i,h) tm cs.invreq) then
-			begin
-			  incr j;
-			  rhl := h::!rhl
-			end
-		done;
-		if not (!rhl = []) then
-		  begin
-		    let msb = Buffer.create 100 in
-		    seosbf (seo_int8 seosb !j (msb,None));
-		    List.iter
-		      (fun h ->
-			Hashtbl.replace cs.invreq (i,h) tm;
-			seosbf (seo_hashval seosb h (msb,None)))
-		      !rhl;
-		    let ms = Buffer.contents msb in
-		    let _ (* mh *) = queue_msg cs GetHeaders ms in
-		    ()
-		  end
-	      end
-	| None -> ())
-      !netconns
-  with Exit -> ();;
 
 let broadcast_inv tosend =
   let invmsg = Buffer.create 10000 in
