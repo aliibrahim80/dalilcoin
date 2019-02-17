@@ -559,52 +559,54 @@ let recently_sent (i,h) nw isnt =
   with Not_found -> false
   
 let find_and_send_requestmissingblocks cs =
-  let i = int_of_msgtype GetHeaders in
-  let ii = int_of_msgtype Headers in
-  let di = int_of_msgtype GetBlockdelta in
-  let dii = int_of_msgtype Blockdelta in
-  let tm = Unix.time() in
-  if not cs.banned then
-    begin
-      let rhl = ref [] in
-      let mhl = ref !missingheaders in
-      let j = ref 0 in
-      while (!j < 256 && not (!mhl = [])) do
-	match !mhl with
-	| [] -> raise Exit (*** impossible ***)
-	| (blkh,h)::mhr ->
-	    mhl := mhr;
-	    if (((blkh >= cs.first_header_height) && (blkh <= cs.last_height)) || Hashtbl.mem cs.rinv (ii,h)) && not (recently_requested (i,h) tm cs.invreq) then
+  if not (!missingheaders = [] && !missingdeltas = []) then
+    let i = int_of_msgtype GetHeader in
+    let ii = int_of_msgtype Headers in
+    let di = int_of_msgtype GetBlockdelta in
+    let dii = int_of_msgtype Blockdelta in
+    let tm = Unix.time() in
+    if not cs.banned then
+      begin
+	let rhl = ref [] in
+	let mhl = ref !missingheaders in
+	let j = ref 0 in
+	while (!j < 255 && not (!mhl = [])) do
+	  match !mhl with
+	  | [] -> raise Exit (*** impossible ***)
+	  | (blkh,h)::mhr ->
+	      mhl := mhr;
+	      Printf.printf "putting into invreq %d %s %f\n" i (hashval_hexstring h) tm;
+	      if (((blkh >= cs.first_header_height) && (blkh <= cs.last_height)) || Hashtbl.mem cs.rinv (ii,h)) && not (recently_requested (i,h) tm cs.invreq) then
+		begin
+		  incr j;
+		  rhl := h::!rhl
+		end
+	done;
+	if not (!rhl = []) then
+	  begin
+	    let msb = Buffer.create 100 in
+	    seosbf (seo_int8 seosb !j (msb,None));
+	    List.iter
+	      (fun h ->
+		Hashtbl.replace cs.invreq (i,h) tm;
+		seosbf (seo_hashval seosb h (msb,None)))
+	      !rhl;
+	    let ms = Buffer.contents msb in
+	    let _ (* mh *) = queue_msg cs GetHeaders ms in
+	    ()
+	  end;
+	match !missingdeltas with
+	| ((blkh,h)::_) ->
+	    if (((blkh >= cs.first_full_height) && (blkh <= cs.last_height)) || Hashtbl.mem cs.rinv (dii,h)) && not (recently_requested (di,h) tm cs.invreq) then
 	      begin
-		incr j;
-		rhl := h::!rhl
+		let msb = Buffer.create 100 in
+		seosbf (seo_hashval seosb h (msb,None));
+		let ms = Buffer.contents msb in
+		Hashtbl.replace cs.invreq (di,h) tm;
+		ignore (queue_msg cs GetBlockdelta ms)
 	      end
-      done;
-      if not (!rhl = []) then
-	begin
-	  let msb = Buffer.create 100 in
-	  seosbf (seo_int8 seosb !j (msb,None));
-	  List.iter
-	    (fun h ->
-	      Hashtbl.replace cs.invreq (i,h) tm;
-	      seosbf (seo_hashval seosb h (msb,None)))
-	    !rhl;
-	  let ms = Buffer.contents msb in
-	  let _ (* mh *) = queue_msg cs GetHeaders ms in
-	  ()
-	end;
-      match !missingdeltas with
-      | ((blkh,h)::_) ->
-	  if (((blkh >= cs.first_full_height) && (blkh <= cs.last_height)) || Hashtbl.mem cs.rinv (dii,h)) && not (recently_requested (di,h) tm cs.invreq) then
-	    begin
-	      let msb = Buffer.create 100 in
-	      seosbf (seo_hashval seosb h (msb,None));
-	      let ms = Buffer.contents msb in
-	      Hashtbl.replace cs.invreq (di,h) tm;
-	      ignore (queue_msg cs GetBlockdelta ms)
-	    end
-      | _ -> ()
-    end;;
+	| _ -> ()
+      end;;
 
 let handle_msg replyto mt sin sout cs mh m =
   match replyto with

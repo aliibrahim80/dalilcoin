@@ -28,7 +28,8 @@ let artificialledgerroot = ref None;;
 let artificialbestblock = ref None;;
 
 let recentheaders : (hashval,unit) Hashtbl.t = Hashtbl.create 1000;;
-let headersrecknown : (hashval,int64) Hashtbl.t = Hashtbl.create 1000;;
+let headerheight : (hashval,int64) Hashtbl.t = Hashtbl.create 1000;;
+let headersrecknown : (hashval,unit) Hashtbl.t = Hashtbl.create 1000;;
 let deltasrecknown : (hashval,unit) Hashtbl.t = Hashtbl.create 1000;;
 let blockprev : (hashval,hashval option) Hashtbl.t = Hashtbl.create 1000;;
 let blocksucc : (hashval,hashval) Hashtbl.t = Hashtbl.create 1000;;
@@ -305,28 +306,26 @@ let initialize_dlc_from_ltc lblkh =
 	  begin
 	    match Hashtbl.find blockprev h with
 	    | Some(k) ->
+		let blkh = Hashtbl.find headerheight k in
+		let blkh2 = Int64.add 1L blkh in
 		if DbBlockHeader.dbexists h then
 		  begin
 		    try
-		      Hashtbl.add headersrecknown h (Int64.add 1L (Hashtbl.find headersrecknown k))
+		      if Hashtbl.mem headersrecknown k then Hashtbl.add headersrecknown h ()
 		    with Not_found -> ()
 		  end
 		else
 		  begin
 		    Hashtbl.add missingheader h ();
-		    try
-		      let blkh = Hashtbl.find headersrecknown k in
-		      missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(blkh,h)] !missingheaders
-		    with Not_found -> ()
+		    missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(blkh2,h)] !missingheaders;
 		  end;
 		if DbBlockDelta.dbexists h then
 		  begin
 		    try
-		      let blkh = Hashtbl.find headersrecknown k in
-		      if Hashtbl.mem deltasrecknown k then
+		      if Hashtbl.mem headersrecknown h && Hashtbl.mem deltasrecknown k then
 			begin
 			  Hashtbl.add deltasrecknown h ();
-			  sync_last_height := max !sync_last_height (Int64.add 1L blkh);
+			  sync_last_height := max !sync_last_height blkh2;
 			end
 		    with Not_found -> ()
 		  end
@@ -334,14 +333,14 @@ let initialize_dlc_from_ltc lblkh =
 		  begin
 		    Hashtbl.add missingdelta h ();
 		    try
-		      let blkh = Hashtbl.find headersrecknown k in
-		      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(blkh,h)] !missingdeltas
+		      if DbBlockHeader.dbexists h then
+			missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(blkh2,h)] !missingdeltas
 		    with Not_found -> ()
 		  end
 	    | None ->
 		if DbBlockHeader.dbexists h then
 		  begin
-		    Hashtbl.add headersrecknown h 1L;
+		    Hashtbl.add headersrecknown h ();
 		    if DbBlockDelta.dbexists h then
 		      begin
 			Hashtbl.add deltasrecknown h ();
@@ -356,7 +355,8 @@ let initialize_dlc_from_ltc lblkh =
 		if not (DbBlockDelta.dbexists h) then
 		  begin
 		    Hashtbl.add missingdelta h ();
-		    missingdeltas := (1L,h)::!missingdeltas
+		    if DbBlockHeader.dbexists h then
+		      missingdeltas := (1L,h)::!missingdeltas
 		  end
 	  end
 	with Not_found -> ()
@@ -369,10 +369,11 @@ let initialize_dlc_from_ltc lblkh =
 	try
 	  let (burned,lprevtx,dnxt) = DbLtcBurnTx.dbget ltxh in
 	  if lprevtx = (0l,0l,0l,0l,0l,0l,0l,0l) then
-	    Hashtbl.add blockprev dnxt None
+	    (Hashtbl.add blockprev dnxt None; Hashtbl.add headerheight dnxt 1L)
 	  else
 	    blockstats_ltx_2 lprevtx dnxt;
 	  Hashtbl.add blockprev dnxt2 (Some(dnxt));
+	  Hashtbl.add headerheight dnxt2 (Int64.add 1L (Hashtbl.find headerheight dnxt));
 	  Hashtbl.add blocksucc dnxt dnxt2;
 	  blockstats dnxt
 	with Not_found ->
@@ -386,7 +387,7 @@ let initialize_dlc_from_ltc lblkh =
 	try
 	  let (burned,lprevtx,dnxt) = DbLtcBurnTx.dbget ltxh in
 	  if lprevtx = (0l,0l,0l,0l,0l,0l,0l,0l) then
-	    Hashtbl.add blockprev dnxt None
+	    (Hashtbl.add blockprev dnxt None; Hashtbl.add headerheight dnxt 1L)
 	  else
 	    blockstats_ltx_2 lprevtx dnxt;
 	  blockstats dnxt
@@ -414,7 +415,7 @@ let initialize_dlc_from_ltc lblkh =
 	      if not (Hashtbl.mem blkheadernode (Some(bh))) then
 		begin
 		  let (bhd,_) = DbBlockHeader.dbget bh in
-		  let blkh = Hashtbl.find headersrecknown bh in
+		  let blkh = Hashtbl.find headerheight bh in
 		  let pob = Poburn(lbh,ltx,ltm,burned) in
 		  let par = try Some(Hashtbl.find blkheadernode (fstohash bhd.prevblockhash)) with Not_found -> None in
 		  let newcsm = poburn_stakemod pob in
@@ -1173,6 +1174,33 @@ let deserialize_exc_protect cs f =
 
 Hashtbl.add msgtype_handler Headers
   (fun (sin,sout,cs,ms) ->
+    let update_missingheaders h bhd =
+      begin (** update hash tables and put missing children onto missing list, if they aren't there **)
+	if not (Hashtbl.mem headersrecknown h) then
+	  begin
+	    match bhd.prevblockhash with
+	    | None -> ()
+	    | Some(pbh,_) ->
+		try
+		  let pblkh = Hashtbl.find headerheight pbh in
+		  Hashtbl.add headerheight h (Int64.add 1L pblkh);
+		  if Hashtbl.mem headersrecknown pbh then Hashtbl.add headersrecknown h ()
+		with Not_found -> ()
+	  end;
+	try
+	  let blkh = Hashtbl.find headerheight h in
+	  begin
+	    if not (DbBlockDelta.dbexists h) then
+	      begin
+		try
+		  ignore (List.find (fun (_,j) -> j = h) !missingdeltas)
+		with Not_found ->
+		  missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(blkh,h)] !missingdeltas
+	      end
+	  end;
+	with Not_found -> ()
+      end;
+    in
     let c = ref (ms,String.length ms,None,0,0) in
     let (n,cn) = sei_int8 seis !c in (*** peers can request at most 255 headers at a time **)
     log_string (Printf.sprintf "get %d Headers\n" n);
@@ -1199,7 +1227,9 @@ Hashtbl.add msgtype_handler Headers
 	else if !Config.ltcoffline then
 	  begin
 	    log_string (Printf.sprintf "Since ltcoffline is true, just accepting header %s\n" (hashval_hexstring h));
+	    missingheaders := List.filter (fun (_,mh) -> not (mh = h)) !missingheaders; (*** remove from missing list ***)
 	    DbBlockHeader.dbput h bh;
+	    update_missingheaders h bhd;
 	    match bhd.prevblockhash with
 	    | None -> ()
 	    | Some(pbh,_) ->
@@ -1266,38 +1296,7 @@ Hashtbl.add msgtype_handler Headers
 		try
 		  let (pob,_) = find_dalilcoin_header_ltc_burn h in
 		  process_new_header_ab h (hashval_hexstring h) bh bhd bhs a false false pob;
-		  begin (** update hash tables and put missing children onto missing list, if they aren't there **)
-		    if not (Hashtbl.mem headersrecknown h) then
-		      begin
-			match bhd.prevblockhash with
-			| None -> ()
-			| Some(pbh,_) ->
-			    try
-			      let pblkh = Hashtbl.find headersrecknown pbh in
-			      Hashtbl.add headersrecknown h (Int64.add 1L pblkh)
-			    with Not_found -> ()
-		      end;
-		    try
-		      let blkh = Hashtbl.find headersrecknown h in
-		      begin
-			if not (DbBlockDelta.dbexists h) then
-			  begin
-			    try
-			      ignore (List.find (fun (_,j) -> j = h) !missingdeltas)
-			    with Not_found ->
-			      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(blkh,h)] !missingdeltas
-			  end
-		      end;
-		      let blkh2 = Int64.add 1L blkh in
-		      List.iter
-			(fun k ->
-			  try
-			    ignore (List.find (fun (_,j) -> j = k) !missingheaders)
-			  with Not_found ->
-			    missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(blkh2,k)] !missingheaders)
-			(Hashtbl.find_all blocksucc h)
-		    with Not_found -> ()
-		  end;
+		  update_missingheaders h bhd;
 		  begin
 		    let gbdi = int_of_msgtype GetBlockdelta in
 		    if Hashtbl.mem cs.rinv (gbdi,h) && not (recently_requested (gbdi,h) tm cs.invreq) && not (DbBlockDelta.dbexists h) then
@@ -1466,69 +1465,85 @@ Hashtbl.add msgtype_handler GetBlockdelta
 
 Hashtbl.add msgtype_handler Blockdelta
   (fun (sin,sout,cs,ms) ->
-      let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
-      let i = int_of_msgtype GetBlockdelta in
-      if not (DbBlockDelta.dbexists h) then (*** if we already have it, abort ***)
-	begin
-	  if !Config.ltcoffline then
-	    begin
-	      log_string (Printf.sprintf "Since ltcoffline is true, just accepting delta %s\n" (hashval_hexstring h));
-	      let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
-	      DbBlockDelta.dbput h blkdel
-	    end
-	  else
-	    try
-	      let tm = Unix.time() in
-	      Hashtbl.remove cs.invreq (i,h);
-	      let BlocktreeNode(par,_,_,_,_,_,_,_,_,_,_,vs,_,chlr) as newnode =
-		try
-		  Hashtbl.find blkheadernode (Some(h))
-		with Not_found ->
-		  create_new_node h true
-	      in
-	      match !vs with
-	      | Waiting(tm,None) ->
-		  begin
-		    match par with
-		    | None -> (*** genesis node, parent implicitly valid ***)
-			let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
-			validate_block_of_node newnode None None !genesisstakemod !genesistarget 1L h blkdel cs
-		    | Some(BlocktreeNode(_,_,_,thyroot,sigroot,_,csm,tinf,_,_,blkhght,vsp,_,_)) ->
-			match !vsp with
-			| InvalidBlock -> raise Not_found
-			| Waiting(_,_) ->
+    let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
+    let update_recknown () =
+      try
+	let blkh = Hashtbl.find headerheight h in
+	if Hashtbl.mem headersrecknown h then
+	  begin
+	    match Hashtbl.find blockprev h with
+	    | Some(k) -> if Hashtbl.mem deltasrecknown k then (Hashtbl.add deltasrecknown h (); sync_last_height := max !sync_last_height (Int64.add 1L blkh))
+	    | None -> Hashtbl.add deltasrecknown h (); sync_last_height := max !sync_last_height 1L
+	  end
+      with Not_found -> ()
+    in
+    let i = int_of_msgtype GetBlockdelta in
+    if not (DbBlockDelta.dbexists h) then (*** if we already have it, abort ***)
+      begin
+	if !Config.ltcoffline then
+	  begin
+	    log_string (Printf.sprintf "Since ltcoffline is true, just accepting delta %s\n" (hashval_hexstring h));
+	    let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
+	    DbBlockDelta.dbput h blkdel;
+	    missingdeltas := List.filter (fun (_,mh) -> not (mh = h)) !missingdeltas; (*** remove from missing list ***)
+	    update_recknown ()
+	  end
+	else
+	  try
+	    let tm = Unix.time() in
+	    Hashtbl.remove cs.invreq (i,h);
+	    let BlocktreeNode(par,_,_,_,_,_,_,_,_,_,_,vs,_,chlr) as newnode =
+	      try
+		Hashtbl.find blkheadernode (Some(h))
+	      with Not_found ->
+		create_new_node h true
+	    in
+	    match !vs with
+	    | Waiting(tm,None) ->
+		begin
+		  match par with
+		  | None -> (*** genesis node, parent implicitly valid ***)
+		      let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
+		      validate_block_of_node newnode None None !genesisstakemod !genesistarget 1L h blkdel cs
+		  | Some(BlocktreeNode(_,_,_,thyroot,sigroot,_,csm,tinf,_,_,blkhght,vsp,_,_)) ->
+		      match !vsp with
+		      | InvalidBlock -> raise Not_found
+		      | Waiting(_,_) ->
+			  let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
+			  vs := Waiting(tm,Some(blkdel,cs)) (*** wait for the parent to be validated; remember the connstate in case we decide to ban it for giving a bad block delta ***)
+		      | ValidBlock -> (*** validate now, and if valid check if children nodes are waiting to be validated ***)
+			  begin
 			    let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
-			    vs := Waiting(tm,Some(blkdel,cs)) (*** wait for the parent to be validated; remember the connstate in case we decide to ban it for giving a bad block delta ***)
-			| ValidBlock -> (*** validate now, and if valid check if children nodes are waiting to be validated ***)
-			    begin
-			      let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
-			      validate_block_of_node newnode thyroot sigroot csm tinf blkhght h blkdel cs
-			    end
-		  end
-	      | ValidBlock -> (*** for some reason we already think the block is valid even though we did not have the delta in the database; while this probably should not happen, just revalidate it and save into db ***)
-		  begin
-		    match par with
-		    | None -> (*** genesis node, parent implicitly valid ***)
-			let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
-			validate_block_of_node newnode None None !genesisstakemod !genesistarget 1L h blkdel cs
-		    | Some(BlocktreeNode(_,_,_,thyroot,sigroot,_,csm,tinf,_,_,blkhght,vsp,_,_)) ->
-			match !vsp with
-			| InvalidBlock -> raise Not_found
-			| Waiting(_,_) ->
+			    validate_block_of_node newnode thyroot sigroot csm tinf blkhght h blkdel cs
+			  end
+		end
+	    | ValidBlock -> (*** for some reason we already think the block is valid even though we did not have the delta in the database; while this probably should not happen, just revalidate it and save into db ***)
+		begin
+		  match par with
+		  | None -> (*** genesis node, parent implicitly valid ***)
+		      let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
+		      validate_block_of_node newnode None None !genesisstakemod !genesistarget 1L h blkdel cs
+		  | Some(BlocktreeNode(_,_,_,thyroot,sigroot,_,csm,tinf,_,_,blkhght,vsp,_,_)) ->
+		      match !vsp with
+		      | InvalidBlock -> raise Not_found
+		      | Waiting(_,_) ->
+			  let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
+			  vs := Waiting(tm,Some(blkdel,cs)) (*** wait for the parent to be validated; remember the connstate in case we decide to ban it for giving a bad block delta ***)
+		      | ValidBlock -> (*** validate now, and if valid check if children nodes are waiting to be validated ***)
+			  begin
 			    let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
-			    vs := Waiting(tm,Some(blkdel,cs)) (*** wait for the parent to be validated; remember the connstate in case we decide to ban it for giving a bad block delta ***)
-			| ValidBlock -> (*** validate now, and if valid check if children nodes are waiting to be validated ***)
-			    begin
-			      let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
-			      validate_block_of_node newnode thyroot sigroot csm tinf blkhght h blkdel cs
-			    end
-		  end
-	      | _ -> ()
-	    with e ->
-	      let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
-	      if not (Hashtbl.mem delayed_deltas h) then Hashtbl.add delayed_deltas h blkdel;
-	      log_string (Printf.sprintf "Delaying handling Blockdelta %s: %s\n" (hashval_hexstring h) (Printexc.to_string e))
-	end);;
+			    validate_block_of_node newnode thyroot sigroot csm tinf blkhght h blkdel cs;
+			    missingdeltas := List.filter (fun (_,mh) -> not (mh = h)) !missingdeltas; (*** remove from missing list ***)
+			    update_recknown ()
+			  end
+		end
+	    | _ -> ()
+	  with e ->
+	    let (blkdel,_) = deserialize_exc_protect cs (fun () -> sei_blockdelta seis r) in
+	    if not (Hashtbl.mem delayed_deltas h) then Hashtbl.add delayed_deltas h blkdel;
+	    log_string (Printf.sprintf "Delaying handling Blockdelta %s: %s\n" (hashval_hexstring h) (Printexc.to_string e));
+	    missingdeltas := List.filter (fun (_,mh) -> not (mh = h)) !missingdeltas; (*** remove from missing list ***)
+      end);;
 
 Hashtbl.add msgtype_handler GetSTx
     (fun (sin,sout,cs,ms) ->
