@@ -13,6 +13,7 @@ let stringconfigvars = [
 ("prompt",fun x -> Config.prompt := x);
 ("rpcuser",fun x -> Config.rpcuser := x);
 ("rpcpass",fun x -> Config.rpcpass := x);
+("ltcrpcip",fun x -> Config.ltcrpcip := x);
 ("ltcrpcuser",fun x -> Config.ltcrpcuser := x);
 ("ltcrpcpass",fun x -> Config.ltcrpcpass := x);
 ("curl",fun x -> Config.curl := x)
@@ -56,6 +57,7 @@ let cantsoffraenksconfigvars = [
 let stringoptionconfigvars = [
 ("ip",fun x -> Config.ip := x);
 ("onion",fun x -> Config.onion := x);
+("ltcrpconion",fun x -> Config.ltcrpconion := x);
 ("randomseed",fun x -> Config.randomseed := x);
 ("offlinestakerewardslock",fun x -> Config.offlinestakerewardslock := x);
 ];;

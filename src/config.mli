@@ -20,6 +20,8 @@ val socksport : int ref
 val rpcuser : string ref
 val rpcpass : string ref
 val rpcport : int ref
+val ltcrpcip : string ref
+val ltcrpconion : string option ref
 val ltcrpcport : int ref
 val ltcrpcuser : string ref
 val ltcrpcpass : string ref
