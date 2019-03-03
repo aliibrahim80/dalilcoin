@@ -522,17 +522,6 @@ module DbLtcBurnTx = Dbbasic2 (struct type t = int64 * hashval * hashval let bas
 
 module DbLtcBlock = Dbbasic2 (struct type t = hashval * int64 * int64 * hashval list let basedir = "ltcblock" let seival = sei_prod4 sei_hashval sei_int64 sei_int64 (sei_list sei_hashval) seic let seoval = seo_prod4 seo_hashval seo_int64 seo_int64 (seo_list seo_hashval) seoc end)
 
-let possibly_request_dalilcoin_block h =
-  try
-    (Utils.log_string (Printf.sprintf "possibly request dalilcoin block %s\n" (hashval_hexstring h)));
-    let req = ref false in
-    if not (DbBlockHeader.dbexists h) then
-      (find_and_send_requestdata GetHeader h; req := true)
-    else if not (DbBlockDelta.dbexists h) then
-      (find_and_send_requestdata GetBlockdelta h; req := true);
-  with e ->
-    Utils.log_string (Printf.sprintf "Problem trying to request block %s: %s\n" (hashval_hexstring h) (Printexc.to_string e))
-
 let rec ltc_process_block h =
   let hh = hexstring_hashval h in
   if not (hh = !ltc_oldest_to_consider) && not (DbLtcBlock.dbexists hh) then
@@ -547,26 +536,45 @@ let rec ltc_process_block h =
 	  (fun txh ->
 	    let txhh = hexstring_hashval txh in
 	    let handle burned lprevtx dnxt =
+	      if not (List.mem (hh,txhh) (Hashtbl.find_all blockburns dnxt)) then Hashtbl.add blockburns dnxt (hh,txhh);
 	      if lprevtx = (0l,0l,0l,0l,0l,0l,0l,0l) then
 		begin
 		  (Utils.log_string (Printf.sprintf "Adding burn %s for genesis header %s\n" txh (hashval_hexstring dnxt)));
-		  possibly_request_dalilcoin_block dnxt;
 		  txhhs := txhh :: !txhhs;
-		  genl := (txhh,burned,dnxt)::!genl
+		  genl := (txhh,burned,dnxt)::!genl;
+		  if not (Hashtbl.mem outlinevals (hh,txhh)) then
+		    begin
+		      Hashtbl.add outlinevals (hh,txhh) (dnxt,tm,burned,None,!genesisstakemod,1L);
+		      (*** since the burn is presumably new, add to missing lists; this should never happen since the genesis phase has passed. ***)
+		      missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(1L,dnxt)] !missingheaders;
+		      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(1L,dnxt)] !missingdeltas
+		    end
 		end
 	      else
 		begin
-		  (Utils.log_string (Printf.sprintf "Adding burn %s for header %s\n" txh (hashval_hexstring dnxt)));
 		  DbLtcBurnTx.dbput txhh (burned,lprevtx,dnxt);
-		  possibly_request_dalilcoin_block dnxt;
-		  begin
-		    try
-		      let (_,_,dprev) = DbLtcBurnTx.dbget lprevtx in
-		      possibly_request_dalilcoin_block dprev;
-		      txhhs := txhh :: !txhhs;
-		      succl := (dprev,txhh,burned,dnxt)::!succl
-		    with _ -> ()
-		  end
+		  try
+		    let (_,_,dprev,lprevblkh,_) = ltc_gettransactioninfo (hashval_hexstring lprevtx) in
+		    (Utils.log_string (Printf.sprintf "Adding burn %s for header %s\n" txh (hashval_hexstring dnxt)));
+		    txhhs := txhh :: !txhhs;
+		    succl := (dprev,txhh,burned,dnxt)::!succl;
+		    if not (Hashtbl.mem outlinevals (hh,txhh)) then
+		      begin
+			try
+			  match lprevblkh with
+			  | Some(lprevblkh) ->
+			      let lprevblkh = hexstring_hashval lprevblkh in
+			      let (_,_,_,_,_,dhght) = Hashtbl.find outlinevals (lprevblkh,lprevtx) in
+			      let currhght = Int64.add 1L dhght in
+			      Hashtbl.add outlinevals (hh,txhh) (dnxt,tm,burned,Some(lprevblkh,lprevtx),hashpair lprevblkh lprevtx,currhght);
+			      (*** since the burn is presumably new, add to missing lists ***)
+			      missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingheaders;
+			      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingdeltas
+			  | None -> ()
+			with Not_found -> ()
+		      end
+		  with Not_found ->
+		    Utils.log_string (Printf.sprintf "Could not find parent ltc burn tx %s for burn %s for header %s\n" (hashval_hexstring lprevtx) txh (hashval_hexstring dnxt))
 		end
 	    in
 	    try
@@ -575,7 +583,7 @@ let rec ltc_process_block h =
 	    with Not_found ->
 	      begin
 		try
-		  let (burned,lprevtx,dnxt,lblkh,confs) = ltc_gettransactioninfo txh in
+		  let (burned,lprevtx,dnxt,_,_) = ltc_gettransactioninfo txh in
 		  DbLtcBurnTx.dbput txhh (burned,lprevtx,dnxt);
 		  handle burned lprevtx dnxt
 		with Not_found ->

@@ -1,5 +1,5 @@
 (* Copyright (c) 2015-2016 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -621,19 +621,23 @@ let assets_at_address_in_ledger_json raiseempty alpha par ledgerroot blkh =
   let rec assets_at_address_in_ledger_json_history alpha par =
     match par with
     | None -> []
-    | Some(BlocktreeNode(par,_,_,_,_,ledgerroot,_,_,_,_,blkh,_,_,_)) ->
-	handler (fun () -> alpha_hl := Ctre.ctree_addr_cache cache true false alpha (Ctre.CHash(ledgerroot)) None);	
-	match !alpha_hl with
-	| (Some(hl),_) ->
-	    let jhl =
-	      List.map (fun j -> JsonObj([("type",JsonStr("spentasset"));
-					  ("spentheight",JsonNum(Int64.to_string blkh));
-					  ("asset",j)]))
-		(hlist_report_assets_json (Ctre.nehlist_hlist hl))
-	    in
-	    jhl @ assets_at_address_in_ledger_json_history alpha par
-	| (None,z) ->
-	    assets_at_address_in_ledger_json_history alpha par
+    | Some(lbk,ltx) ->
+	try
+	  let (_,_,_,par,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+	  let (_,_,ledgerroot,_,_) = Hashtbl.find validheadervals (lbk,ltx) in
+	  handler (fun () -> alpha_hl := Ctre.ctree_addr_cache cache true false alpha (Ctre.CHash(ledgerroot)) None);	
+	  match !alpha_hl with
+	  | (Some(hl),_) ->
+	      let jhl =
+		List.map (fun j -> JsonObj([("type",JsonStr("spentasset"));
+					    ("spentheight",JsonNum(Int64.to_string blkh));
+					    ("asset",j)]))
+		  (hlist_report_assets_json (Ctre.nehlist_hlist hl))
+	      in
+	      jhl @ assets_at_address_in_ledger_json_history alpha par
+	  | (None,z) ->
+	      assets_at_address_in_ledger_json_history alpha par
+	with Not_found -> []
   in
   let jhl = assets_at_address_in_ledger_json_history alpha par in
   if not (jhl = []) then jal := ("historic",JsonArr(jhl))::!jal;
@@ -771,9 +775,14 @@ let printassets oc =
   | Some(ledgerroot) ->
       printassets_in_ledger oc ledgerroot
   | None ->
-      let (bn,cwl) = get_bestnode true in
-      let BlocktreeNode(_,_,_,_,_,ledgerroot,_,_,_,_,_,_,_,_) = bn in
-      printassets_in_ledger oc ledgerroot
+      try
+	let (b,cwl) = get_bestblock() in
+	match b with
+	| Some(_,lbk,ltx) ->
+	    let (_,_,ledgerroot,_,_) = Hashtbl.find validheadervals (lbk,ltx) in
+	    printassets_in_ledger oc ledgerroot
+	| None -> ()
+      with Not_found -> ()
 
 let get_cants_balances_in_ledger oc ledgerroot =
   try
@@ -1509,11 +1518,7 @@ let dalilcoin_addr_jsoninfo raiseempty alpha pbh ledgerroot blkh =
 			      ("ltcmedtm",JsonNum(Int64.to_string lmedtm));
 			      ("ltcburned",JsonNum(Int64.to_string burned))])
 	  in
-	  try
-	    let BlocktreeNode(par,_,_,_,_,_,_,_,_,_,_,_,_,_) = Hashtbl.find blkheadernode (Some(prevh)) in
-	    (jpbh,par)
-	  with Not_found ->
-	    (jpbh,None)
+	  (jpbh,Some(lblkh,ltxh))
 	end
   in
   let (jal,jwl) = assets_at_address_in_ledger_json raiseempty alpha par ledgerroot blkh in
@@ -1593,7 +1598,11 @@ let query_at_block q pbh ledgerroot blkh =
 	    let tinfo = bhd.tinfo in
 	    let bblkh =
 	      try
-		Some(Int64.sub (node_blockheight (Hashtbl.find blkheadernode (Some(h)))) 1L)
+		match pbh with
+		| Some(_,Poburn(plbk,pltx,_,_)) ->
+		    let (_,_,_,_,_,pblkh) = Hashtbl.find outlinevals (plbk,pltx) in
+		    Some(Int64.add pblkh 1L)
+		| None -> Some(1L)
 	      with Not_found ->
 		None
 	    in
@@ -1726,36 +1735,45 @@ let query q =
   | Some(ledgerroot) ->
       query_at_block q None ledgerroot (-1L)
   | None ->
-      let (bn,cwl) = get_bestnode true in
-      let BlocktreeNode(_,_,pbh,_,_,ledgerroot,_,_,_,_,blkh,_,_,_) = bn in
-      query_at_block q pbh ledgerroot blkh
+      try
+	let (b,cwl) = get_bestblock() in
+	match b with
+	| Some(_,lbk,ltx) ->
+	    let (bh,lmedtm,burned,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+	    let pbh = Some(bh,Poburn(lbk,ltx,lmedtm,burned)) in
+	    let (_,_,ledgerroot,_,_) = Hashtbl.find validheadervals (lbk,ltx) in
+	    query_at_block q pbh ledgerroot blkh
+	| None -> JsonObj([("response",JsonStr("no best block found"))])
+      with Not_found -> JsonObj([("response",JsonStr("no best block found"))])
 
 let query_blockheight findblkh =
   if findblkh < 1L then
     JsonObj([("response",JsonStr("no block at height < 1"))])
   else
-    let (bn,cwl) = get_bestnode true in
-    let BlocktreeNode(par,_,pbh,_,_,ledgerroot,_,_,_,_,blkh,_,_,_) = bn in
-    if findblkh >= blkh then
-      JsonObj([("response",JsonStr("no block at height " ^ (Int64.to_string findblkh)))])
-    else
-      let rec query_blockheight_search par pbhi blkhi =
-	if findblkh = Int64.sub blkhi 1L then
-	  begin
-	    match pbhi with
-	    | Some(h,_) -> query_at_block (hashval_hexstring h) pbh ledgerroot blkh
-	    | None -> JsonObj([("response",JsonStr("error"))])
-	  end
-	else
-	  begin
-	    match par with
-	    | Some(BlocktreeNode(par,_,pbhi,_,_,_,_,_,_,_,blkhi,_,_,_)) ->
-		query_blockheight_search par pbhi blkhi
-	    | None ->
-		JsonObj([("response",JsonStr("failed to find block at height " ^ (Int64.to_string findblkh)))])
-	  end
-      in
-      query_blockheight_search par pbh blkh
+    let (b,cwl) = get_bestblock() in
+    match b with
+    | None -> JsonObj([("response",JsonStr("no block at height " ^ (Int64.to_string findblkh)))])
+    | Some(_,lbk,ltx) ->
+	begin
+	  try
+	    let rec query_blockheight_search lbk ltx =
+	      let (bh,lmedtm,burned,par,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+	      if blkh = findblkh then
+		let (_,_,ledgerroot,_,_) = Hashtbl.find validheadervals (lbk,ltx) in
+		query_at_block (hashval_hexstring bh) (Some(bh,Poburn(lbk,ltx,lmedtm,burned))) ledgerroot blkh
+	      else if blkh < findblkh then
+		JsonObj([("response",JsonStr("no block at height " ^ (Int64.to_string findblkh)))])
+	      else
+		match par with
+		| Some(lbk,ltx) ->
+		    query_blockheight_search lbk ltx
+		| None ->
+		    JsonObj([("response",JsonStr("no block at height " ^ (Int64.to_string findblkh)))])
+	    in
+	    query_blockheight_search lbk ltx
+	  with Not_found ->
+	    JsonObj([("response",JsonStr("no block at height " ^ (Int64.to_string findblkh)))])
+	end
 
 let preassetinfo_report oc u =
   match u with

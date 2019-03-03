@@ -10,6 +10,25 @@ val sync_last_height : int64 ref
 
 val shutdown_close : Unix.file_descr -> unit
 
+(** associate (lbk,ltx) -- litecoin block id, litcoin burn tx id -- with various info.
+ outlinevals associates pair with
+   dalilcoin block id, litecoin median time, litoshis burned, optional previous (lbh,ltx) pair, stake modifier and dalilcoin block height
+   This is all data that can be computed via the ltc blockchain.
+ validheadervals associates pair with (if dalilcoin header has been validated and all previous headers have been validated)
+   targetinfo, timestamp, newledgerroot, newtheorytreeroot, newsignatreeroot
+   This information is all in the header, so the hash table is to make it easily accessible and to record that previous headers have been validated.
+ validblockvals associates pair with () (if dalilcoin block has been validated and all previous blocks have been validated)
+   just to record that we have the block (header and delta) and all have been validated.
+ outlinesucc associates pair with several pairs that point back to this one.
+ blockburns associates a dalilcoin block id with all the (lbh,ltx) burns supporting it.
+    Typically there will be only one such burn, but this cannot be enforced.
+ **)
+val outlinevals : (hashval * hashval,hashval * int64 * int64 * (hashval * hashval) option * hashval * int64) Hashtbl.t
+val validheadervals : (hashval * hashval,big_int * int64 * hashval * hashval option * hashval option) Hashtbl.t
+val validblockvals : (hashval * hashval,unit)  Hashtbl.t
+val outlinesucc : (hashval * hashval,hashval * hashval) Hashtbl.t
+val blockburns : (hashval,hashval * hashval) Hashtbl.t
+
 val missingheaders : (int64 * hashval) list ref
 val missingdeltas : (int64 * hashval) list ref
 

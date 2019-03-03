@@ -65,34 +65,6 @@ let rec pblockchain s n c lr m =
   | None ->
       List.iter (fun (k,_) -> Printf.fprintf s "[extra child, not yet considered best %s]\n" (hashval_hexstring k)) !chl
 
-let print_consensus_warning s cw =
-  match cw with
-  | ConsensusWarningMissing(h,ph,blkh,hh,hd,comm) ->
-      Printf.fprintf s "Missing Block %Ld %s%s%s%s %s\n"
-	blkh (hashval_hexstring h)
-	(match ph with None -> "" | Some(ph) -> Printf.sprintf " (succ of %s)" (hashval_hexstring ph))
-	(if hh then " Have Header" else " Missing Header")
-	(if hd then " Have Delta" else " Missing Delta")
-	comm
-  | ConsensusWarningWaiting(h,ph,blkh,tm,hh,hd) ->
-      Printf.fprintf s "Waiting to Validate Block %Ld %s%s%s%s\n"
-	blkh (hashval_hexstring h)
-	(match ph with None -> "" | Some(ph) -> Printf.sprintf " (succ of %s)" (hashval_hexstring ph))
-	(if hh then " Have Header" else " Missing Header")
-	(if hd then " Have Delta" else " Missing Delta")
-  | ConsensusWarningBlacklist(h,ph,blkh) ->
-      Printf.fprintf s "Blacklisted Block %Ld %s%s\n"
-	blkh (hashval_hexstring h)
-	(match ph with None -> "" | Some(ph) -> Printf.sprintf " (succ of %s)" (hashval_hexstring ph))
-  | ConsensusWarningInvalid(h,ph,blkh) ->
-      Printf.fprintf s "Invalid Block %Ld %s%s\n"
-	blkh (hashval_hexstring h)
-	(match ph with None -> "" | Some(ph) -> Printf.sprintf " (succ of %s)" (hashval_hexstring ph))
-  | ConsensusWarningNoBurn(h) ->
-      Printf.fprintf s "BUG: Mystery unburned block %s\n" (hashval_hexstring h)
-  | ConsensusWarningTerminal ->
-      Printf.fprintf s "No blocks were created in the past week. Dalilcoin has reached terminal status.\nThe only recovery possible for the network is a hard fork.\n"
-	
 let get_bestnode_print_warnings s req =
   let (n,cwl) = get_bestnode req in
   if not (cwl = []) then
@@ -1093,8 +1065,14 @@ let initialize_commands () =
 	    try
 	      let bh = DbBlockHeader.dbget h in
 	      let (bhd,_) = bh in
-	      artificialbestblock := Some(h);
-	      artificialledgerroot := Some(bhd.newledgerroot)
+	      begin
+		try
+		  let (lbk,ltx) = get_burn h in
+		  artificialbestblock := Some(h,lbk,ltx);
+		  artificialledgerroot := Some(bhd.newledgerroot)
+		with Not_found ->
+		  Printf.fprintf oc "Cannot find burn for block.\n"
+	      end
 	    with Not_found ->
 	      Printf.fprintf oc "Unknown block.\n"
 	  end
@@ -1107,7 +1085,7 @@ let initialize_commands () =
 	    try
 	      let bh = DbBlockHeader.dbget h in
 	      let (bhd,_) = bh in
-	      artificialbestblock := Some(h);
+	      artificialbestblock := Some(h,lblk,ltx);
 	      let pob = Poburn(lblk,ltx,0L,0L) in
 	      let newcsm = poburn_stakemod pob in
 	      let par =
@@ -1357,12 +1335,10 @@ let initialize_commands () =
 		  Printf.fprintf oc "+ %s %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
 		else
 		  begin
-		    possibly_request_dalilcoin_block dbh;
 		    Printf.fprintf oc "* %s (missing delta) %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
 		  end
 	      else
 		begin
-		  possibly_request_dalilcoin_block dbh;
 		  Printf.fprintf oc "* %s (missing header) %s %s %Ld %Ld\n" (hashval_hexstring dbh) (hashval_hexstring lbh) (hashval_hexstring ltx) ltm lhght
 		end)
 	    zl)
@@ -2540,7 +2516,7 @@ let initialize () =
       begin
 	if not !Config.daemon then (Printf.fprintf sout "Syncing with ltc\n"; flush sout);
 	ltc_init sout;
-	initialize_dlc_from_ltc !ltc_bestblock;
+	initialize_dlc_from_ltc sout !ltc_bestblock;
       end;
     Printf.fprintf sout "Initializing blocktree\n"; flush sout;
     initblocktree();

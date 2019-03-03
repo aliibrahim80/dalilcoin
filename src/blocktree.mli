@@ -17,36 +17,14 @@ val stxpool : (hashval,stx) Hashtbl.t
 val unconfirmed_spent_assets : (hashval,hashval) Hashtbl.t
 
 val artificialledgerroot : hashval option ref
-val artificialbestblock : hashval option ref
+val artificialbestblock : (hashval * hashval * hashval) option ref
 
-val initialize_dlc_from_ltc : hashval -> unit
+val initialize_dlc_from_ltc : out_channel -> hashval -> unit
 
 val processing_deltas : hashval list ref
 val save_processing_deltas : unit -> unit
-val process_delta : hashval -> unit
 
-type validationstatus = Waiting of float * (blockdelta * connstate) option | ValidBlock | InvalidBlock
-
-type blocktree = BlocktreeNode of blocktree option * p2pkhaddr list ref * (hashval * poburn) option * hashval option * hashval option * hashval * stakemod * targetinfo * int64 * big_int * int64 * validationstatus ref * bool ref * (hashval * blocktree) list ref
-
-val genesisblocktreenode : blocktree ref
-val lastcheckpointnode : blocktree ref
-val blkheadernode : (hashval option,blocktree) Hashtbl.t
-val initblocktree : unit -> unit
-val node_recent_stakers : blocktree -> p2pkhaddr list
-val node_prevblockhash : blocktree -> (hashval * poburn) option
-val node_theoryroot : blocktree -> hashval option
-val node_signaroot : blocktree -> hashval option
-val node_ledgerroot : blocktree -> hashval
-val node_stakemod : blocktree -> stakemod
-val node_targetinfo : blocktree -> targetinfo
-val node_timestamp : blocktree -> int64
-val node_blockheight : blocktree -> int64
-val node_validationstatus : blocktree -> validationstatus
-val node_children_ref : blocktree -> (hashval * blocktree) list ref
-val eq_node : blocktree -> blocktree -> bool
-
-val print_best_node : unit -> unit
+val print_best_block : unit -> unit
 
 val lookup_thytree : hashval option -> Mathdata.ttree option
 val lookup_sigtree : hashval option -> Mathdata.stree option
@@ -63,17 +41,17 @@ val send_inv : int -> out_channel -> connstate -> unit
 
 val dumpblocktreestate : out_channel -> unit
 
-val create_new_node : hashval -> bool -> blocktree
-
 type consensuswarning =
-  | ConsensusWarningMissing of hashval * hashval option * int64 * bool * bool * string
-  | ConsensusWarningWaiting of hashval * hashval option * int64 * float * bool * bool
-  | ConsensusWarningBlacklist of hashval * hashval option * int64
-  | ConsensusWarningInvalid of hashval * hashval option * int64
+  | ConsensusWarningMissing of hashval * hashval * hashval
+  | ConsensusWarningBlacklist of hashval
+  | ConsensusWarningInvalid of hashval
   | ConsensusWarningNoBurn of hashval
   | ConsensusWarningTerminal
 
-val get_bestnode : bool -> blocktree * consensuswarning list
+val print_consensus_warning : out_channel -> consensuswarning -> unit
+
+val get_burn : hashval -> hashval * hashval
+val get_bestblock : unit -> (hashval * hashval * hashval) option * consensuswarning list
 
 val add_to_txpool : hashval -> Tx.stx -> unit
 val remove_from_txpool : hashval -> unit
