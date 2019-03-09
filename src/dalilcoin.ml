@@ -696,10 +696,6 @@ let initialize_commands () =
   ac "getpeerinfo" "getpeerinfo" "List the current peers and when the last message was received from each."
     (fun oc al ->
       remove_dead_conns();
-    Printf.fprintf oc "%d missing headers\n" (List.length !missingheaders);
-    List.iter (fun (i,h) -> Printf.fprintf oc "%Ld %s\n" i (hashval_hexstring h)) !missingheaders;
-    Printf.fprintf oc "%d missing deltas\n" (List.length !missingdeltas);
-    List.iter (fun (i,h) -> Printf.fprintf oc "%Ld %s\n" i (hashval_hexstring h)) !missingdeltas;
       let ll = List.length !netconns in
       Printf.fprintf oc "%d connection%s\n" ll (if ll = 1 then "" else "s");
       List.iter
