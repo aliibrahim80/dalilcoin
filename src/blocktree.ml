@@ -479,7 +479,7 @@ let initialize_dlc_from_ltc sout lblkh =
 					    process_header sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt (bhd,bhs) currhght csm tar lmedtm burned
 					end
 				    with Not_found -> (*** an ancestor header was not validated/is missing ***)
-				      ()
+				      if not (DbBlockHeader.dbexists dnxt) then missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingheaders
 				  end
 				else
 				  begin
@@ -521,7 +521,15 @@ let initialize_dlc_from_ltc sout lblkh =
 		let (lprevbh,lmedtm,_,ltxl) = DbLtcBlock.dbget lbh in (*** if lbh is before ltc_oldest_to_consider, then there will be no entry in the database and this will raise Not_found ***)
 		handleltcblock lprevbh false;
 		List.iter (handleltcburntx lbh lmedtm) ltxl;
-		if recent then List.iter (marklivenodes lbh) ltxl;
+		if recent then
+		  begin
+		    List.iter
+		      (fun bdl ->
+			List.iter
+			  (fun (_,lbh,ltx,_,_) -> marklivenodes lbh ltx)
+			  bdl)
+		      bds
+		  end;
 	      with Not_found -> ()
 	    end
       end
