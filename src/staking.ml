@@ -704,7 +704,10 @@ let stakingthread () =
     | StakingPause(del) ->
 	log_string (Printf.sprintf "Staking pause of %f seconds\n" del);
 	Thread.delay del;
-	log_string (Printf.sprintf "After staking pause of %f seconds\n" del);
+	sleepuntil := ltc_medtime()
+    | e ->
+	log_string (Printf.sprintf "Staking exception: %s\nPausing staking for about an hour.\n" (Printexc.to_string e));
+	Thread.delay 3600.0;
 	sleepuntil := ltc_medtime()
   done;;
 
