@@ -55,7 +55,7 @@ val get_fresh_offline_address : out_channel -> addr
 val reclassify_staking : out_channel -> string -> bool -> unit
 
 val createtx : jsonval -> jsonval -> tx
-val createsplitlocktx : out_channel -> hashval -> payaddr -> payaddr -> addr -> hashval -> int -> int64 -> int64 -> unit
+val createsplitlocktx : out_channel -> hashval -> int64 -> payaddr -> payaddr -> addr -> hashval -> int -> int64 -> int64 -> unit
 
 val signtx : out_channel -> hashval -> string -> unit
 val savetxtopool : int64 -> hashval -> string -> unit

@@ -128,12 +128,12 @@ val sei_nehlist : (int -> 'a -> int * 'a) -> 'a -> nehlist * 'a
 val seo_ctree : (int -> int -> 'a -> 'a) -> ctree -> 'a -> 'a
 val sei_ctree : (int -> 'a -> int * 'a) -> 'a -> ctree * 'a
 
-val print_hlist_gen : out_channel -> hlist -> (asset -> unit) -> unit
-val print_hlist : out_channel -> hlist -> unit
+val print_hlist_gen : out_channel -> int64 -> hlist -> (asset -> unit) -> unit
+val print_hlist : out_channel -> int64 -> hlist -> unit
 val print_hlist_to_buffer_gen : Buffer.t -> int64 -> hlist -> (asset -> unit) -> unit
 val print_hlist_to_buffer : Buffer.t -> int64 -> hlist -> unit
 val print_ctree : out_channel -> ctree -> unit
-val print_ctree_all : out_channel -> ctree -> unit
+val print_ctree_all : out_channel -> int64 -> ctree -> unit
 
 val minimal_asset_supporting_ctree : ctree -> bool list -> hashval -> int -> bool
 

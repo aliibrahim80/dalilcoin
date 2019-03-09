@@ -720,8 +720,13 @@ let printassets_in_ledger oc ledgerroot blkhght =
     !walletwatchaddrs_offlinekey;
   let sumcurr tot totu a =
     match a with
-    | (_,_,Some(_,lh,_),Currency(v)) when lh > blkhght -> tot := Int64.add !tot v
-    | (_,_,_,Currency(v)) -> tot := Int64.add !tot v; totu := Int64.add !totu v
+    | (_,_,Some(_,lh,_),Currency(_)) when lh > blkhght ->
+	let v = match asset_value blkhght a with None -> 0L | Some(v) -> v in
+	tot := Int64.add !tot v
+    | (_,_,_,Currency(_)) ->
+	let v = match asset_value blkhght a with None -> 0L | Some(v) -> v in
+	tot := Int64.add !tot v;
+	totu := Int64.add !totu v
     | _ -> ()
   in
   Printf.fprintf oc "Assets in ledger with root %s:\n" (hashval_hexstring ledgerroot);
@@ -731,7 +736,7 @@ let printassets_in_ledger oc ledgerroot blkhght =
       match x with
       | (Some(hl),_) ->
 	  Printf.fprintf oc "%s:\n" z;
-	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot1 tot1u)
+	  Ctre.print_hlist_gen oc blkhght (Ctre.nehlist_hlist hl) (sumcurr tot1 tot1u)
       | (None,_) ->
 	  Printf.fprintf oc "%s: empty\n" z;
     )
@@ -742,7 +747,7 @@ let printassets_in_ledger oc ledgerroot blkhght =
       match x with
       | (Some(hl),_) ->
 	  Printf.fprintf oc "%s:\n" z;
-	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot2 tot2u)
+	  Ctre.print_hlist_gen oc blkhght (Ctre.nehlist_hlist hl) (sumcurr tot2 tot2u)
       | (None,_) ->
 	  Printf.fprintf oc "%s: empty\n" z;
     )
@@ -753,7 +758,7 @@ let printassets_in_ledger oc ledgerroot blkhght =
       match x with
       | (Some(hl),_) ->
 	  Printf.fprintf oc "%s:\n" (addr_daliladdrstr alpha2);
-	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot3 tot3u)
+	  Ctre.print_hlist_gen oc blkhght (Ctre.nehlist_hlist hl) (sumcurr tot3 tot3u)
       | (None,_) ->
 	  Printf.fprintf oc "%s: empty\n" (addr_daliladdrstr alpha2);
     )
@@ -764,7 +769,7 @@ let printassets_in_ledger oc ledgerroot blkhght =
       match x with
       | (Some(hl),_) ->
 	  Printf.fprintf oc "%s:\n" (addr_daliladdrstr alpha);
-	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot4 tot4u)
+	  Ctre.print_hlist_gen oc blkhght (Ctre.nehlist_hlist hl) (sumcurr tot4 tot4u)
       | (None,_) ->
 	  Printf.fprintf oc "%s: empty\n" (addr_daliladdrstr alpha);
     )
@@ -839,30 +844,36 @@ let get_cants_balances_in_ledger oc ledgerroot blkhght =
 	  end
       with Exit -> ()
     in
-    let asset_sumcurr tot a =
+    let asset_sumcurr tot totu a =
       match a with
-      | (_,_,_,Currency(v)) -> tot := Int64.add !tot v
+      | (_,_,Some(_,lh,_),Currency(_)) when lh > blkhght ->
+	  let v = match asset_value blkhght a with None -> 0L | Some(v) -> v in
+	  tot := Int64.add !tot v
+      | (_,_,_,Currency(_)) ->
+	  let v = match asset_value blkhght a with None -> 0L | Some(v) -> v in
+	  tot := Int64.add !tot v;
+	  totu := Int64.add !totu v
       | _ -> ()
     in
-    let rec hlist_sumcurr tot (hl:hlist) =
+    let rec hlist_sumcurr tot totu (hl:hlist) =
       match hl with
       | HNil -> ()
-      | HConsH(ah,hr) -> hlist_sumcurr tot hr; asset_sumcurr tot (get_asset ah)
-      | HCons(a,hr) -> hlist_sumcurr tot hr; asset_sumcurr tot a
-      | HHash(hh,_) -> hlist_sumcurr tot (get_hlist_element hh)
+      | HConsH(ah,hr) -> hlist_sumcurr tot totu hr; asset_sumcurr tot totu (get_asset ah)
+      | HCons(a,hr) -> hlist_sumcurr tot totu hr; asset_sumcurr tot totu a
+      | HHash(hh,_) -> hlist_sumcurr tot totu (get_hlist_element hh)
     in
-    let rec nehlist_sumcurr tot (hl:nehlist) =
+    let rec nehlist_sumcurr tot totu (hl:nehlist) =
       match hl with
-      | NehConsH(ah,hr) -> hlist_sumcurr tot hr; asset_sumcurr tot (get_asset ah)
-      | NehCons(a,hr) -> hlist_sumcurr tot hr; asset_sumcurr tot a
-      | NehHash(hh,_) -> nehlist_sumcurr tot (get_nehlist_element hh)
+      | NehConsH(ah,hr) -> hlist_sumcurr tot totu hr; asset_sumcurr tot totu (get_asset ah)
+      | NehCons(a,hr) -> hlist_sumcurr tot totu hr; asset_sumcurr tot totu a
+      | NehHash(hh,_) -> nehlist_sumcurr tot totu (get_nehlist_element hh)
     in
     List.iter
       (fun (k,b,(x,y),w,h,z) ->
 	handler
 	  (fun () ->
 	    match Ctre.ctree_addr true true (p2pkhaddr_addr h) ctr None with
-	      (Some(hl),_) -> nehlist_sumcurr tot1 hl
+	      (Some(hl),_) -> nehlist_sumcurr tot1 tot1u hl
 	    | _ -> ()))
       !walletkeys_staking;
     List.iter
@@ -870,7 +881,7 @@ let get_cants_balances_in_ledger oc ledgerroot blkhght =
 	handler
 	  (fun () ->
 	    match Ctre.ctree_addr true true (p2pkhaddr_addr h) ctr None with
-	      (Some(hl),_) -> nehlist_sumcurr tot1 hl
+	      (Some(hl),_) -> nehlist_sumcurr tot1 tot1u hl
 	    | _ -> ()))
       !walletkeys_nonstaking;
     List.iter
@@ -878,7 +889,7 @@ let get_cants_balances_in_ledger oc ledgerroot blkhght =
 	handler
 	  (fun () ->
 	    match Ctre.ctree_addr true true (p2shaddr_addr h) ctr None with
-	      (Some(hl),_) -> nehlist_sumcurr tot2 hl
+	      (Some(hl),_) -> nehlist_sumcurr tot2 tot2u hl
 	    | _ -> ()))
       !walletp2shs;
     List.iter
@@ -887,7 +898,7 @@ let get_cants_balances_in_ledger oc ledgerroot blkhght =
 	handler
 	  (fun () ->
 	    match Ctre.ctree_addr true true alpha2 ctr None with
-	      (Some(hl),_) -> nehlist_sumcurr tot3 hl
+	      (Some(hl),_) -> nehlist_sumcurr tot3 tot3u hl
 	    | _ -> ()))
       !walletendorsements;
     List.iter
@@ -895,7 +906,7 @@ let get_cants_balances_in_ledger oc ledgerroot blkhght =
 	handler
 	  (fun () ->
 	    match Ctre.ctree_addr true true alpha ctr None with
-	      (Some(hl),_) -> nehlist_sumcurr tot4 hl
+	      (Some(hl),_) -> nehlist_sumcurr tot4 tot4u hl
 	    | _ -> ()))
       !walletwatchaddrs;
     List.iter
@@ -903,7 +914,7 @@ let get_cants_balances_in_ledger oc ledgerroot blkhght =
 	handler
 	  (fun () ->
 	    match Ctre.ctree_addr true true alpha ctr None with
-	      (Some(hl),_) -> nehlist_sumcurr tot4 hl
+	      (Some(hl),_) -> nehlist_sumcurr tot4 tot4u hl
 	    | _ -> ()))
       !walletwatchaddrs_offlinekey;
     Hashtbl.add cants_balances_in_ledger ledgerroot (!tot1,!tot1u,!tot2,!tot2u,!tot3,!tot3u,!tot4,!tot4u);
@@ -912,7 +923,12 @@ let get_cants_balances_in_ledger oc ledgerroot blkhght =
 let printasset oc h =
   try
     let (aid,bday,obl,u) = DbAsset.dbget h in
-    Printf.fprintf oc "%s: %s [%Ld] %s %s\n" (hashval_hexstring h) (hashval_hexstring aid) bday (preasset_string u) (obligation_string obl)
+    if bday = 0L then
+      begin
+	Printf.fprintf oc "%s: %s [initial distribution] %s %s (note: value has been halved at least once)\n" (hashval_hexstring h) (hashval_hexstring aid) (preasset_string u) (obligation_string obl)
+      end
+    else
+      Printf.fprintf oc "%s: %s [%Ld] %s %s\n" (hashval_hexstring h) (hashval_hexstring aid) bday (preasset_string u) (obligation_string obl)
   with Not_found ->
     Printf.fprintf oc "No asset with hash %s found. (Did you give the asset id instead of the asset hash?)\n" (hashval_hexstring h)
 
@@ -1103,13 +1119,14 @@ let createtx inpj outpj =
       end
   | _ -> raise Exit
 
-let createsplitlocktx oc ledgerroot alpha beta gamma aid i lkh fee =
+let createsplitlocktx oc ledgerroot blkhght alpha beta gamma aid i lkh fee =
   if i <= 0 then raise (Failure ("Cannot split into " ^ (string_of_int i) ^ " assets"));
   let alpha2 = payaddr_addr alpha in
   let ctr = Ctre.CHash(ledgerroot) in
   match ctree_lookup_asset true false aid ctr (addr_bitseq alpha2) with
   | None -> Printf.fprintf oc "Could not find asset %s at %s in ledger %s\n" (hashval_hexstring aid) (addr_daliladdrstr alpha2) (hashval_hexstring ledgerroot); flush stdout
-  | Some(_,bday,obl,Currency(v)) ->
+  | Some((_,bday,obl,Currency(_)) as a) ->
+      let v = match asset_value blkhght a with None -> 0L | Some(v) -> v in
       if v > fee then
 	begin
 	  let rem = ref (Int64.sub v fee) in

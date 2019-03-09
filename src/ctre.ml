@@ -166,77 +166,78 @@ let rec print_ctree_r oc c n =
 
 let print_ctree oc c = print_ctree_r oc c 0
 
-let rec print_hlist_gen f hl g =
+let rec print_hlist_gen f blkh hl g =
   match hl with
   | HHash(h,l) -> Printf.fprintf f "...%s[%d]...\n" (hashval_hexstring h) l
   | HNil -> ()
-  | HCons((aid,bday,obl,Currency(v)) as a,hr) ->
+  | HCons((aid,bday,obl,Currency(_)) as a,hr) ->
       begin
+	let v = match asset_value blkh a with None -> 0L | Some(v) -> v in
 	Printf.fprintf f "%s: (id %s) [%Ld] Currency %s fraenk%s (%Ld cant%s)\n" (hashval_hexstring (hashasset a)) (hashval_hexstring aid) bday (fraenks_of_cants v) (if v = 100000000000L then "" else "s") v (if v = 1L then "" else "s");
 	g a;
-	print_hlist_gen f hr g
+	print_hlist_gen f blkh hr g
       end
   | HCons((aid,bday,obl,Bounty(v)) as a,hr) ->
       begin
 	Printf.fprintf f "%s: (id %s) [%Ld] Bounty %s fraenk%s (%Ld cant%s)\n" (hashval_hexstring (hashasset a)) (hashval_hexstring aid) bday (fraenks_of_cants v) (if v = 100000000000L then "" else "s") v (if v = 1L then "" else "s");
 	g a;
-	print_hlist_gen f hr g
+	print_hlist_gen f blkh hr g
       end
   | HCons((aid,bday,obl,OwnsObj(k,gamma,Some(r))) as a,hr) ->
       begin
 	Printf.fprintf f "%s: (id %s) [%Ld] OwnsObj %s %s royalty fee %s fraenk%s\n" (hashval_hexstring (hashasset a)) (hashval_hexstring aid) bday (hashval_hexstring k) (addr_daliladdrstr (payaddr_addr gamma)) (fraenks_of_cants r) (if r = 100000000000L then "" else "s");
 	g a;
-	print_hlist_gen f hr g
+	print_hlist_gen f blkh hr g
       end
   | HCons((aid,bday,obl,OwnsObj(k,gamma,None)) as a,hr) ->
       begin
 	Printf.fprintf f "%s: (id %s) [%Ld] OwnsObj %s %s None\n" (hashval_hexstring (hashasset a)) (hashval_hexstring aid) bday (hashval_hexstring k) (addr_daliladdrstr (payaddr_addr gamma));
 	g a;
-	print_hlist_gen f hr g
+	print_hlist_gen f blkh hr g
       end
   | HCons((aid,bday,obl,OwnsProp(k,gamma,Some(r))) as a,hr) ->
       begin
 	Printf.fprintf f "%s: (id %s) [%Ld] OwnsProp %s %s royalty fee %s fraenk%s\n" (hashval_hexstring (hashasset a)) (hashval_hexstring aid) bday (hashval_hexstring k) (addr_daliladdrstr (payaddr_addr gamma)) (fraenks_of_cants r) (if r = 100000000000L then "" else "s");
 	g a;
-	print_hlist_gen f hr g
+	print_hlist_gen f blkh hr g
       end
   | HCons((aid,bday,obl,OwnsProp(k,gamma,None)) as a,hr) ->
       begin
 	Printf.fprintf f "%s: (id %s) [%Ld] OwnsProp %s %s None\n" (hashval_hexstring (hashasset a)) (hashval_hexstring aid) bday (hashval_hexstring k) (addr_daliladdrstr (payaddr_addr gamma));
 	g a;
-	print_hlist_gen f hr g
+	print_hlist_gen f blkh hr g
       end
   | HCons((aid,bday,obl,OwnsNegProp) as a,hr) ->
       begin
 	Printf.fprintf f "%s: (id %s) [%Ld] OwnsNegProp\n" (hashval_hexstring (hashasset a)) (hashval_hexstring aid) bday;
 	g a;
-	print_hlist_gen f hr g
+	print_hlist_gen f blkh hr g
       end
   | HCons((aid,bday,obl,RightsObj(k,r)) as a,hr) ->
       begin
 	Printf.fprintf f "%s: (id %s) [%Ld] RightsObj %s %Ld\n" (hashval_hexstring (hashasset a)) (hashval_hexstring aid) bday (hashval_hexstring k) r;
 	g a;
-	print_hlist_gen f hr g
+	print_hlist_gen f blkh hr g
       end
   | HCons((aid,bday,obl,RightsProp(k,r)) as a,hr) ->
       begin
 	Printf.fprintf f "%s: (id %s) [%Ld] RightsProp %s %Ld\n" (hashval_hexstring (hashasset a)) (hashval_hexstring aid) bday (hashval_hexstring k) r;
 	g a;
-	print_hlist_gen f hr g
+	print_hlist_gen f blkh hr g
       end
   | HCons((aid,bday,obl,v) as a,hr) ->
       begin
 	Printf.fprintf f "%s: (id %s) [%Ld]\n" (hashval_hexstring (hashasset a)) (hashval_hexstring aid) bday;
 	g a;
-	print_hlist_gen f hr g
+	print_hlist_gen f blkh hr g
       end
   | HConsH(ah,hr) ->
       begin
 	Printf.fprintf f "%s: *\n" (hashval_hexstring ah);
-	print_hlist_gen f hr g
+	print_hlist_gen f blkh hr g
       end
 
-let print_hlist f hl = print_hlist_gen f hl (fun _ -> ())
+let print_hlist f blkh hl = print_hlist_gen f blkh hl (fun _ -> ())
 
 let right_trim c s =
   let l = ref ((String.length s) - 1) in
@@ -252,8 +253,9 @@ let rec print_hlist_to_buffer_gen sb blkh hl g =
       Buffer.add_string sb (hashval_hexstring h);
       Buffer.add_string sb "...\n"
   | HNil -> ()
-  | HCons((aid,bday,None,Currency(v)) as a,hr) ->
+  | HCons((aid,bday,None,Currency(_)) as a,hr) ->
       begin
+	let v = match asset_value blkh a with None -> 0L | Some(v) -> v in
 	Buffer.add_string sb (hashval_hexstring aid);
 	Buffer.add_string sb " [";
 	Buffer.add_string sb (Int64.to_string bday);
@@ -476,16 +478,16 @@ let rec print_hlist_to_buffer_gen sb blkh hl g =
 
 let print_hlist_to_buffer sb blkh hl = print_hlist_to_buffer_gen sb blkh hl (fun _ -> ())
 
-let rec print_ctree_all_r f c n br =
+let rec print_ctree_all_r f blkh c n br =
   for i = 1 to n do Printf.fprintf f " " done;
   match c with
-  | CLeaf(bl,hl) -> Printf.fprintf f "Leaf %s\n" (addr_daliladdrstr (bitseq_addr ((List.rev br) @ bl))); print_hlist f (nehlist_hlist hl)
+  | CLeaf(bl,hl) -> Printf.fprintf f "Leaf %s\n" (addr_daliladdrstr (bitseq_addr ((List.rev br) @ bl))); print_hlist f blkh (nehlist_hlist hl)
   | CHash(h) -> Printf.fprintf f "H %s\n" (hashval_hexstring h)
-  | CLeft(c0) -> Printf.fprintf f "L\n"; print_ctree_all_r f c0 (n+1) (false::br)
-  | CRight(c1) -> Printf.fprintf f "R\n"; print_ctree_all_r f c1 (n+1) (true::br)
-  | CBin(c0,c1) -> Printf.fprintf f "B\n"; print_ctree_all_r f c0 (n+1) (false::br); print_ctree_all_r f c1 (n+1) (true::br)
+  | CLeft(c0) -> Printf.fprintf f "L\n"; print_ctree_all_r f blkh c0 (n+1) (false::br)
+  | CRight(c1) -> Printf.fprintf f "R\n"; print_ctree_all_r f blkh c1 (n+1) (true::br)
+  | CBin(c0,c1) -> Printf.fprintf f "B\n"; print_ctree_all_r f blkh c0 (n+1) (false::br); print_ctree_all_r f blkh c1 (n+1) (true::br)
 
-let print_ctree_all f c = print_ctree_all_r f c 0 []
+let print_ctree_all f blkh c = print_ctree_all_r f blkh c 0 []
 
 let rec ctree_hashroot c =
   match c with

@@ -1051,7 +1051,7 @@ let initialize_commands () =
       with
       | JsonParseFail(i,msg) ->
 	  Printf.fprintf oc "Problem parsing json object for tx at position %d %s\n" i msg);
-  ac "createsplitlocktx" "createsplitlocktx <current address> <assetid> <number of outputs> <lockheight> <fee> [<new holding address> [<new obligation address> [<ledger root>]]]" "Create a tx to spend an asset into several assets locked until a given height.\nOptionally the new assets can be held at a new address, and may be controlled by a different obligation address."
+  ac "createsplitlocktx" "createsplitlocktx <current address> <assetid> <number of outputs> <lockheight> <fee> [<new holding address> [<new obligation address> [<ledger root> <current block height>]]]" "Create a tx to spend an asset into several assets locked until a given height.\nOptionally the new assets can be held at a new address, and may be controlled by a different obligation address."
     (fun oc al ->
       match al with
       | (alp::aid::n::lkh::fee::r) ->
@@ -1065,18 +1065,27 @@ let initialize_commands () =
 	    if n <= 0 then raise (Failure ("Cannot split into " ^ (string_of_int n) ^ " assets"));
 	    let lkh = Int64.of_string lkh in
 	    let fee = cants_of_fraenks fee in
-	    if fee < 0L then raise (Failure ("Cannot have a negative free"));
+	    if fee < 0L then raise (Failure ("Cannot have a negative fee"));
+	    let (blkhght,lr) =
+	      match r with
+	      | [_;_;lr;blkhght] ->
+		  (Int64.of_string blkhght,hexstring_hashval lr)
+	      | _ ->
+		  try
+		    match get_bestblock_print_warnings oc with
+		    | None -> raise Not_found
+		    | Some(_,lbk,ltx) ->
+			let (_,_,_,_,_,blkhght) = Hashtbl.find outlinevals (lbk,ltx) in
+			let (_,_,lr,_,_) = Hashtbl.find validheadervals (lbk,ltx) in
+			(blkhght,lr)
+		  with Not_found ->
+		    raise (Failure("Could not find ledger root"))
+	    in
 	    match r with
 	    | [] ->
 		let gamma = alpha2 in
 		let beta = alpha in
-		begin
-		  try
-		    let lr = get_ledgerroot (get_bestblock_print_warnings oc) in
-		    Commands.createsplitlocktx oc lr alpha beta gamma aid n lkh fee
-		  with Not_found ->
-		    raise (Failure("Could not find ledger root"))
-		end
+		Commands.createsplitlocktx oc lr blkhght alpha beta gamma aid n lkh fee
 	    | (gam::r) ->
 		let gamma = daliladdrstr_addr gam in
 		if not (payaddr_p gamma) then raise (Failure (gam ^ " is not a pay address"));
@@ -1084,19 +1093,15 @@ let initialize_commands () =
 		| [] ->
 		    let beta = alpha in
 		    let lr = get_ledgerroot (get_bestblock_print_warnings oc) in
-		    Commands.createsplitlocktx oc lr alpha beta gamma aid n lkh fee
+		    Commands.createsplitlocktx oc lr blkhght alpha beta gamma aid n lkh fee
 		| (bet::r) ->
 		    let beta2 = daliladdrstr_addr bet in
 		    if not (payaddr_p beta2) then raise (Failure (bet ^ " is not a pay address"));
 		    let (p,b4,b3,b2,b1,b0) = beta2 in
 		    let beta = (p=1,b4,b3,b2,b1,b0) in
 		    match r with
-		    | [] ->
-			let lr = get_ledgerroot (get_bestblock_print_warnings oc) in
-			Commands.createsplitlocktx oc lr alpha beta gamma aid n lkh fee
-		    | [lr] ->
-			let lr = hexstring_hashval lr in
-			Commands.createsplitlocktx oc lr alpha beta gamma aid n lkh fee
+		    | [] -> Commands.createsplitlocktx oc lr blkhght alpha beta gamma aid n lkh fee
+		    | [_;_] -> Commands.createsplitlocktx oc lr blkhght alpha beta gamma aid n lkh fee (** lr and blockheight given, handled above **)
 		    | _ -> raise BadCommandForm
 	  end
       | _ -> raise BadCommandForm);
