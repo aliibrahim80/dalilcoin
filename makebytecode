@@ -28,6 +28,7 @@ ocamlc -I bin -o bin/ltcrpc.cmi -c src/ltcrpc.mli
 ocamlc -I bin -o bin/blocktree.cmi -c src/blocktree.mli
 ocamlc -I bin -o bin/setconfig.cmi -c src/setconfig.mli
 ocamlc -I bin -o bin/commands.cmi -c src/commands.mli
+ocamlc -I bin -o bin/staking.cmi -c src/staking.mli
 ocamlc -I bin -o bin/json.cmo -c src/json.ml
 ocamlc -I bin -o bin/config.cmo -c src/config.ml
 ocamlc -I bin -o bin/version.cmo -c src/version.ml
@@ -56,10 +57,11 @@ ocamlc -I bin -o bin/ltcrpc.cmo -c src/ltcrpc.ml
 ocamlc -I bin -I +threads -o bin/blocktree.cmo -c src/blocktree.ml
 ocamlc -I bin -o bin/setconfig.cmo -c src/setconfig.ml
 ocamlc -I bin -I +threads -o bin/commands.cmo -c src/commands.ml
+ocamlc -I bin -I +threads -o bin/staking.cmo -c src/staking.ml
 ocamlc -I bin -I +threads -o bin/dalilcoin.cmo -c src/dalilcoin.ml
-ocamlc -I bin -I +threads -o bin/dalilcoinbc unix.cma threads.cma nums.cma json.cmo config.cmo version.cmo utils.cmo ser.cmo hashaux.cmo sha256.cmo ripemd160.cmo hash.cmo htree.cmo net.cmo db.cmo secp256k1.cmo cryptocurr.cmo signat.cmo script.cmo logic.cmo mathdata.cmo checking.cmo assets.cmo tx.cmo ctre.cmo ctregraft.cmo block.cmo ltcrpc.cmo blocktree.cmo setconfig.cmo commands.cmo dalilcoin.cmo
+ocamlc -I bin -I +threads -o bin/dalilcoinbc unix.cma threads.cma nums.cma json.cmo config.cmo version.cmo utils.cmo ser.cmo hashaux.cmo sha256.cmo ripemd160.cmo hash.cmo htree.cmo net.cmo db.cmo secp256k1.cmo cryptocurr.cmo signat.cmo script.cmo logic.cmo mathdata.cmo checking.cmo assets.cmo tx.cmo ctre.cmo ctregraft.cmo block.cmo ltcrpc.cmo blocktree.cmo setconfig.cmo commands.cmo staking.cmo dalilcoin.cmo
 ocamlc -I bin -I +threads -o bin/dalilcoincli.cmo -c src/dalilcoincli.ml
-ocamlc -I bin -I +threads -o bin/dalilcoinclibc unix.cma threads.cma nums.cma json.cmo config.cmo version.cmo utils.cmo ser.cmo hashaux.cmo sha256.cmo ripemd160.cmo hash.cmo htree.cmo net.cmo db.cmo secp256k1.cmo cryptocurr.cmo signat.cmo script.cmo logic.cmo mathdata.cmo checking.cmo assets.cmo tx.cmo ctre.cmo ctregraft.cmo block.cmo ltcrpc.cmo blocktree.cmo setconfig.cmo commands.cmo dalilcoincli.cmo
+ocamlc -I bin -I +threads -o bin/dalilcoinclibc unix.cma threads.cma nums.cma json.cmo config.cmo version.cmo utils.cmo ser.cmo hashaux.cmo sha256.cmo ripemd160.cmo hash.cmo htree.cmo net.cmo db.cmo secp256k1.cmo cryptocurr.cmo signat.cmo script.cmo logic.cmo mathdata.cmo checking.cmo assets.cmo tx.cmo ctre.cmo ctregraft.cmo block.cmo ltcrpc.cmo blocktree.cmo setconfig.cmo commands.cmo staking.cmo dalilcoincli.cmo
 cd bin
 ln -s dalilcoinbc dalilcoin
 ln -s dalilcoinbccli dalilcoin-cli

@@ -681,13 +681,29 @@ let ledgerroot_of_blockchain bc =
 (*** retargeting at each step
  (July 2017, changed to very slow block time target of 6 hours, 21600 seconds)
  ***)
-let retarget tar deltm =
+let retarget_orig tar deltm =
   min_big_int
     !max_target
     (div_big_int
        (mult_big_int tar
 	  (big_int_of_int32 (Int32.add 10000l deltm)))
        (big_int_of_int (10000 + 21600)))
+
+let retarget_dampened tar deltm =
+  min_big_int
+    !max_target
+    (div_big_int
+       (mult_big_int tar
+	  (big_int_of_int32 (Int32.add 1000000l deltm)))
+       (big_int_of_int (1000000 + 21600)))
+
+let retarget blktm tar deltm =
+  if blktm < 1556712000L then
+    retarget_orig tar deltm
+  else
+    unit_big_int (*** effectively impossible target;
+		      this will halt the ability to form any blocks after May 1, 2019,
+		      and is intended to force a hard fork by that date. ***)
 
 let difficulty tar =
   div_big_int !max_target tar
@@ -699,19 +715,22 @@ let blockheader_succ_a prevledgerroot tmstamp1 tinfo1 bh2 =
     &&
   vbcb (bhd2.timestamp = Int64.add tmstamp1 (Int64.of_int32 bhd2.deltatime)) (fun c -> Printf.fprintf c "timestamp matches\n") (fun c -> Printf.fprintf c "timestamp mismatch bhd2 %Ld is not prev %Ld plus delta %ld\n" bhd2.timestamp tmstamp1 bhd2.deltatime)
     &&
-  vbcb (eq_big_int bhd2.tinfo (retarget tinfo1 bhd2.deltatime)) (fun c -> Printf.fprintf c "target info matches\n") (fun c -> Printf.fprintf c "target info mismatch %s vs (retarget %s %ld) = %s\n" (string_of_big_int bhd2.tinfo) (string_of_big_int tinfo1) bhd2.deltatime (string_of_big_int (retarget tinfo1 bhd2.deltatime)))
+  vbcb (eq_big_int bhd2.tinfo (retarget bhd2.timestamp tinfo1 bhd2.deltatime)) (fun c -> Printf.fprintf c "target info matches\n") (fun c -> Printf.fprintf c "target info mismatch %s vs (retarget %s %ld) = %s\n" (string_of_big_int bhd2.tinfo) (string_of_big_int tinfo1) bhd2.deltatime (string_of_big_int (retarget bhd2.timestamp tinfo1 bhd2.deltatime)))
 
-let blockheader_succ bh1 bh2 =
-  let (bhd1,bhs1) = bh1 in
-  let (bhd2,bhs2) = bh2 in
+let blockheader_succ_b pbh1 lr1 tmstmp1 tar1 bh2 =
+  let (bhd2,_) = bh2 in
   match bhd2.prevblockhash with
   | Some(pbh,Poburn(lblkh,ltxh,lmedtm,burned)) ->
-      bhd1.timestamp <= lmedtm
+      tmstmp1 <= lmedtm
 	&&
-      pbh = blockheader_id bh1 (*** the next block must also commit to the previous header with signature since the id hashes both the data and signature ***)
+      pbh = pbh1 (*** the next block must also commit to the previous header with signature since the id hashes both the data and signature ***)
 	&&
-      blockheader_succ_a bhd1.newledgerroot bhd1.timestamp bhd1.tinfo bh2
+      blockheader_succ_a lr1 tmstmp1 tar1 bh2
   | None -> false
+
+let blockheader_succ bh1 bh2 =
+  let (bhd1,_) = bh1 in
+  blockheader_succ_b (blockheader_id bh1) bhd1.newledgerroot bhd1.timestamp bhd1.tinfo bh2
 
 let rec valid_blockchain_aux blkh bl lmedtm burned =
   match bl with

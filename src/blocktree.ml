@@ -30,19 +30,8 @@ let artificialbestblock = ref None;;
 let recentheaders : (hashval,unit) Hashtbl.t = Hashtbl.create 1000;;
 let blockinvalidated : (hashval,unit) Hashtbl.t = Hashtbl.create 1000;;
 
-let processing_deltas : hashval list ref = ref [];;
-
 let delayed_headers : (hashval * hashval,big_int -> unit) Hashtbl.t = Hashtbl.create 100;;
 let delayed_deltas : (hashval * hashval,hashval option -> hashval option -> big_int -> unit) Hashtbl.t = Hashtbl.create 100;;
-
-let save_processing_deltas () =
-  match !processing_deltas with
-  | [] -> ()
-  | hl ->
-      let pdf = Filename.concat (datadir()) "processingdeltas" in
-      let ch = open_out_gen [Open_creat;Open_append;Open_wronly;Open_binary] 0o660 pdf in
-      List.iter (fun h -> seocf (seo_hashval seoc h (ch,None))) hl;
-      close_out ch
 
 let thytree : (hashval,Mathdata.ttree) Hashtbl.t = Hashtbl.create 1000;;
 let sigtree : (hashval,Mathdata.stree) Hashtbl.t = Hashtbl.create 1000;;
@@ -239,29 +228,45 @@ let invalid_or_blacklisted_p h =
     end
 
 (*** assumes ancestors have been validated and info for parent is on validheadervals ***)
-let process_header sout forw dbp (lbh,ltxh) h (bhd,bhs) currhght csm tar lmedtm burned =
-  if valid_blockheader currhght csm tar (bhd,bhs) lmedtm burned then
+let process_header sout validate forw dbp (lbh,ltxh) h (bhd,bhs) currhght csm tar lmedtm burned =
+  if validate then
     begin
-      Hashtbl.add validheadervals (lbh,ltxh) (bhd.tinfo,bhd.timestamp,bhd.newledgerroot,bhd.newtheoryroot,bhd.newsignaroot);
-      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,h)] !missingdeltas;
-      if dbp then DbBlockHeader.dbput h (bhd,bhs);
-      if forw then
+      if valid_blockheader currhght csm tar (bhd,bhs) lmedtm burned then
 	begin
-	  List.iter
-	    (fun (lbh,ltxh) ->
-	      try
-		let f = Hashtbl.find delayed_headers (lbh,ltxh) in
-		Hashtbl.remove delayed_headers (lbh,ltxh);
-		f bhd.tinfo
-	      with Not_found -> ())
-	    (Hashtbl.find_all outlinesucc (lbh,ltxh))
+	  Hashtbl.add validheadervals (lbh,ltxh) (bhd.tinfo,bhd.timestamp,bhd.newledgerroot,bhd.newtheoryroot,bhd.newsignaroot);
+	  if not (DbBlockDelta.dbexists h) then missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,h)] !missingdeltas;
+	  if dbp then
+	    begin
+	      DbBlockHeader.dbput h (bhd,bhs);
+	      missingheaders := List.filter (fun (_,k) -> not (h = k)) !missingheaders;
+	    end;
+	  if forw then
+	    begin
+	      List.iter
+		(fun (lbh,ltxh) ->
+		  try
+		    let f = Hashtbl.find delayed_headers (lbh,ltxh) in
+		    Hashtbl.remove delayed_headers (lbh,ltxh);
+		    f bhd.tinfo
+		  with Not_found -> ())
+		(Hashtbl.find_all outlinesucc (lbh,ltxh))
+	    end
+	end
+      else
+	begin
+	  Printf.fprintf sout "Alleged block %s had an invalid header.\n" (hashval_hexstring h);
+	  verbose_blockcheck := Some(!Utils.log);
+	  ignore (valid_blockheader currhght csm tar (bhd,bhs) lmedtm burned);
+	  verbose_blockcheck := None;
+	  DbInvalidatedBlocks.dbput h true
 	end
     end
   else
     begin
-      Printf.fprintf sout "Alleged block %s had an invalid header.\n" (hashval_hexstring h);
-(*				DbInvalidatedBlocks.dbput h () *)
+      Hashtbl.add validheadervals (lbh,ltxh) (bhd.tinfo,bhd.timestamp,bhd.newledgerroot,bhd.newtheoryroot,bhd.newsignaroot);
+      if not (DbBlockDelta.dbexists h) then missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,h)] !missingdeltas;
     end
+
 
 (*** this is for saving the new ctree elements in the database ***)
 let process_delta_ctree h blkhght blk =
@@ -283,108 +288,126 @@ let process_delta_ctree h blkhght blk =
 
 (*** assumes ancestors have been validated and info for parent is on validheadervals and entry on validblockvals;
  also assumes header has been validated and info for it is on validheadervals ***)
-let rec process_delta sout forw dbp (lbh,ltxh) h ((bhd,bhs),bd) thtr tht sgtr sgt currhght csm tar lmedtm burned =
-  match valid_block tht sgt currhght csm tar ((bhd,bhs),bd) lmedtm burned with
-  | Some(newtht,newsigt) ->
-      Hashtbl.add validblockvals (lbh,ltxh) ();
-      sync_last_height := max !sync_last_height currhght;
-      update_theories thtr tht newtht;
-      update_signatures sgtr sgt newsigt;
-      process_delta_ctree h currhght ((bhd,bhs),bd);
-      if dbp then
-	begin
-	  DbBlockDelta.dbput h bd
-	end;
-      if forw then
-	begin
-	  List.iter
-	    (fun (lbh,ltxh) ->
-	      try
-		let f = Hashtbl.find delayed_deltas (lbh,ltxh) in
-		Hashtbl.remove delayed_deltas (lbh,ltxh);
-		f bhd.newtheoryroot bhd.newsignaroot bhd.tinfo
-	      with Not_found -> ())
-	    (Hashtbl.find_all outlinesucc (lbh,ltxh))
-	end
-  | None -> (*** invalid block ***)
-      Printf.fprintf sout "Alleged block %s at height %Ld is invalid.\n" (hashval_hexstring h) currhght
-(*				                    DbInvalidatedBlocks.dbput h () *)
-
-(*** assumes ancestors have been validated and info for parent is on validheadervals and entry on validblockvals ***)
-let rec process_block sout forw dbp (lbh,ltxh) h ((bhd,bhs),bd) thtr tht sgtr sgt currhght csm tar lmedtm burned =
-  match valid_block tht sgt currhght csm tar ((bhd,bhs),bd) lmedtm burned with
-  | Some(newtht,newsigt) ->
+let rec process_delta sout validate forw dbp (lbh,ltxh) h ((bhd,bhs),bd) thtr tht sgtr sgt currhght csm tar lmedtm burned =
+  if validate then
+    begin
+      match valid_block tht sgt currhght csm tar ((bhd,bhs),bd) lmedtm burned with
+      | Some(newtht,newsigt) ->
+	  Hashtbl.add validblockvals (lbh,ltxh) ();
+	  sync_last_height := max !sync_last_height currhght;
+	  update_theories thtr tht newtht;
+	  update_signatures sgtr sgt newsigt;
+	  process_delta_ctree h currhght ((bhd,bhs),bd);
+	  if dbp then
+	    begin
+	      DbBlockDelta.dbput h bd;
+	      missingdeltas := List.filter (fun (_,k) -> not (h = k)) !missingdeltas;
+	    end;
+	  if forw then
+	    begin
+	      List.iter
+		(fun (lbh,ltxh) ->
+		  try
+		    let f = Hashtbl.find delayed_deltas (lbh,ltxh) in
+		    Hashtbl.remove delayed_deltas (lbh,ltxh);
+		    f bhd.newtheoryroot bhd.newsignaroot bhd.tinfo
+		  with Not_found -> ())
+		(Hashtbl.find_all outlinesucc (lbh,ltxh))
+	    end
+      | None -> (*** invalid block ***)
+	  Printf.fprintf sout "Alleged block %s at height %Ld is invalid.\n" (hashval_hexstring h) currhght;
+	  verbose_blockcheck := Some(!Utils.log);
+	  ignore (valid_block tht sgt currhght csm tar ((bhd,bhs),bd) lmedtm burned);
+	  verbose_blockcheck := None;
+	  DbInvalidatedBlocks.dbput h true
+    end
+  else
+    begin
       Hashtbl.add validheadervals (lbh,ltxh) (bhd.tinfo,bhd.timestamp,bhd.newledgerroot,bhd.newtheoryroot,bhd.newsignaroot);
       Hashtbl.add validblockvals (lbh,ltxh) ();
-      sync_last_height := max !sync_last_height currhght;
-      update_theories thtr tht newtht;
-      update_signatures sgtr sgt newsigt;
-      process_delta_ctree h currhght ((bhd,bhs),bd);
-      if dbp then
-	begin
-	  DbBlockHeader.dbput h (bhd,bhs);
-	  DbBlockDelta.dbput h bd
-	end;
-      if forw then
-	begin
-	  List.iter
-	    (fun (lbh,ltxh) ->
-	      begin
-		try
-		  let f = Hashtbl.find delayed_headers (lbh,ltxh) in
-		  Hashtbl.remove delayed_headers (lbh,ltxh);
-		  f bhd.tinfo
-		with Not_found -> ()
-	      end;
-	      begin
-		try
-		  let f = Hashtbl.find delayed_deltas (lbh,ltxh) in
-		  Hashtbl.remove delayed_deltas (lbh,ltxh);
-		  f bhd.newtheoryroot bhd.newsignaroot bhd.tinfo
-		with Not_found -> ()
-	      end)
-	    (Hashtbl.find_all outlinesucc (lbh,ltxh))
-	end
-  | None -> (*** invalid block ***)
-      Printf.fprintf sout "Alleged block %s at height %Ld is invalid.\n" (hashval_hexstring h) currhght
-(*				                    DbInvalidatedBlocks.dbput h () *)
+    end
+	    
+(*** assumes ancestors have been validated and info for parent is on validheadervals and entry on validblockvals ***)
+let rec process_block sout validate forw dbp (lbh,ltxh) h ((bhd,bhs),bd) thtr tht sgtr sgt currhght csm tar lmedtm burned =
+  if validate then
+    begin
+      match valid_block tht sgt currhght csm tar ((bhd,bhs),bd) lmedtm burned with
+      | Some(newtht,newsigt) ->
+	  Hashtbl.add validheadervals (lbh,ltxh) (bhd.tinfo,bhd.timestamp,bhd.newledgerroot,bhd.newtheoryroot,bhd.newsignaroot);
+	  Hashtbl.add validblockvals (lbh,ltxh) ();
+	  sync_last_height := max !sync_last_height currhght;
+	  update_theories thtr tht newtht;
+	  update_signatures sgtr sgt newsigt;
+	  process_delta_ctree h currhght ((bhd,bhs),bd);
+	  if dbp then
+	    begin
+	      DbBlockHeader.dbput h (bhd,bhs);
+	      missingheaders := List.filter (fun (_,k) -> not (h = k)) !missingheaders;
+	      DbBlockDelta.dbput h bd;
+	      missingdeltas := List.filter (fun (_,k) -> not (h = k)) !missingdeltas;
+	    end;
+	  if forw then
+	    begin
+	      List.iter
+		(fun (lbh,ltxh) ->
+		  begin
+		    try
+		      let f = Hashtbl.find delayed_headers (lbh,ltxh) in
+		      Hashtbl.remove delayed_headers (lbh,ltxh);
+		      f bhd.tinfo
+		    with Not_found -> ()
+		  end;
+		  begin
+		    try
+		      let f = Hashtbl.find delayed_deltas (lbh,ltxh) in
+		      Hashtbl.remove delayed_deltas (lbh,ltxh);
+		      f bhd.newtheoryroot bhd.newsignaroot bhd.tinfo
+		    with Not_found -> ()
+		  end)
+		(Hashtbl.find_all outlinesucc (lbh,ltxh))
+	    end
+      | None -> (*** invalid block ***)
+	  Printf.fprintf sout "Alleged block %s at height %Ld is invalid.\n" (hashval_hexstring h) currhght;
+	  verbose_blockcheck := Some(!Utils.log);
+	  ignore (valid_block tht sgt currhght csm tar ((bhd,bhs),bd) lmedtm burned);
+	  verbose_blockcheck := None;
+          DbInvalidatedBlocks.dbput h true
+    end
+  else
+    begin
+      Hashtbl.add validheadervals (lbh,ltxh) (bhd.tinfo,bhd.timestamp,bhd.newledgerroot,bhd.newtheoryroot,bhd.newsignaroot);
+      Hashtbl.add validblockvals (lbh,ltxh) ();
+    end
 
 let initialize_dlc_from_ltc sout lblkh =
-  let ldone : (hashval,unit) Hashtbl.t = Hashtbl.create 10000 in
-  let ltx_lblk : (hashval,hashval) Hashtbl.t = Hashtbl.create 10000 in (*** this depends on the current ltc state, so don't save it globally ***)
-  let rec handleltcblock lbh recent =
-    if not (Hashtbl.mem ldone lbh) then
-      begin
-	Hashtbl.add ldone lbh ();
-	try
-	  let lds =  DbLtcDacStatus.dbget lbh in
-	  begin
-	    match lds with
-	    | LtcDacStatusPrev(lbh2) -> handleltcblock lbh2 recent
-	    | LtcDacStatusNew(bds) -> handleltcblock2 bds recent
-	  end
-	with Not_found -> ()
-      end
-  and handleltcblock2 bds recent =
-    List.iter
-      (fun bdl ->
-	List.iter
-	  (fun (bh,lbh,ltx,ltm,lhght) ->
-	    if not (Hashtbl.mem ltx_lblk ltx) then Hashtbl.add ltx_lblk ltx lbh;
-	    blockstats_ltc lbh ltx ltm;
-	    if recent then Hashtbl.replace recentheaders bh ())
-	  bdl)
-      bds
-  and blockstats_ltc lbh ltx lmedtm =
+  let liveblocks : (hashval,unit) Hashtbl.t = Hashtbl.create 1000 in
+  let liveblocks2 : (hashval * hashval,unit) Hashtbl.t = Hashtbl.create 1000 in
+  let ltx_lblk : (hashval,hashval) Hashtbl.t = Hashtbl.create 1000 in
+  let rec marklivenodes lbh ltx =
+    try
+      let (dnxt,_,_,par,_,_) = Hashtbl.find outlinevals (lbh,ltx) in
+      if not (Hashtbl.mem liveblocks2 (lbh,ltx)) then
+	begin
+	  Hashtbl.add liveblocks2 (lbh,ltx) ();
+	  Hashtbl.add liveblocks dnxt ();
+	  match par with
+	  | None -> ()
+	  | Some(lbh,ltx) -> marklivenodes lbh ltx
+	end
+    with Not_found -> ()
+  in
+  let handleltcburntx lbh lmedtm ltx =
     if not (Hashtbl.mem outlinevals (lbh,ltx)) then
       begin
+	Hashtbl.add ltx_lblk ltx lbh;
 	try
 	  let (burned,lprevtx,dnxt) = DbLtcBurnTx.dbget ltx in
+	  Hashtbl.add blockburns dnxt (lbh,ltx);
 	  if lprevtx = (0l,0l,0l,0l,0l,0l,0l,0l) then
 	    begin
 	      if lmedtm >= !Config.genesistimestamp && lmedtm <= Int64.add !Config.genesistimestamp 604800L then
 		begin
-		  Hashtbl.add outlinevals (lbh,ltx) (dnxt,lmedtm,burned,None,!genesisstakemod,1L);
+		  Hashtbl.add outlinevals (lbh,ltx) (dnxt,lmedtm,burned,None,hashpair lbh ltx,1L);
 		  if invalid_or_blacklisted_p dnxt then
 		    Hashtbl.add blockinvalidated dnxt ()
 		  else (*** process header and delta if we have them ***)
@@ -395,14 +418,14 @@ let initialize_dlc_from_ltc sout lblkh =
 			  begin
 			    try
 			      let bd = DbBlockDelta.dbget dnxt in
-			      process_block sout false false (lbh,ltx) dnxt ((bhd,bhs),bd) None None None None 1L !genesisstakemod !genesistarget lmedtm burned
+			      process_block sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt ((bhd,bhs),bd) None None None None 1L !genesisstakemod !genesistarget lmedtm burned
 			    with Not_found ->
-			      process_header sout false false (lbh,ltx) dnxt (bhd,bhs) 1L !genesisstakemod !genesistarget lmedtm burned
+			      process_header sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt (bhd,bhs) 1L !genesisstakemod !genesistarget lmedtm burned
 			  end
 			else
 			  begin
 			    Printf.fprintf sout "Alleged genesis block %s had an invalid header (claims point to a previous block).\n" (hashval_hexstring dnxt);
-(*				DbInvalidatedBlocks.dbput dnxt () *)
+			    DbInvalidatedBlocks.dbput dnxt true
 			  end
 		      with Not_found ->
 			missingheaders := (1L,dnxt)::!missingheaders
@@ -411,16 +434,14 @@ let initialize_dlc_from_ltc sout lblkh =
 	    end
 	  else
 	    begin
-	      handleltcblock lbh false; (*** calling this should ensure many previous things are processed, including knowing the ltc block in which lprevtx was confirmed ***)
 	      try
 		begin
 		  let lprevblkh = Hashtbl.find ltx_lblk lprevtx in
 		  try
 		    let (prevdbh,prevlmedtm,prevburned,_,csm,prevhght) = Hashtbl.find outlinevals (lprevblkh,lprevtx) in
 		    let currhght = Int64.add 1L prevhght in
-		    Hashtbl.add outlinevals (lbh,ltx) (dnxt,lmedtm,burned,Some(lprevblkh,lprevtx),hashpair lprevblkh lprevtx,currhght);
+		    Hashtbl.add outlinevals (lbh,ltx) (dnxt,lmedtm,burned,Some(lprevblkh,lprevtx),hashpair lbh ltx,currhght);
 		    Hashtbl.add outlinesucc (lprevblkh,lprevtx) (lbh,ltx);
-		    Hashtbl.add blockburns dnxt (lbh,ltx);
 		    if invalid_or_blacklisted_p dnxt then
 		      Hashtbl.add blockinvalidated dnxt ()
 		    else (*** process header and delta if we have them ***)
@@ -430,32 +451,40 @@ let initialize_dlc_from_ltc sout lblkh =
 			  begin
 			    match bhd.prevblockhash with
 			    | None ->
-				Printf.fprintf sout "Alleged block %s at height %Ld had an invalid header, points to no previous block but should point to %s.\n" (hashval_hexstring dnxt) currhght (hashval_hexstring prevdbh)
-(*				DbInvalidatedBlocks.dbput dnxt () *)
-			    | Some(prevdbh,Poburn(lbh2,ltx2,lmedtm2,burned2)) ->
-				if lbh2 = lprevblkh && ltx2 = lprevtx && lmedtm2 = prevlmedtm && burned2 = prevburned then
+				Printf.fprintf sout "Alleged block %s at height %Ld had an invalid header, points to no previous block but should point to %s.\n" (hashval_hexstring dnxt) currhght (hashval_hexstring prevdbh);
+				DbInvalidatedBlocks.dbput dnxt true
+			    | Some(prevdbh2,Poburn(lbh2,ltx2,lmedtm2,burned2)) ->
+				if prevdbh = prevdbh2 && lbh2 = lprevblkh && ltx2 = lprevtx && lmedtm2 = prevlmedtm && burned2 = prevburned then
 				  begin
 				    try
 				      let (tar,tmstmp,lr,thtr,sgtr) = Hashtbl.find validheadervals (lprevblkh,lprevtx) in
-				      if Hashtbl.mem validblockvals (lprevblkh,lprevtx) then (*** full blocks up to here have been validated ***)
+				      if not (blockheader_succ_b prevdbh lr tmstmp tar (bhd,bhs)) then
 					begin
-					  try
-					    let bd = DbBlockDelta.dbget dnxt in
-					    let tht = lookup_thytree thtr in
-					    let sgt = lookup_sigtree sgtr in
-					    process_block sout false false (lbh,ltx) dnxt ((bhd,bhs),bd) thtr tht sgtr sgt currhght csm tar lmedtm burned
-					  with Not_found -> (*** check if header is valid, report delta as missing ***)
-					    process_header sout false false (lbh,ltx) dnxt (bhd,bhs) currhght csm tar lmedtm burned
+					  Printf.fprintf sout "Block %s at height %Ld is not a valid successor for %s.\n" (hashval_hexstring dnxt) currhght (hashval_hexstring prevdbh);
+					  DbInvalidatedBlocks.dbput dnxt true
 					end
-				      else (*** an ancestor delta was not validated/is missing ***)
-					process_header sout false false (lbh,ltx) dnxt (bhd,bhs) currhght csm tar lmedtm burned
+				      else
+					begin
+					  if Hashtbl.mem validblockvals (lprevblkh,lprevtx) then (*** full blocks up to here have been validated ***)
+					    begin
+					      try
+						let bd = DbBlockDelta.dbget dnxt in
+						let tht = lookup_thytree thtr in
+						let sgt = lookup_sigtree sgtr in
+						process_block sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt ((bhd,bhs),bd) thtr tht sgtr sgt currhght csm tar lmedtm burned;
+					      with Not_found -> (*** check if header is valid, report delta as missing ***)
+						process_header sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt (bhd,bhs) currhght csm tar lmedtm burned
+					    end
+					  else (*** an ancestor delta was not validated/is missing ***)
+					    process_header sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt (bhd,bhs) currhght csm tar lmedtm burned
+					end
 				    with Not_found -> (*** an ancestor header was not validated/is missing ***)
 				      ()
 				  end
 				else
 				  begin
 				    Printf.fprintf sout "Alleged block %s at height %Ld had an invalid header, pointing to an incorrect previous block or proof of burn.\n" (hashval_hexstring dnxt) currhght;
-(*				    DbInvalidatedBlocks.dbput dnxt () *)
+				    DbInvalidatedBlocks.dbput dnxt true
 				  end
 			  end
 			with Not_found ->
@@ -471,7 +500,37 @@ let initialize_dlc_from_ltc sout lblkh =
 	  Printf.fprintf sout "Missing ltc burntx %s\n" (hashval_hexstring ltx)
       end
   in
-  handleltcblock lblkh true
+  let rec handleltcblock lbh recent =
+    try
+      let lds = DbLtcDacStatus.dbget lbh in
+      begin
+	match lds with
+	| LtcDacStatusPrev(lbh2) -> handleltcblock lbh2 recent
+	| LtcDacStatusNew(bds) -> (*** not all of these will contain burntxs, but these are the only ltc blocks that might contain burntxs ***)
+	    begin
+	      if recent then
+		begin
+		  List.iter
+		    (fun bdl ->
+		      List.iter
+			(fun (bh,_,_,_,_) -> Hashtbl.replace recentheaders bh ())
+			bdl)
+		    bds
+		end;
+	      try
+		let (lprevbh,lmedtm,_,ltxl) = DbLtcBlock.dbget lbh in (*** if lbh is before ltc_oldest_to_consider, then there will be no entry in the database and this will raise Not_found ***)
+		handleltcblock lprevbh false;
+		List.iter (handleltcburntx lbh lmedtm) ltxl;
+		if recent then List.iter (marklivenodes lbh) ltxl;
+	      with Not_found -> ()
+	    end
+      end
+    with Not_found -> ()
+  in
+  handleltcblock lblkh true;
+  (*** remove dead blocks (no recent descendant/permanent orphans) ***)
+  missingheaders := List.filter (fun (_,h) -> Hashtbl.mem liveblocks h) !missingheaders;
+  missingdeltas := List.filter (fun (_,h) -> Hashtbl.mem liveblocks h) !missingdeltas
 
 let collect_inv m cnt tosend txinv =
   let (lastchangekey,ctips0l) = ltcdacstatus_dbget !ltc_bestblock in
@@ -704,40 +763,42 @@ Hashtbl.add msgtype_handler Headers
 	  let (lbk,ltx) = get_burn h in
 	  let (bhd,bhs) = bh in
 	  if not (Hashtbl.mem validheadervals (lbk,ltx)) then
-	    let (dbh,lmedtm,burned,par,csm,currhght) = Hashtbl.find outlinevals (lbk,ltx) in
-	    if not (dbh = h) then
-	      begin
-		log_string (Printf.sprintf "Impossible Error: Header burn mismatch %s %s %s != %s\n" (hashval_hexstring lbk) (hashval_hexstring ltx) (hashval_hexstring dbh) (hashval_hexstring h))
-	      end
-	    else
-	      begin
-		match par with
-		| None -> (*** genesis ***)
-		    if bhd.prevblockhash = None then
-		      process_header sout true true (lbk,ltx) h (bhd,bhs) currhght csm !genesistarget lmedtm burned
-		    else
-		      begin
-			Printf.fprintf sout "Alleged genesis block %s had an invalid header (claims point to a previous block).\n" (hashval_hexstring h);
-(*				DbInvalidatedBlocks.dbput h () *)
-		      end
-		| Some(plbk,pltx) ->
-		    try
-		      let (pdbh,lmedtm,burned,_,_,_) = Hashtbl.find outlinevals (plbk,pltx) in
-		      if bhd.prevblockhash = Some(pdbh,Poburn(plbk,pltx,lmedtm,burned)) then
-			begin
-			  try
-			    let (tar,_,_,_,_) = Hashtbl.find validheadervals (plbk,pltx) in
-			    process_header !Utils.log true true (lbk,ltx) h (bhd,bhs) currhght csm tar lmedtm burned
-			  with Not_found ->
-			    Hashtbl.add delayed_headers (lbk,ltx) (fun tar -> process_header !Utils.log true true (lbk,ltx) h (bhd,bhs) currhght csm tar lmedtm burned)
-			end
+	    begin
+	      let (dbh,lmedtm,burned,par,newcsm,currhght) = Hashtbl.find outlinevals (lbk,ltx) in
+	      if not (dbh = h) then
+		begin
+		  log_string (Printf.sprintf "Impossible Error: Header burn mismatch %s %s %s != %s\n" (hashval_hexstring lbk) (hashval_hexstring ltx) (hashval_hexstring dbh) (hashval_hexstring h))
+		end
+	      else
+		begin
+		  match par with
+		  | None -> (*** genesis ***)
+		      if bhd.prevblockhash = None then
+			process_header !Utils.log true true true (lbk,ltx) h (bhd,bhs) currhght !genesisstakemod !genesistarget lmedtm burned
 		      else
 			begin
-			  Printf.fprintf sout "Alleged block %s at height %Ld had an invalid header, pointing to an incorrect previous block or proof of burn.\n" (hashval_hexstring h) currhght;
-(*				DbInvalidatedBlocks.dbput h () *)
+			  Printf.fprintf !Utils.log "Alleged genesis block %s had an invalid header (claims point to a previous block).\n" (hashval_hexstring h);
+			  DbInvalidatedBlocks.dbput h true
 			end
-		    with Not_found -> () (*** do not know the burn for the parent; ignore header ***)
-	      end
+		  | Some(plbk,pltx) ->
+		      try
+			let (pdbh,plmedtm,pburned,_,csm,_) = Hashtbl.find outlinevals (plbk,pltx) in
+			if bhd.prevblockhash = Some(pdbh,Poburn(plbk,pltx,plmedtm,pburned)) then
+			  begin
+			    try
+			      let (tar,_,_,_,_) = Hashtbl.find validheadervals (plbk,pltx) in
+			      process_header !Utils.log true true true (lbk,ltx) h (bhd,bhs) currhght csm tar lmedtm burned
+			    with Not_found ->
+			      Hashtbl.add delayed_headers (lbk,ltx) (fun tar -> process_header !Utils.log true true true (lbk,ltx) h (bhd,bhs) currhght csm tar lmedtm burned)
+			  end
+			else
+			  begin
+			    Printf.fprintf !Utils.log "Alleged block %s at height %Ld had an invalid header, pointing to an incorrect previous block or proof of burn.\n" (hashval_hexstring h) currhght;
+			    DbInvalidatedBlocks.dbput h true
+			  end
+		      with Not_found -> () (*** do not know the burn for the parent; ignore header ***)
+		end
+	    end
 	with Not_found -> () (*** the burn is not there, so ignore the header ***)
       end
     done);;
@@ -856,7 +917,7 @@ Hashtbl.add msgtype_handler Blockdelta
     begin
       try
 	let (lbk,ltx) = get_burn h in
-	let (dbh,lmedtm,burned,par,csm,currhght) = Hashtbl.find outlinevals (lbk,ltx) in
+	let (dbh,lmedtm,burned,par,newcsm,currhght) = Hashtbl.find outlinevals (lbk,ltx) in
 	if not (dbh = h) then
 	  begin
 	    log_string (Printf.sprintf "Impossible Error: Delta burn mismatch %s %s %s != %s\n" (hashval_hexstring lbk) (hashval_hexstring ltx) (hashval_hexstring dbh) (hashval_hexstring h))
@@ -869,19 +930,20 @@ Hashtbl.add msgtype_handler Blockdelta
 		let bh = DbBlockHeader.dbget h in
 		match par with
 		| None -> (*** genesis ***)
-		    process_delta !Utils.log true true (lbk,ltx) h (bh,bd) None None None None currhght csm !genesistarget lmedtm burned
+		    process_delta !Utils.log true true true (lbk,ltx) h (bh,bd) None None None None currhght !genesisstakemod !genesistarget lmedtm burned
 		| Some(plbk,pltx) ->
-		    try
-		      let (tar,_,_,thtr,sgtr) = Hashtbl.find validheadervals (plbk,pltx) in
-		      let tht = lookup_thytree thtr in
-		      let sgt = lookup_sigtree sgtr in
-		      process_delta !Utils.log true true (lbk,ltx) h (bh,bd) thtr tht sgtr sgt currhght csm tar lmedtm burned
-		    with Not_found ->
-		      Hashtbl.add delayed_deltas (lbk,ltx)
-			(fun thtr sgtr tar ->
-			  let tht = lookup_thytree thtr in
-			  let sgt = lookup_sigtree sgtr in
-			  process_delta !Utils.log true true (lbk,ltx) h (bh,bd) thtr tht sgtr sgt currhght csm tar lmedtm burned)
+		    let (_,_,_,_,csm,_) = Hashtbl.find outlinevals (plbk,pltx) in
+		      try
+			let (tar,_,_,thtr,sgtr) = Hashtbl.find validheadervals (plbk,pltx) in
+			let tht = lookup_thytree thtr in
+			let sgt = lookup_sigtree sgtr in
+			process_delta !Utils.log true true true (lbk,ltx) h (bh,bd) thtr tht sgtr sgt currhght csm tar lmedtm burned
+		      with Not_found ->
+			Hashtbl.add delayed_deltas (lbk,ltx)
+			  (fun thtr sgtr tar ->
+			    let tht = lookup_thytree thtr in
+			    let sgt = lookup_sigtree sgtr in
+			    process_delta !Utils.log true true true (lbk,ltx) h (bh,bd) thtr tht sgtr sgt currhght csm tar lmedtm burned)
 	      end
 	  end
       with Not_found ->
@@ -1051,6 +1113,34 @@ let print_consensus_warning s cw =
   | ConsensusWarningTerminal ->
       Printf.fprintf s "No blocks were created in the past week. Dalilcoin has reached terminal status.\nThe only recovery possible for the network is a hard fork.\nSometimes this message means the node is out of sync with ltc.\n";;
 	
+let get_bestblock_print_warnings s =
+  let (b,cwl) = get_bestblock() in
+  List.iter (print_consensus_warning s) cwl;
+  b;;
+
+let get_bestblock_cw_exception e =
+  let (best,cwl) = get_bestblock() in
+  begin
+    try
+      let cw =
+	List.find
+	  (fun cw ->
+	    match cw with
+	    | ConsensusWarningMissing(_,_,_) -> true
+	    | _ -> false)
+	  cwl
+      in
+      print_consensus_warning !log cw;
+      log_string (Printf.sprintf "possibly not synced; delaying staking\n");
+      raise Exit
+    with
+    | Not_found -> ()
+    | Exit -> raise e
+  end;
+  match best with
+  | Some(dbh,lbk,ltx) -> (dbh,lbk,ltx)
+  | None -> raise e;;
+
 let print_best_block () =
   let (b,cwl) = get_bestblock () in
   List.iter (print_consensus_warning !Utils.log) cwl;
@@ -1109,14 +1199,15 @@ let reprocessblock oc h =
       let bd = DbBlockDelta.dbget h in
       try
 	let (lbk,ltx) = get_burn h in
-	let (_,lmedtm,burned,par,csm,currhght) = Hashtbl.find outlinevals (lbk,ltx) in
-	let (tar,thtr,sgtr) =
+	let (_,lmedtm,burned,par,_,currhght) = Hashtbl.find outlinevals (lbk,ltx) in
+	let (csm,tar,thtr,sgtr) =
 	  match par with
 	  | None -> (*** genesis ***)
-	      (!genesistarget,None,None)
+	      (!genesisstakemod,!genesistarget,None,None)
 	  | Some(plbk,pltx) ->
+	let (_,_,_,_,csm,_) = Hashtbl.find outlinevals (plbk,pltx) in
 	      let (tar,_,_,thtr,sgtr) = Hashtbl.find validheadervals (plbk,pltx) in
-	      (tar,thtr,sgtr)
+	      (csm,tar,thtr,sgtr)
 	in
 	let prevc = load_expanded_ctree (ctree_of_block (bh,bd)) in
 	let (cstk,txl) = txl_of_block (bh,bd) in (*** the coinstake tx is performed last, i.e., after the txs in the block. ***)

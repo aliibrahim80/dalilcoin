@@ -21,9 +21,6 @@ val artificialbestblock : (hashval * hashval * hashval) option ref
 
 val initialize_dlc_from_ltc : out_channel -> hashval -> unit
 
-val processing_deltas : hashval list ref
-val save_processing_deltas : unit -> unit
-
 val print_best_block : unit -> unit
 
 val lookup_thytree : hashval option -> Mathdata.ttree option
@@ -52,6 +49,8 @@ val print_consensus_warning : out_channel -> consensuswarning -> unit
 
 val get_burn : hashval -> hashval * hashval
 val get_bestblock : unit -> (hashval * hashval * hashval) option * consensuswarning list
+val get_bestblock_print_warnings : out_channel -> (hashval * hashval * hashval) option
+val get_bestblock_cw_exception : exn -> hashval * hashval * hashval
 
 val add_to_txpool : hashval -> Tx.stx -> unit
 val remove_from_txpool : hashval -> unit

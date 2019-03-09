@@ -544,7 +544,7 @@ let rec ltc_process_block h =
 		  genl := (txhh,burned,dnxt)::!genl;
 		  if not (Hashtbl.mem outlinevals (hh,txhh)) then
 		    begin
-		      Hashtbl.add outlinevals (hh,txhh) (dnxt,tm,burned,None,!genesisstakemod,1L);
+		      Hashtbl.add outlinevals (hh,txhh) (dnxt,tm,burned,None,hashpair hh txhh,1L);
 		      (*** since the burn is presumably new, add to missing lists; this should never happen since the genesis phase has passed. ***)
 		      missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(1L,dnxt)] !missingheaders;
 		      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(1L,dnxt)] !missingdeltas
@@ -566,7 +566,7 @@ let rec ltc_process_block h =
 			      let lprevblkh = hexstring_hashval lprevblkh in
 			      let (_,_,_,_,_,dhght) = Hashtbl.find outlinevals (lprevblkh,lprevtx) in
 			      let currhght = Int64.add 1L dhght in
-			      Hashtbl.add outlinevals (hh,txhh) (dnxt,tm,burned,Some(lprevblkh,lprevtx),hashpair lprevblkh lprevtx,currhght);
+			      Hashtbl.add outlinevals (hh,txhh) (dnxt,tm,burned,Some(lprevblkh,lprevtx),hashpair hh txhh,currhght);
 			      (*** since the burn is presumably new, add to missing lists ***)
 			      missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingheaders;
 			      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingdeltas

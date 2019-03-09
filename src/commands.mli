@@ -28,7 +28,7 @@ val walletwatchaddrs_offlinekey : addr list ref
 val walletwatchaddrs_offlinekey_fresh : addr list ref
 val stakingassets : (p2pkhaddr * hashval * int64 * obligation * int64) list ref
 
-val get_cants_balances_in_ledger : out_channel -> hashval -> int64 * int64 * int64 * int64
+val get_cants_balances_in_ledger : out_channel -> hashval -> int64 -> int64 * int64 * int64 * int64 * int64 * int64 * int64 * int64
 
 val load_txpool : unit -> unit
 val save_txpool : unit -> unit
@@ -36,7 +36,7 @@ val load_wallet : unit -> unit
 val save_wallet : unit -> unit
 
 val printassets : out_channel -> unit
-val printassets_in_ledger : out_channel -> hashval -> unit
+val printassets_in_ledger : out_channel -> hashval -> int64 -> unit
 val printctreeinfo : out_channel -> hashval -> unit
 val printctreeelt : out_channel -> hashval -> unit
 val printhconselt : out_channel -> hashval -> unit
@@ -73,3 +73,6 @@ val verifyfullledger : out_channel -> hashval -> unit
 val requestfullledger : out_channel -> hashval -> unit
 
 val dumpwallet : string -> unit
+val pblockchain : out_channel -> (hashval * hashval * hashval) option -> int -> unit
+val dumpstate : string -> unit
+

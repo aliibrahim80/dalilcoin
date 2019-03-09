@@ -21,7 +21,7 @@ let shutdown_close s =
 
 (** associate (lbk,ltx) -- litecoin block id, litcoin burn tx id -- with various info.
  outlinevals associates pair with
-   dalilcoin block id, litecoin median time, litoshis burned, optional previous (lbh,ltx) pair, stake modifier and dalilcoin block height
+   dalilcoin block id, litecoin median time, litoshis burned, optional previous (lbh,ltx) pair, stake modifier (for the next block) and dalilcoin block height
    This is all data that can be computed via the ltc blockchain.
  validheadervals associates pair with (if dalilcoin header has been validated and all previous headers have been validated)
    targetinfo, timestamp, newledgerroot, newtheorytreeroot, newsignatreeroot

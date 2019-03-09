@@ -140,12 +140,13 @@ val ctree_of_block : block -> ctree
 
 val txl_of_block : block -> tx * tx list
 
-val retarget : big_int -> int32 -> big_int
+val retarget : int64 -> big_int -> int32 -> big_int
 val difficulty : big_int -> big_int
 
 val valid_block : ttree option -> stree option -> int64 -> stakemod -> targetinfo -> block -> int64 -> int64 -> (ttree option * stree option) option
 
 val blockheader_succ_a : hashval -> int64 -> targetinfo -> blockheader -> bool
+val blockheader_succ_b : hashval -> hashval -> int64 -> targetinfo -> blockheader -> bool
 val blockheader_succ : blockheader -> blockheader -> bool
 
 type blockchain = block * block list

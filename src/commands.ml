@@ -31,7 +31,7 @@ let walletwatchaddrs_offlinekey = ref []
 let walletwatchaddrs_offlinekey_fresh = ref []
 let stakingassets = ref []
 
-let cants_balances_in_ledger : (hashval,int64 * int64 * int64 * int64) Hashtbl.t = Hashtbl.create 100
+let cants_balances_in_ledger : (hashval,int64 * int64 * int64 * int64 * int64 * int64 * int64 * int64) Hashtbl.t = Hashtbl.create 100
 
 let load_txpooltm () =
   let fn = Filename.concat (datadir()) "txpooltm" in
@@ -643,18 +643,22 @@ let assets_at_address_in_ledger_json raiseempty alpha par ledgerroot blkh =
   if not (jhl = []) then jal := ("historic",JsonArr(jhl))::!jal;
   (!jal,!jwl)
 
-let printassets_in_ledger oc ledgerroot =
+let printassets_in_ledger oc ledgerroot blkhght =
   let ctr = Ctre.CHash(ledgerroot) in
   let warned = ref false in
   let waitprinted = ref false in
   let al1 = ref [] in
   let tot1 = ref 0L in
+  let tot1u = ref 0L in
   let al2 = ref [] in
   let tot2 = ref 0L in
+  let tot2u = ref 0L in
   let al3 = ref [] in
   let tot3 = ref 0L in
+  let tot3u = ref 0L in
   let al4 = ref [] in
   let tot4 = ref 0L in
+  let tot4u = ref 0L in
   let numtrys = ref 11 in
   let handler f =
     try
@@ -714,9 +718,10 @@ let printassets_in_ledger oc ledgerroot =
     (fun alpha ->
       handler (fun () -> al4 := (alpha,Ctre.ctree_addr true true alpha ctr None)::!al4))
     !walletwatchaddrs_offlinekey;
-  let sumcurr tot a =
+  let sumcurr tot totu a =
     match a with
-    | (_,_,_,Currency(v)) -> tot := Int64.add !tot v
+    | (_,_,Some(_,lh,_),Currency(v)) when lh > blkhght -> tot := Int64.add !tot v
+    | (_,_,_,Currency(v)) -> tot := Int64.add !tot v; totu := Int64.add !totu v
     | _ -> ()
   in
   Printf.fprintf oc "Assets in ledger with root %s:\n" (hashval_hexstring ledgerroot);
@@ -726,7 +731,7 @@ let printassets_in_ledger oc ledgerroot =
       match x with
       | (Some(hl),_) ->
 	  Printf.fprintf oc "%s:\n" z;
-	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot1)
+	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot1 tot1u)
       | (None,_) ->
 	  Printf.fprintf oc "%s: empty\n" z;
     )
@@ -737,7 +742,7 @@ let printassets_in_ledger oc ledgerroot =
       match x with
       | (Some(hl),_) ->
 	  Printf.fprintf oc "%s:\n" z;
-	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot2)
+	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot2 tot2u)
       | (None,_) ->
 	  Printf.fprintf oc "%s: empty\n" z;
     )
@@ -748,7 +753,7 @@ let printassets_in_ledger oc ledgerroot =
       match x with
       | (Some(hl),_) ->
 	  Printf.fprintf oc "%s:\n" (addr_daliladdrstr alpha2);
-	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot3)
+	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot3 tot3u)
       | (None,_) ->
 	  Printf.fprintf oc "%s: empty\n" (addr_daliladdrstr alpha2);
     )
@@ -759,32 +764,33 @@ let printassets_in_ledger oc ledgerroot =
       match x with
       | (Some(hl),_) ->
 	  Printf.fprintf oc "%s:\n" (addr_daliladdrstr alpha);
-	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot4)
+	  Ctre.print_hlist_gen oc (Ctre.nehlist_hlist hl) (sumcurr tot4 tot4u)
       | (None,_) ->
 	  Printf.fprintf oc "%s: empty\n" (addr_daliladdrstr alpha);
     )
     !al4;
-  Printf.fprintf oc "Total p2pkh: %s fraenks\n" (fraenks_of_cants !tot1);
-  Printf.fprintf oc "Total p2sh: %s fraenks\n" (fraenks_of_cants !tot2);
-  Printf.fprintf oc "Total via endorsement: %s fraenks\n" (fraenks_of_cants !tot3);
-  Printf.fprintf oc "Total watched: %s fraenks\n" (fraenks_of_cants !tot4);
-  Hashtbl.replace cants_balances_in_ledger ledgerroot (!tot1,!tot2,!tot3,!tot4) (*** preventing recomputation for getting balances if the ledger has not changed ***)
+  Printf.fprintf oc "Total p2pkh: %s fraenks (%s unlocked)\n" (fraenks_of_cants !tot1) (fraenks_of_cants !tot1u);
+  Printf.fprintf oc "Total p2sh: %s fraenks (%s unlocked)\n" (fraenks_of_cants !tot2) (fraenks_of_cants !tot2u);
+  Printf.fprintf oc "Total via endorsement: %s fraenks (%s unlocked)\n" (fraenks_of_cants !tot3) (fraenks_of_cants !tot3u);
+  Printf.fprintf oc "Total watched: %s fraenks (%s unlocked)\n" (fraenks_of_cants !tot4)  (fraenks_of_cants !tot4u);
+  Hashtbl.replace cants_balances_in_ledger ledgerroot (!tot1,!tot1u,!tot2,!tot2u,!tot3,!tot3u,!tot4,!tot4u) (*** preventing recomputation for getting balances if the ledger has not changed ***)
 
 let printassets oc =
   match !artificialledgerroot with
   | Some(ledgerroot) ->
-      printassets_in_ledger oc ledgerroot
+      printassets_in_ledger oc ledgerroot (-1L)
   | None ->
       try
 	let (b,cwl) = get_bestblock() in
 	match b with
 	| Some(_,lbk,ltx) ->
+	    let (_,_,_,_,_,blkhght) = Hashtbl.find outlinevals (lbk,ltx) in
 	    let (_,_,ledgerroot,_,_) = Hashtbl.find validheadervals (lbk,ltx) in
-	    printassets_in_ledger oc ledgerroot
+	    printassets_in_ledger oc ledgerroot blkhght
 	| None -> ()
       with Not_found -> ()
 
-let get_cants_balances_in_ledger oc ledgerroot =
+let get_cants_balances_in_ledger oc ledgerroot blkhght =
   try
     Hashtbl.find cants_balances_in_ledger ledgerroot
   with Not_found ->
@@ -792,9 +798,13 @@ let get_cants_balances_in_ledger oc ledgerroot =
     let warned = ref false in
     let waitprinted = ref false in
     let tot1 = ref 0L in
+    let tot1u = ref 0L in
     let tot2 = ref 0L in
+    let tot2u = ref 0L in
     let tot3 = ref 0L in
+    let tot3u = ref 0L in
     let tot4 = ref 0L in
+    let tot4u = ref 0L in
     let numtrys = ref 11 in
     let handler f =
       try
@@ -896,8 +906,8 @@ let get_cants_balances_in_ledger oc ledgerroot =
 	      (Some(hl),_) -> nehlist_sumcurr tot4 hl
 	    | _ -> ()))
       !walletwatchaddrs_offlinekey;
-    Hashtbl.add cants_balances_in_ledger ledgerroot (!tot1,!tot2,!tot3,!tot4);
-    (!tot1,!tot2,!tot3,!tot4)
+    Hashtbl.add cants_balances_in_ledger ledgerroot (!tot1,!tot1u,!tot2,!tot2u,!tot3,!tot3u,!tot4,!tot4u);
+    (!tot1,!tot1u,!tot2,!tot2u,!tot3,!tot3u,!tot4,!tot4u)
 
 let printasset oc h =
   try
@@ -2319,3 +2329,63 @@ let dumpwallet fn =
     (fun alpha -> Printf.fprintf f "%s (offlinekey, fresh)\n" (addr_daliladdrstr alpha))
     !walletwatchaddrs_offlinekey_fresh;
   close_out f
+
+let rec pblockchain_r s lbk ltx m =
+  if m > 0 then
+    begin
+      try
+	let (dbh,lmedtm,burned,par,csm,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+	begin
+	  match par with
+	  | Some(lbk,ltx) -> pblockchain_r s lbk ltx (m-1)
+	  | None -> ()
+	end;
+	try
+	  let (tar,tm,lr,_,_) = Hashtbl.find validheadervals (lbk,ltx) in
+	  Printf.fprintf s "block %Ld %s (post block ledger %s)\n" blkh (hashval_hexstring dbh) (hashval_hexstring lr);
+	  Printf.fprintf s "Timestamp: %Ld\n" tm;
+	  Printf.fprintf s "Target: %s\n" (string_of_big_int tar);
+	  Printf.fprintf s "Difficulty: %s\n" (string_of_big_int (difficulty tar));
+	  Printf.fprintf s "Stake Modifier: %s\n" (hashval_hexstring csm);
+	  Printf.fprintf s "Burned %Ld at median time %Ld with ltc tx %s in block %s\n" burned lmedtm (hashval_hexstring ltx) (hashval_hexstring lbk);
+	with Not_found ->
+	  Printf.fprintf s "block %Ld %s (missing header info)\n" blkh (hashval_hexstring dbh);
+	  Printf.fprintf s "Stake Modifier: %s\n" (hashval_hexstring csm);
+	  Printf.fprintf s "Burned %Ld at median time %Ld with ltc tx %s in block %s\n" burned lmedtm (hashval_hexstring ltx) (hashval_hexstring lbk);
+      with Not_found ->
+	Printf.fprintf s "apparent block burned with ltc tx %s in block %s, but missing outline info\n" (hashval_hexstring ltx) (hashval_hexstring lbk);
+    end
+
+let pblockchain s n m =
+  match n with
+  | Some(_,lbk,ltx) -> pblockchain_r s lbk ltx m
+  | None -> ()
+
+let dumpstate fa =
+  let sa = open_out fa in
+  Printf.fprintf sa "=========\nNetwork connections: %d\n" (List.length !netconns);
+  List.iter
+    (fun (lth,sth,(fd,sin,sout,gcs)) ->
+      match !gcs with
+      | None -> Printf.fprintf sa "[Dead Connection]\n";
+      | Some(cs) ->
+	  Printf.fprintf sa "-----------\nConnection: %s %f\n" cs.realaddr cs.conntime;
+	  Printf.fprintf sa "peertimeskew %d\nprotvers %ld\nuseragent %s\naddrfrom %s\nbanned %s\nlastmsgtm %f\nfirst_header_height %Ld\nfirst_full_height %Ld\nlast_height %Ld\n" cs.peertimeskew cs.protvers cs.useragent cs.addrfrom (if cs.banned then "true" else "false") cs.lastmsgtm cs.first_header_height cs.first_full_height cs.last_height;
+	  Hashtbl.iter
+	    (fun (m,h) tm ->
+	      Printf.fprintf sa "%d %s %f\n" m (hashval_hexstring h) tm)
+	    cs.sentinv;
+	  Hashtbl.iter
+	    (fun (m,h) () ->
+	      Printf.fprintf sa "%d %s\n" m (hashval_hexstring h))
+	    cs.rinv;
+	  Hashtbl.iter
+	    (fun (m,h) tm ->
+	      Printf.fprintf sa "%d %s %f\n" m (hashval_hexstring h) tm)
+	    cs.invreq;
+    )
+    !netconns;
+  Printf.fprintf sa "=================\nBlock Chain:\n";
+  (try pblockchain sa (get_bestblock_print_warnings sa) 10000 with _ -> ());
+  dumpblocktreestate sa;
+  close_out sa

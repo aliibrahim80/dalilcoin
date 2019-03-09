@@ -35,7 +35,6 @@ let intconfigvars = [
 ("onionremoteport",fun x -> Config.onionremoteport := x);
 ("socksport",fun x -> Config.socksport := x);
 ("rpcport",fun x -> Config.rpcport := x);
-("rpcport",fun x -> Config.rpcport := x);
 ("ltcrpcport",fun x -> Config.ltcrpcport := x);
 ("ltcnotifyport",fun x -> Config.ltcnotifyport := x);
 ("maxconns",fun x -> Config.maxconns := x);
