@@ -701,9 +701,7 @@ let retarget blktm tar deltm =
   if blktm < 1556712000L then
     retarget_orig tar deltm
   else
-    unit_big_int (*** effectively impossible target;
-		      this will halt the ability to form any blocks after May 1, 2019,
-		      and is intended to force a hard fork by that date. ***)
+    retarget_dampened tar deltm (*** after May 01 2019 ***)
 
 let difficulty tar =
   div_big_int !max_target tar
