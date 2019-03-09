@@ -663,6 +663,12 @@ let initialize_commands () =
     (fun oc _ -> Hashtbl.iter (fun n () -> Printf.fprintf oc "%s\n" n) bannedpeers);
   ac "bannode" "bannode [<address:port>] ... [<address:port>]" "ban the given peers"
     (fun _ al -> List.iter (fun n -> banpeer n) al);
+  ac "missingblocks" "missingblocks" "Print info about headers and deltas the node is missing.\nTypically a delta is only listed as missing after the header has been received and validated."
+    (fun oc al ->
+      Printf.fprintf oc "%d missing headers.\n" (List.length !missingheaders);
+      List.iter (fun (h,k) -> Printf.fprintf oc "%Ld. %s\n" h (hashval_hexstring k)) !missingheaders;
+      Printf.fprintf oc "%d missing deltas.\n" (List.length !missingdeltas);
+      List.iter (fun (h,k) -> Printf.fprintf oc "%Ld. %s\n" h (hashval_hexstring k)) !missingdeltas);
   ac "getinfo" "getinfo" "Print a summary of the current dalilcoin node state including:\nnumber of connections, current best block, current difficulty, current balance."
     (fun oc al ->
       remove_dead_conns();
