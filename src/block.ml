@@ -441,7 +441,7 @@ let valid_block_a tht sigt blkh csm tinfo b ((aid,bday,obl,u) as a) stkaddr lmed
   (*** The header is valid. ***)
   if (vbcb (valid_blockheader_a blkh csm tinfo (bhd,bhs) (aid,bday,obl,u) lmedtm burned) (fun c -> Printf.fprintf c "header valid\n") (fun c -> Printf.fprintf c "header invalid\n")
 	&&
-      vbcb (tx_outputs_valid bd.stakeoutput) (fun c -> Printf.fprintf c "stakeoutput valid\n") (fun c -> Printf.fprintf c "stakeoutput invalid\n")
+      vbcb (tx_outputs_valid bhd.timestamp bd.stakeoutput) (fun c -> Printf.fprintf c "stakeoutput valid\n") (fun c -> Printf.fprintf c "stakeoutput invalid\n")
         &&
       vbcb (blockdelta_hashroot bd = bhd.blockdeltaroot) (fun c -> Printf.fprintf c "delta Merkle root valid\n") (fun c -> Printf.fprintf c "delta Merkle root invalid\n") (*** the header commits to the blockdelta (including all txs and their signatures) ***)
 	&&
@@ -535,7 +535,7 @@ let valid_block_a tht sigt blkh csm tinfo b ((aid,bday,obl,u) as a) stkaddr lmed
 		      && sgvb
 		      && not (List.mem stakein inpl)
 		      && tx_signatures_valid blkh bhd.timestamp al stau
-		      && tx_valid tau
+		      && tx_valid bhd.timestamp tau
 		      && ctree_supports_tx_2 false false tht sigt blkh tau aal al tr <= 0L
 	      )
 	      true

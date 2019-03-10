@@ -1016,15 +1016,15 @@ Hashtbl.add msgtype_handler STx
 	if recently_requested (i,h) tm cs.invreq then (*** only continue if it was requested ***)
           let (((tauin,tauout) as tau,_) as stau,_) = deserialize_exc_protect cs (fun () -> sei_stx seis r) in
 	  if hashstx stau = h then
-	    if tx_valid tau then
-	      begin
-		try
-		  begin
-		    match get_bestblock() with
-		    | (Some(dbh,lbk,ltx),_) -> (*** ignore consensus warnings here ***)
-			begin
-			  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
-			  let (_,tmstmp,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
+	    begin
+	      try
+		begin
+		  match get_bestblock() with
+		  | (Some(dbh,lbk,ltx),_) -> (*** ignore consensus warnings here ***)
+		      begin
+			let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+			let (_,tmstmp,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
+			if tx_valid tmstmp tau then
 			  let unsupportederror alpha k = log_string (Printf.sprintf "Could not find asset %s at address %s in ledger %s; throwing out tx %s\n" (hashval_hexstring k) (Cryptocurr.addr_daliladdrstr alpha) (hashval_hexstring lr) (hashval_hexstring h)) in
 			  let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
 			  if tx_signatures_valid blkh tmstmp al stau then
@@ -1043,14 +1043,14 @@ Hashtbl.add msgtype_handler STx
 			    end
 			  else
 			    (log_string (Printf.sprintf "ignoring tx %s since signatures are not valid at the current block height of %Ld\n" (hashval_hexstring h) blkh))
-			end
+			else
+			  (log_string (Printf.sprintf "misbehaving peer? [invalid Tx %s]\n" (hashval_hexstring h)))
+		      end
 		    | _ -> raise Not_found
-		  end
-		with _ ->
-		  (log_string (Printf.sprintf "Tx %s is unsupported by the local ledger, dropping it.\n" (hashval_hexstring h)))
-	      end
-	    else
-	      (log_string (Printf.sprintf "misbehaving peer? [invalid Tx %s]\n" (hashval_hexstring h)))
+		end
+	      with _ ->
+		(log_string (Printf.sprintf "Tx %s is unsupported by the local ledger, dropping it.\n" (hashval_hexstring h)))
+	    end
           else (*** otherwise, it seems to be a misbehaving peer --  ignore for now ***)
 	    (log_string (Printf.sprintf "misbehaving peer? [malformed Tx]\n"))
 	else (*** if something unrequested was sent, then seems to be a misbehaving peer ***)

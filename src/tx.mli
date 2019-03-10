@@ -19,9 +19,9 @@ val tx_outputs : tx -> addr_preasset list
 
 val no_dups : 'a list -> bool
 val tx_inputs_valid : addr_assetid list -> bool
-val tx_outputs_valid : addr_preasset list -> bool
-val tx_valid : tx -> bool
-val tx_valid_oc : out_channel -> tx -> bool
+val tx_outputs_valid : int64 -> addr_preasset list -> bool
+val tx_valid : int64 -> tx -> bool
+val tx_valid_oc : out_channel -> int64 -> tx -> bool
 
 type gensignat_or_ref = GenSignatReal of gensignat | GenSignatRef of int
 type txsigs = gensignat_or_ref option list * gensignat_or_ref option list

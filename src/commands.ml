@@ -1413,7 +1413,7 @@ let signtx oc lr taustr =
 let savetxtopool blkh tm lr staustr =
   let s = hexstring_string staustr in
   let (((tauin,tauout) as tau,tausg),_) = sei_stx seis (s,String.length s,None,0,0) in
-  if tx_valid tau then
+  if tx_valid tm tau then
     let unsupportederror alpha h = Printf.printf "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
     let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
     if tx_signatures_valid blkh tm al (tau,tausg) then
@@ -1427,7 +1427,7 @@ let savetxtopool blkh tm lr staustr =
 let validatetx oc blkh tm tr sr lr staustr =
   let s = hexstring_string staustr in
   let (((tauin,tauout) as tau,tausg) as stau,_) = sei_stx seis (s,String.length s,None,0,0) in
-  if tx_valid_oc oc tau then
+  if tx_valid_oc oc tm tau then
     begin
       let unsupportederror alpha h = Printf.fprintf oc "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
       let validatetx_report() =
@@ -1507,7 +1507,7 @@ let validatetx oc blkh tm tr sr lr staustr =
 let sendtx oc blkh tm tr sr lr staustr =
   let s = hexstring_string staustr in
   let (((tauin,tauout) as tau,tausg) as stau,_) = sei_stx seis (s,String.length s,None,0,0) in
-  if tx_valid tau then
+  if tx_valid tm tau then
     begin
       let unsupportederror alpha h = Printf.fprintf oc "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
       let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in

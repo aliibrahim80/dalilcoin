@@ -97,86 +97,95 @@ let rec tx_outputs_valid_one_owner_oc oc outpl ool pol nol =
   | [] -> true
 
 (*** Ensure ownership deeds are sent to term addresses and publications are sent to publication addresses. ***)
-let rec tx_outputs_valid_addr_cats outpl =
+let rec tx_outputs_valid_addr_cats tm outpl =
   match outpl with
-  | (alpha,(_,Bounty(_)))::outpr -> termaddr_p alpha && tx_outputs_valid_addr_cats outpr (*** bounties should only be published to term addresses ***)
-  | (alpha,(_,OwnsObj(h,beta,u)))::outpr -> hashval_term_addr h = alpha && tx_outputs_valid_addr_cats outpr
-  | (alpha,(_,OwnsProp(h,beta,u)))::outpr -> hashval_term_addr h = alpha && tx_outputs_valid_addr_cats outpr
-  | (alpha,(_,OwnsNegProp))::outpr -> termaddr_p alpha && tx_outputs_valid_addr_cats outpr
-  | (alpha,(_,TheoryPublication(beta,h,dl)))::outpr -> false (*** disable theories and signatures for now; can be hard forked in later upon demand ***)
-(***
-      begin
-	match hashtheory (theoryspec_theory dl) with
-	| Some(dlh) ->
-	    alpha = hashval_pub_addr dlh && tx_outputs_valid_addr_cats outpr
-	| None -> false
-      end
-***)
-  | (alpha,(_,SignaPublication(beta,h,th,dl)))::outpr -> false (*** disable theories and signatures for now; can be hard forked in later upon demand ***)
-(***      alpha = hashval_pub_addr (hashopair2 th (hashsigna (signaspec_signa dl))) && tx_outputs_valid_addr_cats outpr ***)
-  | (alpha,(_,DocPublication(beta,h,th,dl)))::outpr -> alpha = hashval_pub_addr (hashopair2 th (hashdoc dl)) && tx_outputs_valid_addr_cats outpr
-  | (alpha,(_,Marker))::outpr -> pubaddr_p alpha && tx_outputs_valid_addr_cats outpr (*** markers should only be published to publication addresses, since they're used to prepublish an intention to publish ***)
-  | _::outpr -> tx_outputs_valid_addr_cats outpr
+  | (alpha,(_,Bounty(_)))::outpr -> termaddr_p alpha && tx_outputs_valid_addr_cats tm outpr (*** bounties should only be published to term addresses ***)
+  | (alpha,(_,OwnsObj(h,beta,u)))::outpr -> hashval_term_addr h = alpha && tx_outputs_valid_addr_cats tm outpr
+  | (alpha,(_,OwnsProp(h,beta,u)))::outpr -> hashval_term_addr h = alpha && tx_outputs_valid_addr_cats tm outpr
+  | (alpha,(_,OwnsNegProp))::outpr -> termaddr_p alpha && tx_outputs_valid_addr_cats tm outpr
+  | (alpha,(_,TheoryPublication(beta,h,dl)))::outpr ->
+      if tm < 1556712000L then (*** May 01 2019 hard fork ***)
+	false
+      else
+	begin
+	  match hashtheory (theoryspec_theory dl) with
+	  | Some(dlh) ->
+	      alpha = hashval_pub_addr dlh && tx_outputs_valid_addr_cats tm outpr
+	  | None -> false
+	end
+  | (alpha,(_,SignaPublication(beta,h,th,dl)))::outpr ->
+      if tm < 1556712000L then (*** May 01 2019 hard fork ***)
+	false
+      else
+	alpha = hashval_pub_addr (hashopair2 th (hashsigna (signaspec_signa dl))) && tx_outputs_valid_addr_cats tm outpr
+  | (alpha,(_,DocPublication(beta,h,th,dl)))::outpr -> alpha = hashval_pub_addr (hashopair2 th (hashdoc dl)) && tx_outputs_valid_addr_cats tm outpr
+  | (alpha,(_,Marker))::outpr -> pubaddr_p alpha && tx_outputs_valid_addr_cats tm outpr (*** markers should only be published to publication addresses, since they're used to prepublish an intention to publish ***)
+  | _::outpr -> tx_outputs_valid_addr_cats tm outpr
   | [] -> true
 
-let rec tx_outputs_valid_addr_cats_oc oc outpl =
+let rec tx_outputs_valid_addr_cats_oc oc tm outpl =
   match outpl with
   | (alpha,(_,OwnsObj(h,beta,u)))::outpr ->
       if hashval_term_addr h = alpha then
-	tx_outputs_valid_addr_cats_oc oc outpr
+	tx_outputs_valid_addr_cats_oc oc tm outpr
       else
 	(Printf.fprintf oc "tx invalid since OwnsObj %s should be sent to %s\n" (hashval_hexstring h) (Cryptocurr.addr_daliladdrstr alpha); false)
   | (alpha,(_,OwnsProp(h,beta,u)))::outpr ->
       if hashval_term_addr h = alpha then
-	tx_outputs_valid_addr_cats_oc oc outpr
+	tx_outputs_valid_addr_cats_oc oc tm outpr
       else
 	(Printf.fprintf oc "tx invalid since OwnsProp %s should be sent to %s\n" (hashval_hexstring h) (Cryptocurr.addr_daliladdrstr alpha); false)
   | (alpha,(_,OwnsNegProp))::outpr ->
       if termaddr_p alpha then 
-	tx_outputs_valid_addr_cats_oc oc outpr
+	tx_outputs_valid_addr_cats_oc oc tm outpr
       else
 	(Printf.fprintf oc "tx invalid since OwnsNegProp should be sent to a term address\n"; false)
   | (alpha,(_,TheoryPublication(beta,h,dl)))::outpr ->
-      begin
-	match hashtheory (theoryspec_theory dl) with
-	| Some(dlh) ->
-	    if alpha = hashval_pub_addr dlh then
-	      tx_outputs_valid_addr_cats_oc oc outpr
-	    else
-	      (Printf.fprintf oc "tx invalid since Theory should be sent to %s\n" (Cryptocurr.addr_daliladdrstr (hashval_pub_addr dlh)); false)
-	| None -> false
-      end
+      if tm < 1556712000L then (*** May 01 2019 hard fork ***)
+	(Printf.fprintf oc "tx invalid since Theory could not be published before May 01 2019 hard fork."; false)
+      else
+	begin
+	  match hashtheory (theoryspec_theory dl) with
+	  | Some(dlh) ->
+	      if alpha = hashval_pub_addr dlh then
+		tx_outputs_valid_addr_cats_oc oc tm outpr
+	      else
+		(Printf.fprintf oc "tx invalid since Theory should be sent to %s\n" (Cryptocurr.addr_daliladdrstr (hashval_pub_addr dlh)); false)
+	  | None -> false
+	end
   | (alpha,(_,SignaPublication(beta,h,th,dl)))::outpr ->
-      if alpha = hashval_pub_addr (hashopair2 th (hashsigna (signaspec_signa dl))) then
-	tx_outputs_valid_addr_cats_oc oc outpr
+      if tm < 1556712000L then (*** May 01 2019 hard fork ***)
+	(Printf.fprintf oc "tx invalid since Signature could not be published before May 01 2019 hard fork."; false)
+      else if alpha = hashval_pub_addr (hashopair2 th (hashsigna (signaspec_signa dl))) then
+	tx_outputs_valid_addr_cats_oc oc tm outpr
       else
 	(Printf.fprintf oc "tx invalid since Signature should be sent to %s\n" (Cryptocurr.addr_daliladdrstr (hashval_pub_addr (hashopair2 th (hashsigna (signaspec_signa dl))))); false)
   | (alpha,(_,DocPublication(beta,h,th,dl)))::outpr ->
       if alpha = hashval_pub_addr (hashopair2 th (hashdoc dl)) then
-	tx_outputs_valid_addr_cats_oc oc outpr
+	tx_outputs_valid_addr_cats_oc oc tm outpr
       else
 	(Printf.fprintf oc "tx invalid since Document should be sent to %s\n" (Cryptocurr.addr_daliladdrstr (hashval_pub_addr (hashopair2 th (hashdoc dl)))); false)
   | (alpha,(_,Marker))::outpr ->
       if pubaddr_p alpha then
-	tx_outputs_valid_addr_cats outpr (*** markers should only be published to publication addresses, since they're used to prepublish an intention to publish ***)
+	tx_outputs_valid_addr_cats_oc oc tm outpr (*** markers should only be published to publication addresses, since they're used to prepublish an intention to publish ***)
       else
 	(Printf.fprintf oc "tx invalid since Marker not sent to a publication address\n"; false)
-  | _::outpr -> tx_outputs_valid_addr_cats_oc oc outpr
+  | _::outpr -> tx_outputs_valid_addr_cats_oc oc tm outpr
   | [] -> true
 
-let tx_outputs_valid (outpl: addr_preasset list) =
+let tx_outputs_valid tm (outpl: addr_preasset list) =
   tx_outputs_valid_one_owner outpl [] [] []
     &&
-  tx_outputs_valid_addr_cats outpl 
+  tx_outputs_valid_addr_cats tm outpl 
 
-let tx_outputs_valid_oc oc (outpl: addr_preasset list) =
+let tx_outputs_valid_oc oc tm (outpl: addr_preasset list) =
   tx_outputs_valid_one_owner_oc oc outpl [] [] []
     &&
-  tx_outputs_valid_addr_cats_oc oc outpl 
+  tx_outputs_valid_addr_cats_oc oc tm outpl 
 
-let tx_valid tau = tx_inputs_valid (tx_inputs tau) && tx_outputs_valid (tx_outputs tau)
+let tx_valid tm tau = tx_inputs_valid (tx_inputs tau) && tx_outputs_valid tm (tx_outputs tau)
 
-let tx_valid_oc oc tau = tx_inputs_valid_oc oc (tx_inputs tau) && tx_outputs_valid_oc oc (tx_outputs tau)
+let tx_valid_oc oc tm tau = tx_inputs_valid_oc oc (tx_inputs tau) && tx_outputs_valid_oc oc tm (tx_outputs tau)
 
 type gensignat_or_ref = GenSignatReal of gensignat | GenSignatRef of int
 type txsigs = gensignat_or_ref option list * gensignat_or_ref option list

@@ -304,7 +304,7 @@ let stakingthread () =
 			      try
 				ignore (List.find (fun (alpha,_) -> alpha = alpha2) tauout) (*** Do not include txs that spend to the staking address, to avoid the possibility of ending up with too many assets at the stakign address ***)
 			      with Not_found ->
-				if tx_valid (tauin,tauout) then
+				if tx_valid tm (tauin,tauout) then
 				  try
 				    let unsupportederror alpha h = log_string (Printf.sprintf "Could not find asset %s at address %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha)) in
 				    let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin !dync unsupportederror) in
