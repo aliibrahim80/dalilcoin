@@ -1024,10 +1024,10 @@ Hashtbl.add msgtype_handler STx
 		    | (Some(dbh,lbk,ltx),_) -> (*** ignore consensus warnings here ***)
 			begin
 			  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
-			  let (_,_,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
+			  let (_,tmstmp,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
 			  let unsupportederror alpha k = log_string (Printf.sprintf "Could not find asset %s at address %s in ledger %s; throwing out tx %s\n" (hashval_hexstring k) (Cryptocurr.addr_daliladdrstr alpha) (hashval_hexstring lr) (hashval_hexstring h)) in
 			  let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
-			  if tx_signatures_valid blkh al stau then
+			  if tx_signatures_valid blkh tmstmp al stau then
 			    begin
 			      let nfee = ctree_supports_tx true false (lookup_thytree tr) (lookup_sigtree sr) blkh tau (CHash(lr)) in
 			      let fee = Int64.sub 0L nfee in

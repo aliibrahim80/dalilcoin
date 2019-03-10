@@ -58,9 +58,9 @@ val createtx : jsonval -> jsonval -> tx
 val createsplitlocktx : out_channel -> hashval -> int64 -> payaddr -> payaddr -> addr -> hashval -> int -> int64 -> int64 -> unit
 
 val signtx : out_channel -> hashval -> string -> unit
-val savetxtopool : int64 -> hashval -> string -> unit
-val validatetx : out_channel -> int64 -> hashval option -> hashval option -> hashval -> string -> unit
-val sendtx : out_channel -> int64 -> hashval option -> hashval option -> hashval -> string -> unit
+val savetxtopool : int64 -> int64 -> hashval -> string -> unit
+val validatetx : out_channel -> int64 -> int64 -> hashval option -> hashval option -> hashval -> string -> unit
+val sendtx : out_channel -> int64 -> int64 -> hashval option -> hashval option -> hashval -> string -> unit
 
 val query_at_block : string -> (hashval * Block.poburn) option -> hashval -> int64 -> jsonval
 val query : string -> jsonval

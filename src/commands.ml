@@ -1217,7 +1217,7 @@ let rec signtx_ins taue inpl al outpl sl rl (rsl:gensignat_or_ref option list) c
 	if not (assetid a = k) then raise (Failure "Asset mismatch when trying to sign inputs");
 	match a with
 	| (_,_,_,Marker) -> signtx_ins taue inpr ar outpl sl rl rsl ci propowns
-	| (_,_,obl,Bounty(_)) ->
+	| (_,bday,obl,Bounty(_)) ->
 	    begin
 	      if List.mem alpha propowns then (*** no signature required, bounty is being collected by owner of prop/negprop ***)
 		signtx_ins taue inpr ar outpl sl rl rsl ci propowns
@@ -1253,24 +1253,23 @@ let rec signtx_ins taue inpl al outpl sl rl (rsl:gensignat_or_ref option list) c
 			  try
 			    let obl = assetobl a in
 			    let (s1,rl1) = getsig s rl in
-			    let blkh = lkh in (*** actually, should allow signing before the lockheight, it just can't be confirmed before the lockheight ***)
-			    if check_spend_obligation alpha blkh taue s1 obl then
-			      begin
+			    begin
+			      let (b,_,_) = check_spend_obligation_upto_blkh (Some(bday)) alpha taue s1 obl in (*** allow signing now even if it cannot be confirmed until later ***)
+			      if b then
 				match obl with
 				| None -> 
 				    let (p,a4,a3,a2,a1,a0) = alpha in
 				    signtx_ins taue inpr ar outpl sr (rl1 (p=1,a4,a3,a2,a1,a0)) (Some(GenSignatReal(s1))::rsl) ci propowns
 				| Some(gam,_,_) ->
 				    signtx_ins taue inpr ar outpl sr (rl1 gam) (Some(GenSignatReal(s1))::rsl) ci propowns
-			      end
-			    else
-			      raise (Failure "bad signature already part of stx")
+			      else
+				raise (Failure "bad signature already part of stx")
+			    end
 			  with BadOrMissingSignature ->
 			    raise (Failure "bad signature already part of stx")
 		    end
 	    end
-	| _ ->
-	    let obl = assetobl a in
+	| (_,bday,obl,_) ->
 	    match sl with
 	    | [] -> signtx_ins taue inpl al outpl [None] rl rsl ci propowns
 	    | (None::sr) -> (*** missing signature ***)
@@ -1322,8 +1321,8 @@ let rec signtx_ins taue inpl al outpl sl rl (rsl:gensignat_or_ref option list) c
 	    | (Some(s)::sr) ->
 		try
 		  let (s1,rl1) = getsig s rl in
-		  let blkh = match obl with Some(_,lkh,_) -> lkh | None -> 1L in (*** artificial block height just for checking signatures ***)
-		  if check_spend_obligation alpha blkh taue s1 obl then
+		  let (b,_,_) = check_spend_obligation_upto_blkh (Some(bday)) alpha taue s1 obl in (*** allow signing now even if it cannot be confirmed until later ***)
+		  if b then
 		    begin
 		      match obl with
 		      | None -> 
@@ -1365,8 +1364,8 @@ let rec signtx_outs taue outpl sl rl rsl co =
 	| (Some(s)::sr) ->
 	    begin
 	      let (s1,rl1) = getsig s rl in
-	      let blkh = 1L in
-	      if check_spend_obligation (payaddr_addr alpha) blkh taue s1 None then
+	      let (b,_,_) = check_spend_obligation_upto_blkh None (payaddr_addr alpha) taue s1 None in
+	      if b then
 		signtx_outs taue outpr sr (rl1 alpha) (Some(GenSignatReal(s1))::rsl) co
 	      else
 		raise (Failure "bad signature already part of stx")
@@ -1411,13 +1410,13 @@ let signtx oc lr taustr =
   else
     Printf.fprintf oc "Partially signed.\n"
 
-let savetxtopool blkh lr staustr =
+let savetxtopool blkh tm lr staustr =
   let s = hexstring_string staustr in
   let (((tauin,tauout) as tau,tausg),_) = sei_stx seis (s,String.length s,None,0,0) in
   if tx_valid tau then
     let unsupportederror alpha h = Printf.printf "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
     let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
-    if tx_signatures_valid blkh al (tau,tausg) then
+    if tx_signatures_valid blkh tm al (tau,tausg) then
       let txid = hashstx (tau,tausg) in
       savetxtopool_real txid (tau,tausg)
     else
@@ -1425,7 +1424,7 @@ let savetxtopool blkh lr staustr =
   else
     Printf.printf "Invalid tx\n"
 
-let validatetx oc blkh tr sr lr staustr =
+let validatetx oc blkh tm tr sr lr staustr =
   let s = hexstring_string staustr in
   let (((tauin,tauout) as tau,tausg) as stau,_) = sei_stx seis (s,String.length s,None,0,0) in
   if tx_valid_oc oc tau then
@@ -1460,26 +1459,52 @@ let validatetx oc blkh tr sr lr staustr =
       in
       let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
       try
-	let b = tx_signatures_valid_asof_blkh al (tau,tausg) in
-	match b with
-	| None ->
-	    validatetx_report()
-	| Some(b) ->
-	    if b > blkh then
+	let (mbh,mtm) = tx_signatures_valid_asof_blkh al (tau,tausg) in
+	match (mbh,mtm) with
+	| (None,None) -> validatetx_report()
+	| (Some(bh2),None) ->
+	    if bh2 > blkh then
 	      begin
-		Printf.fprintf oc "Tx is not valid until block height %Ld\n" b;
+		Printf.fprintf oc "Tx is not valid until block height %Ld\n" bh2;
+		flush oc
+	      end;
+	    validatetx_report()
+	| (None,Some(tm2)) ->
+	    if tm2 > tm then
+	      begin
+		Printf.fprintf oc "Tx is not valid until time %Ld\n" tm2;
+		flush oc
+	      end;
+	    validatetx_report()
+	| (Some(bh2),Some(tm2)) ->
+	    if (bh2 > blkh) && (tm2 > tm) then
+	      begin
+		Printf.fprintf oc "Tx is not valid until block height %Ld and time %Ld\n" bh2 tm2;
 		flush oc
 	      end
-	    else
-	      validatetx_report()
-      with BadOrMissingSignature ->
-	Printf.fprintf oc "Invalid or incomplete signatures\n";
-	validatetx_report()
+	    else if bh2 > blkh then
+	      begin
+		Printf.fprintf oc "Tx is not valid until block height %Ld\n" bh2;
+		flush oc
+	      end
+	    else if tm2 > tm then
+	      begin
+		Printf.fprintf oc "Tx is not valid until time %Ld\n" tm2;
+		flush oc
+	      end;
+	    validatetx_report()
+      with
+      | BadOrMissingSignature ->
+	  Printf.fprintf oc "Invalid or incomplete signatures\n";
+	  validatetx_report()
+      | e ->
+	  Printf.fprintf oc "Exception: %s\n" (Printexc.to_string e);
+	  validatetx_report()
     end
   else
     Printf.fprintf oc "Invalid tx\n"
 
-let sendtx oc blkh tr sr lr staustr =
+let sendtx oc blkh tm tr sr lr staustr =
   let s = hexstring_string staustr in
   let (((tauin,tauout) as tau,tausg) as stau,_) = sei_stx seis (s,String.length s,None,0,0) in
   if tx_valid tau then
@@ -1487,43 +1512,72 @@ let sendtx oc blkh tr sr lr staustr =
       let unsupportederror alpha h = Printf.fprintf oc "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
       let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
       try
-	let b = tx_signatures_valid_asof_blkh al (tau,tausg) in
-	match b with
-	| None ->
+	let (mbh,mtm) = tx_signatures_valid_asof_blkh al (tau,tausg) in
+	let sendtxreal () =
+	  let stxh = hashstx stau in
+	  begin
+	    try
+	      let nfee = ctree_supports_tx true false (lookup_thytree tr) (lookup_sigtree sr) blkh tau (CHash(lr)) in
+	      let fee = Int64.sub 0L nfee in
+	      if fee >= !Config.minrelayfee then
+		begin
+		  savetxtopool_real stxh stau;
+		  publish_stx stxh stau;
+		  Printf.fprintf oc "%s\n" (hashval_hexstring stxh);
+		end
+	      else
+		Printf.fprintf oc "Tx is supported by the current ledger, but has too low fee of %s fraenks (below minrelayfee %s fraenks)\n" (Cryptocurr.fraenks_of_cants fee) (Cryptocurr.fraenks_of_cants !Config.minrelayfee);
+	      flush oc
+	    with
+	    | NotSupported ->
+		Printf.fprintf oc "Tx is not supported by the current ledger\n";
+		flush oc;
+	    | exn ->
+		Printf.fprintf oc "Tx is not supported by the current ledger: %s\n" (Printexc.to_string exn);
+		flush oc;
+	  end
+	in
+	match (mbh,mtm) with
+	| (None,None) ->
 	    let stxh = hashstx stau in
 	    savetxtopool_real stxh stau;
 	    publish_stx stxh stau;
 	    Printf.fprintf oc "%s\n" (hashval_hexstring stxh);
 	    flush stdout;
-	| Some(b) ->
-	    if b > blkh then
+	| (Some(bh2),None) ->
+	    if bh2 > blkh then
 	      begin
-		Printf.fprintf oc "Tx is not valid until block height %Ld\n" b;
+		Printf.fprintf oc "Tx is not valid until block height %Ld\n" bh2;
 		flush stdout
 	      end
 	    else
-	      let stxh = hashstx stau in
+	      sendtxreal()
+	| (None,Some(tm2)) ->
+	    if tm2 > tm then
 	      begin
-		try
-		  let nfee = ctree_supports_tx true false (lookup_thytree tr) (lookup_sigtree sr) blkh tau (CHash(lr)) in
-		  let fee = Int64.sub 0L nfee in
-		  if fee >= !Config.minrelayfee then
-		    begin
-		      savetxtopool_real stxh stau;
-		      publish_stx stxh stau;
-		      Printf.fprintf oc "%s\n" (hashval_hexstring stxh);
-		    end
-		  else
-		    Printf.fprintf oc "Tx is supported by the current ledger, but has too low fee of %s fraenks (below minrelayfee %s fraenks)\n" (Cryptocurr.fraenks_of_cants fee) (Cryptocurr.fraenks_of_cants !Config.minrelayfee);
-		  flush oc
-		with
-		| NotSupported ->
-		  Printf.fprintf oc "Tx is not supported by the current ledger\n";
-		  flush oc;
-		| exn ->
-		  Printf.fprintf oc "Tx is not supported by the current ledger: %s\n" (Printexc.to_string exn);
-		  flush oc;
+		Printf.fprintf oc "Tx is not valid until time %Ld\n" tm2;
+		flush stdout
 	      end
+	    else
+	      sendtxreal()
+	| (Some(bh2),Some(tm2)) ->
+	    if bh2 > blkh && tm2 > tm then
+	      begin
+		Printf.fprintf oc "Tx is not valid until block height %Ld and time %Ld\n" bh2 tm2;
+		flush stdout
+	      end
+	    else if bh2 > blkh then
+	      begin
+		Printf.fprintf oc "Tx is not valid until block height %Ld\n" bh2;
+		flush stdout
+	      end
+	    else if tm2 > tm then
+	      begin
+		Printf.fprintf oc "Tx is not valid until time %Ld\n" tm2;
+		flush stdout
+	      end
+	    else
+	      sendtxreal()
       with BadOrMissingSignature ->
 	Printf.fprintf oc "Invalid or incomplete signatures\n"
     end

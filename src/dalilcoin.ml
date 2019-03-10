@@ -1128,12 +1128,13 @@ let initialize_commands () =
 		try
 		  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
 		  try
-		    let (_,_,lr,_,_) = Hashtbl.find validheadervals (lbk,ltx) in
-		    Commands.savetxtopool blkh lr s
+		    let (_,tm,lr,_,_) = Hashtbl.find validheadervals (lbk,ltx) in
+		    Commands.savetxtopool blkh tm lr s
 		  with Not_found ->
 		    let (bhd,_) = DbBlockHeader.dbget dbh in
 		    let lr = bhd.newledgerroot in
-		    Commands.savetxtopool blkh lr s
+		    let tm = bhd.timestamp in
+		    Commands.savetxtopool blkh tm lr s
 		with Not_found ->
 		  Printf.fprintf oc "Trouble finding current block height\n"
 	  end
@@ -1148,8 +1149,8 @@ let initialize_commands () =
 	    | Some(dbh,lbk,ltx) ->
 		try
 		  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
-		  let (lr,tr,sr) = get_3roots (Some(dbh,lbk,ltx)) in
-		  Commands.sendtx oc blkh tr sr lr s
+		  let (_,tm,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
+		  Commands.sendtx oc blkh tm tr sr lr s
 		with Not_found ->
 		  Printf.fprintf oc "Cannot find block height for best block %s\n" (hashval_hexstring dbh)
 	  end
@@ -1166,8 +1167,8 @@ let initialize_commands () =
 		try
 		  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
 		  try
-		    let (lr,tr,sr) = get_3roots best in
-		    Commands.validatetx oc blkh tr sr lr s
+		    let (_,tm,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
+		    Commands.validatetx oc blkh tm tr sr lr s
 		  with Not_found ->
 		    Printf.fprintf oc "Cannot determine information about best block %s at height %Ld\n" (hashval_hexstring dbh) blkh
 		with Not_found ->

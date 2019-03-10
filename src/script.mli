@@ -10,9 +10,8 @@ open Secp256k1
 open Signat
 
 val hash160_bytelist : int list -> p2shaddr
-val eval_script : big_int -> int list -> int list list -> int list list -> int list list * int list list
 
-val verify_p2sh : big_int -> p2shaddr -> int list -> bool
+val verify_p2sh : int64 option -> big_int -> p2shaddr -> int list -> bool * int64 option * int64 option
 
 type gensignat =
   | P2pkhSignat of pt * bool * signat
@@ -22,7 +21,7 @@ type gensignat =
   | EndP2shToP2pkhSignat of pt * bool * int list * signat
   | EndP2shToP2shSignat of md160 * int list * int list
 
-val verify_gensignat : big_int -> gensignat -> addr -> bool
+val verify_gensignat : int64 option -> big_int -> gensignat -> addr -> bool * int64 option * int64 option
 
 val seo_gensignat : (int -> int -> 'a -> 'a) -> gensignat -> 'a -> 'a
 val sei_gensignat : (int -> 'a -> int * 'a) -> 'a -> gensignat * 'a

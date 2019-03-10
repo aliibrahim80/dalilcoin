@@ -308,7 +308,7 @@ let stakingthread () =
 				  try
 				    let unsupportederror alpha h = log_string (Printf.sprintf "Could not find asset %s at address %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha)) in
 				    let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin !dync unsupportederror) in
-				    if tx_signatures_valid blkh al ((tauin,tauout),sg) then
+				    if tx_signatures_valid blkh tm al ((tauin,tauout),sg) then
 				      begin
 					let nfee = ctree_supports_tx true false !dyntht !dynsigt blkh (tauin,tauout) !dync in
 					if nfee > 0L then

@@ -534,7 +534,7 @@ let valid_block_a tht sigt blkh csm tinfo b ((aid,bday,obl,u) as a) stkaddr lmed
 		    norew
 		      && sgvb
 		      && not (List.mem stakein inpl)
-		      && tx_signatures_valid blkh al stau
+		      && tx_signatures_valid blkh bhd.timestamp al stau
 		      && tx_valid tau
 		      && ctree_supports_tx_2 false false tht sigt blkh tau aal al tr <= 0L
 	      )

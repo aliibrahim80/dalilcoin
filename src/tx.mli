@@ -29,11 +29,11 @@ type stx = tx * txsigs
 
 exception BadOrMissingSignature
 
-val check_spend_obligation_upto_blkh : addr -> big_int -> gensignat -> obligation -> int64 option
-val check_spend_obligation : addr -> int64 -> big_int -> gensignat -> obligation -> bool
+val check_spend_obligation_upto_blkh : int64 option -> addr -> big_int -> gensignat -> obligation -> bool * int64 option * int64 option
+val check_spend_obligation : int64 option -> addr -> int64 -> int64 -> big_int -> gensignat -> obligation -> bool
 val check_move_obligation : addr -> big_int -> gensignat -> obligation -> preasset -> addr_preasset list -> bool
-val tx_signatures_valid : int64 -> asset list -> stx -> bool
-val tx_signatures_valid_asof_blkh : asset list -> stx -> int64 option
+val tx_signatures_valid : int64 -> int64 -> asset list -> stx -> bool
+val tx_signatures_valid_asof_blkh : asset list -> stx -> int64 option * int64 option
 
 val txout_update_ottree : addr_preasset list -> ttree option -> ttree option
 val txout_update_ostree : addr_preasset list -> stree option -> stree option
