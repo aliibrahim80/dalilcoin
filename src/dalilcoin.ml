@@ -1797,7 +1797,6 @@ let initialize () =
 	| Invalid_argument(_) ->
 	    raise (Failure "Bad seed")
       end;
-    Printf.fprintf sout "Initializing theory and signature trees.\n"; flush sout;
     if not !Config.offline && not !Config.ltcoffline then
       begin
 	if not !Config.daemon then (Printf.fprintf sout "Syncing with ltc.\n"; flush sout);
