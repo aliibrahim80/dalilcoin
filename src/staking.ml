@@ -223,23 +223,24 @@ let compute_staking_chances (prevblkh,lbk,ltx) fromtm totm =
     log_string (Printf.sprintf "Unexpected Exception in Staking: %s\n" (Printexc.to_string exn));
     raise StakingProblemPause;;
 
+exception Genesis;;
+
 (***
  The staking code underwent a major rewrite in March 2019.
- The rewrite does not include code to stake a genesis block,
- since dalilcoin had a genesis block for almost a year at that point.
  ***)
 let stakingthread () =
   let sleepuntil = ref (ltc_medtime()) in
   while true do
     try
-      let sleeplen = Int64.to_float (Int64.sub !sleepuntil (ltc_medtime())) in
+      let nw = ltc_medtime() in
+      let sleeplen = Int64.to_float (Int64.sub !sleepuntil nw) in
       log_string (Printf.sprintf "Staking sleeplen %f seconds\n" sleeplen);
       if sleeplen > 1.0 then Thread.delay sleeplen;
       log_string (Printf.sprintf "Staking after sleeplen %f seconds\n" sleeplen);
       if not (ltc_synced()) then (log_string (Printf.sprintf "ltc not synced yet; delaying staking\n"); raise (StakingPause(60.0)));
       pendingltctxs := List.filter (fun h -> not (ltc_tx_confirmed h)) !pendingltctxs;
       if not (!pendingltctxs = []) then (log_string (Printf.sprintf "there are pending ltc txs; delaying staking\n"); raise (StakingPause(60.0)));
-      let (pbhh1,lbk,ltx) = get_bestblock_cw_exception (StakingPause(300.0)) in
+      let (pbhh1,lbk,ltx) = get_bestblock_cw_exception (if nw > Int64.add !Config.genesistimestamp 604800L then (StakingPause(300.0)) else Genesis) in
       try
 	let (_,plmedtm,pburned,par,csm0,pblkh) = Hashtbl.find outlinevals (lbk,ltx) in
 	let (tar0,pbhtm,prevledgerroot,thtr,sgtr) = Hashtbl.find validheadervals (lbk,ltx) in
@@ -701,6 +702,131 @@ let stakingthread () =
 	  let ftm = Int64.add ltm 86400L in
 	  compute_staking_chances (pbhh1,lbk,ltx) stm ftm
     with
+    | Genesis -> (*** at this point, a new genesis phase can only happen when restarting the testnet ***)
+	begin (*** since the code for staking a genesis block is only for the testnet, fix staking asset as the one at tDY6SUKGiWvrPy24p47YaSAFiaBqXQwUz1N with id 000000000000000000000000a1d7d38b18a9cedc356d0bf3a1379f6e6fa18687 and hash 67c9489211e9fa9a7b3e141b4490d106346549cf2768e13eca832953c5afd26d ***)
+	  let i = ref !Config.genesistimestamp in
+	  let nw = ltc_medtime() in
+	  let upto = Int64.add 86400L nw in
+	  let alpha2 = daliladdrstr_addr "tDY6SUKGiWvrPy24p47YaSAFiaBqXQwUz1N" in
+	  let (_,a0,a1,a2,a3,a4) = alpha2 in
+	  let alpha = (false,a0,a1,a2,a3,a4) in
+	  let aid = hexstring_hashval "000000000000000000000000a1d7d38b18a9cedc356d0bf3a1379f6e6fa18687" in
+	  let bday = 0L in
+	  let obl = None in
+	  let v = 13669000000L in
+	  let csm0 = !genesisstakemod in
+	  let tar0 = !genesistarget in
+	  let caf = coinagefactor 1L bday obl in
+	  begin
+	    try
+	      Printf.printf "checking for hits from %Ld up to %Ld\n" !i upto;
+	      while !i < upto do
+		let hv = hitval !i aid csm0 in
+		let mtar = mult_big_int tar0 caf in
+		let minv = div_big_int hv mtar in
+		if lt_big_int minv (big_int_of_int64 v) then (*** hit without burn ***)
+		  begin
+		    if !i < nw then
+		      begin
+			let stx1s = "c92c5395c2f4985cc32311b83056c68402b1bd46040000000000000000000000e009f99f64de2f7b115bc6880849177acd5a51a095cc3255294c8fc9353c12810b63654c2810db6bc432cb54a5303d26d7f048042e8c9531a1406caf1101000000000000c800000040806a811c209965aa52981e936b78240217c6ca985020b6d7886596a94a617a4caee191085c182b634281d85e2302000000000000200300008000d502394032cb54a5303d26d7f048042e8c9531a1406caf11cb2c5395c2f4985cc32311b83056c68402b1bd4604000000000008600100000001aa0572806496a94a617a4caee191085c182b634281d85e239659a62a85e931b98647227061ac8c0905627b8d08000000000010000900000002540be40039c6e832c9aae110591e17d95a77a3f400f7cc4b0500008006fc232c00e3899d3738cc04ed91f4a37a7e827de22341304f7d0ba41706e07dc00237f4ec1993ebce26a99997f33ad00326fc6689476a6e84baa5b9739f57a7f2b265127d27d421b8de719e9bbb4ce876526d1f030d9307a33a42f41d27a14cacb050ce24f4c17900120f937b0e40770e145f9d5a89f96acbde3dd1ab1ae0757f70e0b2335900" in (*** an initial tx for the testnet's genesis block ***)
+			let (stx1,_) = sei_stx seis (stx1s,String.length stx1s,None,0,0) in
+			let ((tauin,tauout),_) = stx1 in
+			(*** form the genesis block ***)
+			let tm = !i in
+			let deltm = Int64.to_int32 (Int64.sub tm !Config.genesistimestamp) in
+			let blkh = 1L in
+			let tar = retarget tm !genesistarget deltm in
+			let prevc = Some(CHash(!genesisledgerroot)) in
+			let octree_ctree c =
+			  match c with
+			  | Some(c) -> c
+			  | None -> raise (Failure "tree should not be empty")
+			in
+			let c = octree_ctree (tx_octree_trans true false 1L (tauin,tauout) prevc) in
+			let otherstxs = [stx1] in
+			let othertxs = List.map (fun (tau,_) -> tau) otherstxs in
+			let stkoutl = [(alpha2,(None,Currency(v)));(alpha2,(Some(alpha,1000L,true),Currency(rewfn 1L)))] in
+			let coinstk : tx = ([(alpha2,aid)],stkoutl) in
+			let newc = octree_ctree (tx_octree_trans true false blkh coinstk (Some(c))) in
+			let newcr = save_ctree_elements newc in
+			let prevcforblock =
+			  match
+			    get_txl_supporting_octree (coinstk::othertxs) prevc
+			  with
+			  | Some(c) -> c
+			  | None -> raise (Failure "ctree should not have become empty")
+			in
+			let (prevcforheader,cgr) = factor_inputs_ctree_cgraft [(alpha2,aid)] prevcforblock in
+			let bdnew : blockdelta =
+			  { stakeoutput = stkoutl;
+			    prevledgergraft = cgr;
+			    blockdelta_stxl = otherstxs
+			  }
+			in
+			let bdnewroot = blockdelta_hashroot bdnew in
+			let bhdnew : blockheaderdata
+			    = { prevblockhash = None;
+				newtheoryroot = None;
+				newsignaroot = None;
+				newledgerroot = newcr;
+				stakeaddr = (a0,a1,a2,a3,a4);
+				stakeassetid = aid;
+				timestamp = tm;
+				deltatime = deltm;
+				tinfo = tar;
+				prevledger = prevcforheader;
+				blockdeltaroot = bdnewroot;
+			      }
+			in
+			let bhdnewh = hash_blockheaderdata bhdnew in
+			let bhsnew =
+			  try
+			    let (prvk,b,_,_,_,_) = List.find (fun (_,_,_,_,beta,_) -> beta = (a0,a1,a2,a3,a4)) !Commands.walletkeys_staking in
+			    let r = rand_256() in
+			    let sg : signat = signat_hashval bhdnewh prvk r in
+			    { blocksignat = sg;
+			      blocksignatrecid = compute_recid sg r;
+			      blocksignatfcomp = b;
+			      blocksignatendorsement = None
+			    }
+			  with Not_found -> log_string "Key for staking genesis block is not in wallet.\n"; raise (Failure "staking problem")
+			in
+			let bhnew = (bhdnew,bhsnew) in
+			let newblkid = blockheader_id bhnew in
+			DbBlockHeader.dbput newblkid bhnew;
+			DbBlockDelta.dbput newblkid bdnew;
+			List.iter
+			  (fun stau -> DbSTx.dbput (hashstx stau) stau)
+			  bdnew.blockdelta_stxl;
+			begin
+			  match valid_block None None blkh csm0 tar0 (bhnew,bdnew) tm 0L with
+			  | Some(_,_) -> ()
+			  | None -> log_string "Genesis block is not valid.\n"; raise (Failure "staked invalid genesis block")
+			end;
+			let btx = ltc_createburntx (0l,0l,0l,0l,0l,0l,0l,0l) newblkid 0L in
+			let btxhex = Hashaux.string_hexstring btx in
+			let btxs = ltc_signrawtransaction btxhex in
+			let h = ltc_sendrawtransaction btxs in
+			log_string (Printf.sprintf "Sending ltc burn %s for header %s. Waiting 5 minutes for it to confirm.\n" h (hashval_hexstring newblkid));
+			Thread.delay 300.0;
+			publish_block blkh newblkid ((bhdnew,bhsnew),bdnew);
+		      end
+		    else
+		      begin
+			log_string (Printf.sprintf "A genesis block can be staked at %Ld\n" !i);
+			flush stdout;
+		      end;
+		    raise Exit
+		  end;
+		i := Int64.add !i 1L
+	      done;
+	      raise Exit
+	    with Exit ->
+	      Printf.printf "no hits found\n";
+	  end;
+	  Thread.delay 300.0;
+	  sleepuntil := ltc_medtime()
+	end
     | StakingPause(del) ->
 	log_string (Printf.sprintf "Staking pause of %f seconds\n" del);
 	Thread.delay del;
