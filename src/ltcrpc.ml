@@ -21,6 +21,9 @@ let ltc_oldblocks = (*** add an ltc block every 50,000 blocks or so to help node
    "3eb72e473ce35c3b88c0a3c96ffa4a7ab01f40e476034c9caf82fba8e0270cb0";
    "458bdbb339f30b349cb2478da3afb6a7b1eb02044ad504b156fa17da047f848b"]
 
+let ltc_testnet_oldblocks = (*** add an ltc block every 50,000 blocks or so to help nodes with initial sync; order them from oldest to newest ***)
+  []
+
 (*** testnet ***)
 let ltctestnet () =
   ltc_oldest_to_consider := hexstring_hashval "52bed2a0bdafe1d44e978c3dde0ff9a0a824ca9d30bd1cae375b539f34855b4d";
@@ -728,4 +731,6 @@ let find_dalilcoin_header_ltc_burn h =
   find_dalilcoin_header_ltc_burn_rec [!ltc_bestblock]
 
 let ltc_old_sync () =
-  List.iter ltc_process_block ltc_oldblocks
+  List.iter
+    ltc_process_block
+    (if !Config.testnet then ltc_testnet_oldblocks else ltc_oldblocks)
