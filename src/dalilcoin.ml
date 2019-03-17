@@ -1400,8 +1400,9 @@ let initialize () =
     let datadir = if !Config.testnet then (Filename.concat !Config.datadir "testnet") else !Config.datadir in
     if !Config.testnet then
       begin
+	Config.may2019hardforktime := 1553277394L; (** move fork to earlier time on testnet **)
 	if !Config.ltcrpcport = 9332 then Config.ltcrpcport := 19332;
-	if !Config.genesistimestamp = 1523203501L then Config.genesistimestamp := 1522226815L
+	if !Config.genesistimestamp = 1523203501L then Config.genesistimestamp := 1552816800L
       end;
     if Sys.file_exists (Filename.concat datadir "lock") then
       begin

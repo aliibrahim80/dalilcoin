@@ -49,3 +49,4 @@ val generatenewrewardaddresses : bool ref
 val stakewithrewards : bool ref
 val reward_lock_relative : int64 option ref
 val reward_lock_absolute : int64 option ref
+val may2019hardforktime : int64 ref

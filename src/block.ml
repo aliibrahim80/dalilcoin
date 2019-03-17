@@ -698,7 +698,7 @@ let retarget_dampened tar deltm =
        (big_int_of_int (1000000 + 21600)))
 
 let retarget blktm tar deltm =
-  if blktm < 1556712000L then
+  if blktm < !Config.may2019hardforktime then
     retarget_orig tar deltm
   else
     retarget_dampened tar deltm (*** after May 01 2019 ***)

@@ -104,7 +104,7 @@ let rec tx_outputs_valid_addr_cats tm outpl =
   | (alpha,(_,OwnsProp(h,beta,u)))::outpr -> hashval_term_addr h = alpha && tx_outputs_valid_addr_cats tm outpr
   | (alpha,(_,OwnsNegProp))::outpr -> termaddr_p alpha && tx_outputs_valid_addr_cats tm outpr
   | (alpha,(_,TheoryPublication(beta,h,dl)))::outpr ->
-      if tm < 1556712000L then (*** May 01 2019 hard fork ***)
+      if tm < !Config.may2019hardforktime then (*** May 01 2019 hard fork ***)
 	false
       else
 	begin
@@ -114,7 +114,7 @@ let rec tx_outputs_valid_addr_cats tm outpl =
 	  | None -> false
 	end
   | (alpha,(_,SignaPublication(beta,h,th,dl)))::outpr ->
-      if tm < 1556712000L then (*** May 01 2019 hard fork ***)
+      if tm < !Config.may2019hardforktime then (*** May 01 2019 hard fork ***)
 	false
       else
 	alpha = hashval_pub_addr (hashopair2 th (hashsigna (signaspec_signa dl))) && tx_outputs_valid_addr_cats tm outpr
@@ -141,7 +141,7 @@ let rec tx_outputs_valid_addr_cats_oc oc tm outpl =
       else
 	(Printf.fprintf oc "tx invalid since OwnsNegProp should be sent to a term address\n"; false)
   | (alpha,(_,TheoryPublication(beta,h,dl)))::outpr ->
-      if tm < 1556712000L then (*** May 01 2019 hard fork ***)
+      if tm < !Config.may2019hardforktime then (*** May 01 2019 hard fork ***)
 	(Printf.fprintf oc "tx invalid since Theory could not be published before May 01 2019 hard fork."; false)
       else
 	begin
@@ -154,7 +154,7 @@ let rec tx_outputs_valid_addr_cats_oc oc tm outpl =
 	  | None -> false
 	end
   | (alpha,(_,SignaPublication(beta,h,th,dl)))::outpr ->
-      if tm < 1556712000L then (*** May 01 2019 hard fork ***)
+      if tm < !Config.may2019hardforktime then (*** May 01 2019 hard fork ***)
 	(Printf.fprintf oc "tx invalid since Signature could not be published before May 01 2019 hard fork."; false)
       else if alpha = hashval_pub_addr (hashopair2 th (hashsigna (signaspec_signa dl))) then
 	tx_outputs_valid_addr_cats_oc oc tm outpr

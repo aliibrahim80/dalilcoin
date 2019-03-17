@@ -23,9 +23,9 @@ let ltc_oldblocks = (*** add an ltc block every 50,000 blocks or so to help node
 
 (*** testnet ***)
 let ltctestnet () =
-  ltc_oldest_to_consider := hexstring_hashval "05db5c435747921b3fe9d39cbf5089c2918e4055ef11843a8b36eecf2a90f0a2";
-  ltc_oldest_to_consider_time := 1522285202L;
-  ltc_oldest_to_consider_height := 477000L
+  ltc_oldest_to_consider := hexstring_hashval "52bed2a0bdafe1d44e978c3dde0ff9a0a824ca9d30bd1cae375b539f34855b4d";
+  ltc_oldest_to_consider_time := 1552816988L;
+  ltc_oldest_to_consider_height := 1021606L
 
 let ltc_bestblock = ref (0l,0l,0l,0l,0l,0l,0l,0l)
 

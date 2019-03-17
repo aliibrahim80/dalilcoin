@@ -120,7 +120,6 @@ let compute_staking_chances (prevblkh,lbk,ltx) fromtm totm =
   try
     let (_,lmedtm,burned,_,csm1,prevblkhght) = Hashtbl.find outlinevals (lbk,ltx) in
     let blkhght = Int64.add 1L prevblkhght in
-    if lmedtm >= 1556712000L then (log_string "This version of dalilcoin should not be used to stake blocks after May 1 2019.\n"; raise (StakingProblemPause));
     let (tar1,tmstamp,currledgerroot,thyroot,sigroot) = Hashtbl.find validheadervals (lbk,ltx) in
     Hashtbl.find validblockvals (lbk,ltx);
     let thytree =

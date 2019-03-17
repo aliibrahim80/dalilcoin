@@ -730,7 +730,7 @@ let check_p2sh obday (tosign:big_int) (beta:md160) s =
 		raise Invalid
 	      else if x < 500000000L then (*** block height ***)
 		begin
-		  mintm := opmax (Some(1556712000L)) !mintm; (*** if OP_CLTV is used, then insist we are past the hard fork time of May 1 2019 ***)
+		  mintm := opmax (Some(!Config.may2019hardforktime)) !mintm; (*** if OP_CLTV is used, then insist we are past the hard fork time of May 1 2019 ***)
 		  match obday with
 		  | None -> raise Invalid (*** if the birthday is not known (e.g., we are signing an output), then CLTV is not allowed ***)
 		  | Some(bday) ->
@@ -739,7 +739,7 @@ let check_p2sh obday (tosign:big_int) (beta:md160) s =
 		end
 	      else (*** unix time ***)
 		begin
-		  mintm := opmax (Some(1556712000L)) !mintm; (*** if OP_CLTV is used, then insist we are past the hard fork time of May 1 2019 ***)
+		  mintm := opmax (Some(!Config.may2019hardforktime)) !mintm; (*** if OP_CLTV is used, then insist we are past the hard fork time of May 1 2019 ***)
 		  mintm := opmax (Some(x)) !mintm;
 		  eval_script_r tosign br stk altstk
 		end
@@ -759,7 +759,7 @@ let check_p2sh obday (tosign:big_int) (beta:md160) s =
 		  match obday with
 		  | None -> raise Invalid (*** if the birthday is not known (e.g., we are signing an output), then CSV is not allowed ***)
 		  | Some(bday) ->
-		      mintm := opmax (Some(1556712000L)) !mintm; (*** if OP_CSV is used, then insist we are past the hard fork time of May 1 2019 ***)
+		      mintm := opmax (Some(!Config.may2019hardforktime)) !mintm; (*** if OP_CSV is used, then insist we are past the hard fork time of May 1 2019 ***)
 		      minblkh := opmax (Some(Int64.add x bday)) !minblkh;
 		      eval_script_r tosign br stk altstk
 		end
