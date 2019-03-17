@@ -1418,7 +1418,9 @@ let initialize () =
     let dbdir = Filename.concat datadir "db" in
     dbconfig dbdir; (*** configure the database ***)
     DbTheory.dbinit();
+    DbTheoryTree.dbinit();
     DbSigna.dbinit();
+    DbSignaTree.dbinit();
     DbAsset.dbinit();
     DbAssetIdAt.dbinit();
     DbSTx.dbinit();
@@ -1796,8 +1798,6 @@ let initialize () =
 	    raise (Failure "Bad seed")
       end;
     Printf.fprintf sout "Initializing theory and signature trees.\n"; flush sout;
-    init_thytrees();
-    init_sigtrees();
     if not !Config.offline && not !Config.ltcoffline then
       begin
 	if not !Config.daemon then (Printf.fprintf sout "Syncing with ltc.\n"; flush sout);

@@ -25,8 +25,6 @@ val print_best_block : unit -> unit
 
 val lookup_thytree : hashval option -> Mathdata.ttree option
 val lookup_sigtree : hashval option -> Mathdata.stree option
-val init_thytrees : unit -> unit
-val init_sigtrees : unit -> unit
 
 val update_theories : hashval option -> Mathdata.ttree option -> Mathdata.ttree option -> unit
 val update_signatures : hashval option -> Mathdata.stree option -> Mathdata.stree option -> unit

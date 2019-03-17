@@ -425,6 +425,15 @@ let theory_to_str thy =
 
 module DbTheory = Dbbasic (struct type t = theory let basedir = "theory" let seival = sei_theory seic let seoval = seo_theory seoc end)
 
+module DbTheoryTree =
+  Dbbasic
+    (struct
+      type t = hashval option * hashval list
+      let basedir = "theorytree"
+      let seival = sei_prod (sei_option sei_hashval) (sei_list sei_hashval) seic
+      let seoval = seo_prod (seo_option seo_hashval) (seo_list seo_hashval) seoc
+    end)
+
 (** * computation of hash roots ***)
 let rec tm_hashroot m =
   match m with
@@ -505,6 +514,15 @@ let signa_to_str s =
   Buffer.contents c
 
 module DbSigna = Dbbasic (struct type t = signa let basedir = "signa" let seival = sei_signa seic let seoval = seo_signa seoc end)
+
+module DbSignaTree =
+  Dbbasic
+    (struct
+      type t = hashval option * hashval list
+      let basedir = "signatree"
+      let seival = sei_prod (sei_option sei_hashval) (sei_list sei_hashval) seic
+      let seoval = seo_prod (seo_option seo_hashval) (seo_list seo_hashval) seoc
+    end)
 
 (** * htrees to hold theories and signatures **)
 

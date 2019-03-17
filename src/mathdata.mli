@@ -56,6 +56,15 @@ module DbTheory :
       val dbdelete : hashval -> unit
     end
 
+module DbTheoryTree :
+    sig
+      val dbinit : unit -> unit
+      val dbget : hashval -> hashval option * hashval list
+      val dbexists : hashval -> bool
+      val dbput : hashval -> hashval option * hashval list -> unit
+      val dbdelete : hashval -> unit
+    end
+
 val hashtheory : theory -> hashval option
 
 val theoryspec_theory : theoryspec -> theory
@@ -79,6 +88,15 @@ module DbSigna :
       val dbget : hashval -> signa
       val dbexists : hashval -> bool
       val dbput : hashval -> signa -> unit
+      val dbdelete : hashval -> unit
+    end
+
+module DbSignaTree :
+    sig
+      val dbinit : unit -> unit
+      val dbget : hashval -> hashval option * hashval list
+      val dbexists : hashval -> bool
+      val dbput : hashval -> hashval option * hashval list -> unit
       val dbdelete : hashval -> unit
     end
 
