@@ -23,6 +23,8 @@ open Block
 open Blocktree
 open Commands
 
+let stakegenesis = false (*** set this to true and recompile to stake a genesis block for the testnet; then reset it to false and recompile to continue ***)
+
 let get_reward_locktime blkh =
   let rl =
     match !Config.reward_lock_relative with
@@ -240,7 +242,7 @@ let stakingthread () =
       if not (ltc_synced()) then (log_string (Printf.sprintf "ltc not synced yet; delaying staking\n"); raise (StakingPause(60.0)));
       pendingltctxs := List.filter (fun h -> not (ltc_tx_confirmed h)) !pendingltctxs;
       if not (!pendingltctxs = []) then (log_string (Printf.sprintf "there are pending ltc txs; delaying staking\n"); raise (StakingPause(60.0)));
-      let (pbhh1,lbk,ltx) = get_bestblock_cw_exception (if nw > Int64.add !Config.genesistimestamp 604800L then (StakingPause(300.0)) else Genesis) in
+      let (pbhh1,lbk,ltx) = get_bestblock_cw_exception (if stakegenesis then Genesis else (StakingPause(300.0))) in
       try
 	let (_,plmedtm,pburned,par,csm0,pblkh) = Hashtbl.find outlinevals (lbk,ltx) in
 	let (tar0,pbhtm,prevledgerroot,thtr,sgtr) = Hashtbl.find validheadervals (lbk,ltx) in
@@ -728,7 +730,7 @@ let stakingthread () =
 		  begin
 		    if !i < nw then
 		      begin
-			let stx1s = "c92c5395c2f4985cc32311b83056c68402b1bd46040000000000000000000000e009f99f64de2f7b115bc6880849177acd5a51a095cc3255294c8fc9353c12810b63654c2810db6bc432cb54a5303d26d7f048042e8c9531a1406caf1101000000000000c800000040806a811c209965aa52981e936b78240217c6ca985020b6d7886596a94a617a4caee191085c182b634281d85e2302000000000000200300008000d502394032cb54a5303d26d7f048042e8c9531a1406caf11cb2c5395c2f4985cc32311b83056c68402b1bd4604000000000008600100000001aa0572806496a94a617a4caee191085c182b634281d85e239659a62a85e931b98647227061ac8c0905627b8d08000000000010000900000002540be40039c6e832c9aae110591e17d95a77a3f400f7cc4b0500008006fc232c00e3899d3738cc04ed91f4a37a7e827de22341304f7d0ba41706e07dc00237f4ec1993ebce26a99997f33ad00326fc6689476a6e84baa5b9739f57a7f2b265127d27d421b8de719e9bbb4ce876526d1f030d9307a33a42f41d27a14cacb050ce24f4c17900120f937b0e40770e145f9d5a89f96acbde3dd1ab1ae0757f70e0b2335900" in (*** an initial tx for the testnet's genesis block ***)
+			let stx1s = hexstring_string "c92c5395c2f4985cc32311b83056c68402b1bd46040000000000000000000000e009f99f64de2f7b115bc6880849177acd5a51a095cc3255294c8fc9353c12810b63654c2810db6bc432cb54a5303d26d7f048042e8c9531a1406caf1101000000000000c800000040806a811c209965aa52981e936b78240217c6ca985020b6d7886596a94a617a4caee191085c182b634281d85e2302000000000000200300008000d502394032cb54a5303d26d7f048042e8c9531a1406caf11cb2c5395c2f4985cc32311b83056c68402b1bd4604000000000008600100000001aa0572806496a94a617a4caee191085c182b634281d85e239659a62a85e931b98647227061ac8c0905627b8d08000000000010000900000002540be40039c6e832c9aae110591e17d95a77a3f400f7cc4b0500008006fc232c00e3899d3738cc04ed91f4a37a7e827de22341304f7d0ba41706e07dc00237f4ec1993ebce26a99997f33ad00326fc6689476a6e84baa5b9739f57a7f2b265127d27d421b8de719e9bbb4ce876526d1f030d9307a33a42f41d27a14cacb050ce24f4c17900120f937b0e40770e145f9d5a89f96acbde3dd1ab1ae0757f70e0b2335900" in (*** an initial tx for the testnet's genesis block ***)
 			let (stx1,_) = sei_stx seis (stx1s,String.length stx1s,None,0,0) in
 			let ((tauin,tauout),_) = stx1 in
 			(*** form the genesis block ***)
@@ -745,7 +747,8 @@ let stakingthread () =
 			let c = octree_ctree (tx_octree_trans true false 1L (tauin,tauout) prevc) in
 			let otherstxs = [stx1] in
 			let othertxs = List.map (fun (tau,_) -> tau) otherstxs in
-			let stkoutl = [(alpha2,(None,Currency(v)));(alpha2,(Some(alpha,1000L,true),Currency(rewfn 1L)))] in
+			let fees = 1000000000L in
+			let stkoutl = [(alpha2,(None,Currency(v)));(alpha2,(Some(alpha,1000L,true),Currency(Int64.add fees (rewfn 1L))))] in
 			let coinstk : tx = ([(alpha2,aid)],stkoutl) in
 			let newc = octree_ctree (tx_octree_trans true false blkh coinstk (Some(c))) in
 			let newcr = save_ctree_elements newc in
@@ -810,17 +813,17 @@ let stakingthread () =
 			log_string (Printf.sprintf "Sending ltc burn %s for header %s. Waiting 5 minutes for it to confirm.\n" h (hashval_hexstring newblkid));
 			Thread.delay 300.0;
 			publish_block blkh newblkid ((bhdnew,bhsnew),bdnew);
+			i := upto
 		      end
 		    else
 		      begin
 			log_string (Printf.sprintf "A genesis block can be staked at %Ld\n" !i);
 			flush stdout;
+			raise Exit
 		      end;
-		    raise Exit
 		  end;
 		i := Int64.add !i 1L
-	      done;
-	      raise Exit
+	      done
 	    with Exit ->
 	      Printf.printf "no hits found\n";
 	  end;
