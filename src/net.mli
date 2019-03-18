@@ -71,6 +71,8 @@ val msgtype_of_int : int -> msgtype
 val int_of_msgtype : msgtype -> int
 val string_of_msgtype : msgtype -> string
 
+val extract_ipv4 : string -> int * int * int * int
+
 val openlistener : string -> int -> int -> Unix.file_descr
 val openonionlistener : string -> int -> int -> int -> Unix.file_descr
 

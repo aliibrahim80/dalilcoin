@@ -362,11 +362,56 @@ let ltc_createburntx h1 h2 toburn =
       Buffer.add_string txs1b (hexstring_string rs);
       Buffer.add_string txs2b "\255\255\255\255\002";
       List.iter (fun z -> Buffer.add_char txs2b (Char.chr z)) (blnum64 toburn);
-      Buffer.add_char txs2b (Char.chr 69);
-      Buffer.add_char txs2b (Char.chr 0x6a); (*** OP_RETURN ***)
-      Buffer.add_char txs2b (Char.chr 67); (*** PUSH 67 ***)
+      let extradata =
+	begin
+	  match !Config.onion with
+	  | Some(onionaddr) ->
+	      begin
+		try
+		  let dot = String.index onionaddr '.' in
+		  if !Config.onionremoteport = 20808 then
+		    Printf.sprintf "o%s." (String.sub onionaddr 0 dot)
+		  else
+		    Printf.sprintf "o%s:%s" (String.sub onionaddr 0 dot) (hexstring_string (Printf.sprintf "%04x" !Config.onionremoteport))
+		with Not_found -> ""
+	      end
+	  | None ->
+	      match !Config.ip with
+	      | Some(ip) ->
+		  begin
+		    let (ip0,ip1,ip2,ip3) = extract_ipv4 ip in
+		    if !Config.port = 20805 then
+		      begin
+			Printf.sprintf "I%s" (hexstring_string (Printf.sprintf "%02x%02x%02x%02x" ip0 ip1 ip2 ip3))
+		      end
+		    else
+		      begin
+			Printf.sprintf "i%s" (hexstring_string (Printf.sprintf "%02x%02x%02x%02x%04x" ip0 ip1 ip2 ip3 !Config.port))
+		      end
+		  end
+	      | None -> ""
+	end
+      in
+      let datalen = 67 + String.length extradata in
+      if datalen > 252 then raise (Failure "too much data to burn");
+      if datalen < 76 then
+	begin
+	  Buffer.add_char txs2b (Char.chr (datalen+2));
+	  Buffer.add_char txs2b (Char.chr 0x6a); (*** OP_RETURN ***)
+	  Buffer.add_char txs2b (Char.chr datalen); (*** PUSH datalen ***)
+	end
+      else
+	begin
+	  Buffer.add_char txs2b (Char.chr (datalen+3));
+	  Buffer.add_char txs2b (Char.chr 0x6a); (*** OP_RETURN ***)
+	  Buffer.add_char txs2b (Char.chr 76); (*** PUSH datalen ***)
+	  Buffer.add_char txs2b (Char.chr datalen);
+	end;
       ignore (seo_hashval seosb h1 (txs2b,None));
       ignore (seo_hashval seosb h2 (txs2b,None));
+      for i = 0 to (String.length extradata) - 1 do
+	Buffer.add_char txs2b extradata.[i]
+      done;
       List.iter (fun z -> Buffer.add_char txs3b (Char.chr z)) (blnum64 (Int64.sub amt toburn_plus_fee));
       let spks = hexstring_string spk in
       Buffer.add_char txs3b (Char.chr (String.length spks));
@@ -479,6 +524,62 @@ let ltc_gettransactioninfo h =
 			    begin
 			      let lprevtx = hexstring_hashval (String.sub hex 4 64) in
 			      let dnxt = hexstring_hashval (String.sub hex 68 64) in
+			      begin
+				let hexl = String.length hex in
+				if hexl > 136 then
+				  let extradata = hexstring_string (String.sub hex 132 ((String.length hex) - 132)) in
+				  if extradata.[0] = 'o' then
+				    begin
+				      if List.length !netconns < !Config.maxconns then
+					begin
+					  let onionaddr = Buffer.create 10 in
+					  try
+					    for i = 1 to ((String.length extradata) - 1) do
+					      if extradata.[i] = '.' then
+						begin
+						  ignore (tryconnectpeer (Printf.sprintf "%s:20808" (Buffer.contents onionaddr)));
+						  raise Exit
+						end
+					      else if extradata.[i] = ':' then
+						begin
+						  if i+2 < String.length extradata then
+						    begin
+						      let port = (Char.code extradata.[i+1]) * 256 + (Char.code extradata.[i+2]) in
+						      ignore (tryconnectpeer (Printf.sprintf "%s:%d" (Buffer.contents onionaddr) port));
+						    end
+						  else
+						    raise Exit
+						end
+					      else
+						Buffer.add_char onionaddr extradata.[i]
+					    done
+					  with Exit -> ()
+					end
+				    end
+				  else if extradata.[0] = 'I' then
+				    begin
+				      if List.length !netconns < !Config.maxconns && ((String.length extradata) > 4) then
+					begin
+					  let ip0 = Char.code extradata.[1] in
+					  let ip1 = Char.code extradata.[2] in
+					  let ip2 = Char.code extradata.[3] in
+					  let ip3 = Char.code extradata.[4] in
+					  ignore (tryconnectpeer (Printf.sprintf "%d.%d.%d.%d:20805" ip0 ip1 ip2 ip3))
+					end
+				    end
+				  else if extradata.[0] = 'i' then
+				    begin
+				      if List.length !netconns < !Config.maxconns && ((String.length extradata) > 6) then
+					begin
+					  let ip0 = Char.code extradata.[1] in
+					  let ip1 = Char.code extradata.[2] in
+					  let ip2 = Char.code extradata.[3] in
+					  let ip3 = Char.code extradata.[4] in
+					  let port = (Char.code extradata.[5]) * 256 + Char.code extradata.[6] in
+					  ignore (tryconnectpeer (Printf.sprintf "%d.%d.%d.%d:%d" ip0 ip1 ip2 ip3 port))
+					end
+				    end
+			      end;
 			      let lblkh =
 				begin
 				  try
