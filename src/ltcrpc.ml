@@ -520,14 +520,22 @@ let ltc_gettransactioninfo h =
 		      match List.assoc "scriptPubKey" vout1 with
 		      | JsonObj(cl) ->
 			  let hex = json_assoc_string "hex" cl in
-			  if String.length hex >= 132 && hex.[0] = '6' && hex.[1] = 'a' then
+			  if String.length hex >= 132 && hex.[0] = '6' && hex.[1] = 'a' && hex.[2] = '4' then
 			    begin
-			      let lprevtx = hexstring_hashval (String.sub hex 4 64) in
-			      let dnxt = hexstring_hashval (String.sub hex 68 64) in
+			      let hex =
+				if hex.[3] = 'c' then (*** pushing up to 255 bytes ***)
+				  String.sub hex 6 ((String.length hex) - 6)
+				else if hex.[3] = 'd' then (*** pushing up to 64K bytes ***)
+				  String.sub hex 8 ((String.length hex) - 8)
+				else
+				  String.sub hex 4 ((String.length hex) - 4)
+			      in
+			      let lprevtx = hexstring_hashval (String.sub hex 0 64) in
+			      let dnxt = hexstring_hashval (String.sub hex 64 64) in
 			      begin
 				let hexl = String.length hex in
-				if hexl > 136 then
-				  let extradata = hexstring_string (String.sub hex 132 ((String.length hex) - 132)) in
+				if hexl > 132 then
+				  let extradata = hexstring_string (String.sub hex 128 ((String.length hex) - 128)) in
 				  if extradata.[0] = 'o' then
 				    begin
 				      if List.length !netconns < !Config.maxconns then
