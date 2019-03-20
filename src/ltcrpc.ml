@@ -392,6 +392,14 @@ let ltc_createburntx h1 h2 toburn =
 	      | None -> ""
 	end
       in
+      let extradata = (*** before the May 2019 hard fork, do not burn enough to require pushing more than 75 bytes in the burn tx ***)
+	if Int64.of_float (Unix.time()) < !Config.may2019hardforktime && 67 + String.length extradata >= 76 then
+	  ""
+	else if 67 + String.length extradata >= 65536 then
+	  ""
+	else
+	  extradata
+      in
       let datalen = 67 + String.length extradata in
       if datalen > 252 then raise (Failure "too much data to burn");
       if datalen < 76 then
@@ -400,7 +408,17 @@ let ltc_createburntx h1 h2 toburn =
 	  Buffer.add_char txs2b (Char.chr 0x6a); (*** OP_RETURN ***)
 	  Buffer.add_char txs2b (Char.chr datalen); (*** PUSH datalen ***)
 	end
-      else
+      else if datalen > 65535 then
+	raise (Failure "too much data to burn")
+      else if datalen > 255 then
+	begin
+	  Buffer.add_char txs2b (Char.chr (datalen+3));
+	  Buffer.add_char txs2b (Char.chr 0x6a); (*** OP_RETURN ***)
+	  Buffer.add_char txs2b (Char.chr 77); (*** PUSH datalen ***)
+	  Buffer.add_char txs2b (Char.chr (datalen mod 256));
+	  Buffer.add_char txs2b (Char.chr (datalen / 256));
+	end
+      else 
 	begin
 	  Buffer.add_char txs2b (Char.chr (datalen+3));
 	  Buffer.add_char txs2b (Char.chr 0x6a); (*** OP_RETURN ***)
@@ -523,7 +541,9 @@ let ltc_gettransactioninfo h =
 			  if String.length hex >= 132 && hex.[0] = '6' && hex.[1] = 'a' && hex.[2] = '4' then
 			    begin
 			      let hex =
-				if hex.[3] = 'c' then (*** pushing up to 255 bytes ***)
+				if Int64.of_float (Unix.time()) < !Config.may2019hardforktime then
+				  String.sub hex 4 ((String.length hex) - 4)
+				else if hex.[3] = 'c' then (*** pushing up to 255 bytes ***)
 				  String.sub hex 6 ((String.length hex) - 6)
 				else if hex.[3] = 'd' then (*** pushing up to 64K bytes ***)
 				  String.sub hex 8 ((String.length hex) - 8)
