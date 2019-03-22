@@ -251,7 +251,38 @@ let stakingthread () =
 	| NextStake(tm,alpha,aid,bday,obl,v,toburn,already,thyroot,thytree,sigroot,sigtree) ->
 	    begin
 	      match !already with
-	      | Some(_,_) -> raise (StakingPause(60.0))
+	      | Some(newblkid,ltcburntxid) ->
+		  begin
+		    try
+		      let (lblkid,ltxid) =
+			List.find (fun (_,ltxid) -> ltxid = ltcburntxid) (Hashtbl.find_all blockburns newblkid)
+		      in
+		      let (bhdnew,bhsnew) = DbBlockHeader.dbget newblkid in
+		      let bdnew = DbBlockDelta.dbget newblkid in
+		      let (_,lmedtm,burned,_,newcsm,currhght) = Hashtbl.find outlinevals (lblkid,ltxid) in
+		      match bhdnew.prevblockhash with
+		      | Some(pbh,Poburn(plblkh,pltxh,lmedtm,burned)) ->
+			  begin
+			    let (_,_,_,_,csm,_) = Hashtbl.find outlinevals (plblkh,pltxh) in
+			    let (tar,tmstmp,lr,thtr,sgtr) = Hashtbl.find validheadervals (plblkh,pltxh) in
+			    if not (blockheader_succ_b pbh lr tmstmp tar (bhdnew,bhsnew)) then
+			      begin
+				log_string (Printf.sprintf "Staking problem at height %Ld: %s is not a valid succ of %s\n" currhght (hashval_hexstring newblkid) (hashval_hexstring pbh));
+				raise StakingProblemPause
+			      end;
+			    let tht = lookup_thytree thtr in
+			    let sgt = lookup_sigtree sgtr in
+			    process_block !Utils.log true false false (lblkid,ltxid) newblkid ((bhdnew,bhsnew),bdnew) thtr tht sgtr sgt currhght csm tar lmedtm burned;
+			    missingheaders := List.filter (fun (_,k) -> not (newblkid = k)) !missingheaders;
+			    missingdeltas := List.filter (fun (_,k) -> not (newblkid = k)) !missingdeltas;
+			  end
+		      | None ->
+			  process_block !Utils.log true false false (lblkid,ltxid) newblkid ((bhdnew,bhsnew),bdnew) None None None None 1L !genesisstakemod !genesistarget lmedtm burned;
+			  missingheaders := List.filter (fun (_,k) -> not (newblkid = k)) !missingheaders;
+			  missingdeltas := List.filter (fun (_,k) -> not (newblkid = k)) !missingdeltas;
+		    with Not_found ->
+		      raise (StakingPause(60.0))
+		  end
 	      | None ->
 		  begin
 		    let nw = ltc_medtime() in

@@ -8,6 +8,7 @@ open Hash
 open Net
 open Signat
 open Ltcrpc
+open Mathdata
 open Tx
 open Ctre
 open Block
@@ -19,6 +20,10 @@ val unconfirmed_spent_assets : (hashval,hashval) Hashtbl.t
 val artificialledgerroot : hashval option ref
 val artificialbestblock : (hashval * hashval * hashval) option ref
 
+val process_block : out_channel -> bool -> bool -> bool
+  -> hashval * hashval -> hashval -> block
+    -> hashval option -> ttree option -> hashval option -> stree option
+      -> int64 -> stakemod -> targetinfo -> int64 -> int64 -> unit
 val initialize_dlc_from_ltc : out_channel -> hashval -> unit
 
 val print_best_block : unit -> unit
