@@ -226,12 +226,14 @@ let compute_staking_chances (prevblkh,lbk,ltx) fromtm totm =
     raise StakingProblemPause;;
 
 exception Genesis;;
+exception SyncIssue;;
 
 (***
  The staking code underwent a major rewrite in March 2019.
  ***)
 let stakingthread () =
   let sleepuntil = ref (ltc_medtime()) in
+  let pending = ref None in
   while true do
     try
       let nw = ltc_medtime() in
@@ -242,7 +244,7 @@ let stakingthread () =
       if not (ltc_synced()) then (log_string (Printf.sprintf "ltc not synced yet; delaying staking\n"); raise (StakingPause(60.0)));
       pendingltctxs := List.filter (fun h -> not (ltc_tx_confirmed h)) !pendingltctxs;
       if not (!pendingltctxs = []) then (log_string (Printf.sprintf "there are pending ltc txs; delaying staking\n"); raise (StakingPause(60.0)));
-      let (pbhh1,lbk,ltx) = get_bestblock_cw_exception (if stakegenesis then Genesis else (StakingPause(300.0))) in
+      let (pbhh1,lbk,ltx) = get_bestblock_cw_exception (if stakegenesis then Genesis else SyncIssue) in
       try
 	let (_,plmedtm,pburned,par,csm0,pblkh) = Hashtbl.find outlinevals (lbk,ltx) in
 	let (tar0,pbhtm,prevledgerroot,thtr,sgtr) = Hashtbl.find validheadervals (lbk,ltx) in
@@ -251,38 +253,7 @@ let stakingthread () =
 	| NextStake(tm,alpha,aid,bday,obl,v,toburn,already,thyroot,thytree,sigroot,sigtree) ->
 	    begin
 	      match !already with
-	      | Some(newblkid,ltcburntxid) ->
-		  begin
-		    try
-		      let (lblkid,ltxid) =
-			List.find (fun (_,ltxid) -> ltxid = ltcburntxid) (Hashtbl.find_all blockburns newblkid)
-		      in
-		      let (bhdnew,bhsnew) = DbBlockHeader.dbget newblkid in
-		      let bdnew = DbBlockDelta.dbget newblkid in
-		      let (_,lmedtm,burned,_,newcsm,currhght) = Hashtbl.find outlinevals (lblkid,ltxid) in
-		      match bhdnew.prevblockhash with
-		      | Some(pbh,Poburn(plblkh,pltxh,lmedtm,burned)) ->
-			  begin
-			    let (_,_,_,_,csm,_) = Hashtbl.find outlinevals (plblkh,pltxh) in
-			    let (tar,tmstmp,lr,thtr,sgtr) = Hashtbl.find validheadervals (plblkh,pltxh) in
-			    if not (blockheader_succ_b pbh lr tmstmp tar (bhdnew,bhsnew)) then
-			      begin
-				log_string (Printf.sprintf "Staking problem at height %Ld: %s is not a valid succ of %s\n" currhght (hashval_hexstring newblkid) (hashval_hexstring pbh));
-				raise StakingProblemPause
-			      end;
-			    let tht = lookup_thytree thtr in
-			    let sgt = lookup_sigtree sgtr in
-			    process_block !Utils.log true false false (lblkid,ltxid) newblkid ((bhdnew,bhsnew),bdnew) thtr tht sgtr sgt currhght csm tar lmedtm burned;
-			    missingheaders := List.filter (fun (_,k) -> not (newblkid = k)) !missingheaders;
-			    missingdeltas := List.filter (fun (_,k) -> not (newblkid = k)) !missingdeltas;
-			  end
-		      | None ->
-			  process_block !Utils.log true false false (lblkid,ltxid) newblkid ((bhdnew,bhsnew),bdnew) None None None None 1L !genesisstakemod !genesistarget lmedtm burned;
-			  missingheaders := List.filter (fun (_,k) -> not (newblkid = k)) !missingheaders;
-			  missingdeltas := List.filter (fun (_,k) -> not (newblkid = k)) !missingdeltas;
-		    with Not_found ->
-		      raise (StakingPause(60.0))
-		  end
+	      | Some(_,_) -> raise SyncIssue
 	      | None ->
 		  begin
 		    let nw = ltc_medtime() in
@@ -660,6 +631,7 @@ let stakingthread () =
 						  publish_block blkh newblkid ((bhdnew,bhsnew),bdnew);
 						  extraburn := 0L;
 						  already := Some(newblkid,hexstring_hashval h);
+						  pending := !already;
 						  log_string ("Burning " ^ (Int64.to_string u) ^ " litoshis in tx " ^ h ^ "\n")
 					      with
 					      | InsufficientLtcFunds ->
@@ -860,6 +832,46 @@ let stakingthread () =
 	  end;
 	  Thread.delay 300.0;
 	  sleepuntil := ltc_medtime()
+	end
+    | SyncIssue ->
+	begin
+	  try
+	    match !pending with
+	    | Some(newblkid,ltcburntxid) ->
+		begin
+		  let (lblkid,ltxid) =
+		    List.find (fun (_,ltxid) -> ltxid = ltcburntxid) (Hashtbl.find_all blockburns newblkid)
+		  in
+		  let (bhdnew,bhsnew) = DbBlockHeader.dbget newblkid in
+		  let bdnew = DbBlockDelta.dbget newblkid in
+		  let (_,lmedtm,burned,_,newcsm,currhght) = Hashtbl.find outlinevals (lblkid,ltxid) in
+		  match bhdnew.prevblockhash with
+		  | Some(pbh,Poburn(plblkh,pltxh,lmedtm,burned)) ->
+		      begin
+			let (_,_,_,_,csm,_) = Hashtbl.find outlinevals (plblkh,pltxh) in
+			let (tar,tmstmp,lr,thtr,sgtr) = Hashtbl.find validheadervals (plblkh,pltxh) in
+			if not (blockheader_succ_b pbh lr tmstmp tar (bhdnew,bhsnew)) then
+			  begin
+			    log_string (Printf.sprintf "Staking problem at height %Ld: %s is not a valid succ of %s\n" currhght (hashval_hexstring newblkid) (hashval_hexstring pbh));
+			    raise Exit
+			  end;
+			let tht = lookup_thytree thtr in
+			let sgt = lookup_sigtree sgtr in
+			process_block !Utils.log true false false (lblkid,ltxid) newblkid ((bhdnew,bhsnew),bdnew) thtr tht sgtr sgt currhght csm tar lmedtm burned;
+			missingheaders := List.filter (fun (_,k) -> not (newblkid = k)) !missingheaders;
+			missingdeltas := List.filter (fun (_,k) -> not (newblkid = k)) !missingdeltas;
+			pending := None
+		      end
+		  | None ->
+		      process_block !Utils.log true false false (lblkid,ltxid) newblkid ((bhdnew,bhsnew),bdnew) None None None None 1L !genesisstakemod !genesistarget lmedtm burned;
+		      missingheaders := List.filter (fun (_,k) -> not (newblkid = k)) !missingheaders;
+		      missingdeltas := List.filter (fun (_,k) -> not (newblkid = k)) !missingdeltas;
+		      pending := None
+		end
+	    | None -> raise Exit
+	  with _ ->
+	    Thread.delay 300.0;
+	    sleepuntil := ltc_medtime()
 	end
     | StakingPause(del) ->
 	log_string (Printf.sprintf "Staking pause of %f seconds\n" del);
