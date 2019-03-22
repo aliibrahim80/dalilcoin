@@ -392,8 +392,8 @@ let ltc_createburntx h1 h2 toburn =
 	      | None -> ""
 	end
       in
-      let extradata = (*** before the May 2019 hard fork, do not burn enough to require pushing more than 75 bytes in the burn tx ***)
-	if Int64.of_float (Unix.time()) < !Config.may2019hardforktime && 67 + String.length extradata >= 76 then
+      let extradata = (*** before the May 2019 hard fork, do not burn enough to require pushing more than 75 bytes in the burn tx (and wait an extra day before burning more than 75 bytes even after the hard fork time, out of abundance of caution) ***)
+	if 67 + String.length extradata >= 76 && Int64.of_float (Unix.time()) < Int64.add 86400L !Config.may2019hardforktime then
 	  ""
 	else if 67 + String.length extradata >= 65536 then
 	  ""
@@ -565,7 +565,7 @@ let ltc_gettransactioninfo h =
 					    for i = 1 to ((String.length extradata) - 1) do
 					      if extradata.[i] = '.' then
 						begin
-						  ignore (tryconnectpeer (Printf.sprintf "%s:20808" (Buffer.contents onionaddr)));
+						  ignore (tryconnectpeer (Printf.sprintf "%s.onion:20808" (Buffer.contents onionaddr)));
 						  raise Exit
 						end
 					      else if extradata.[i] = ':' then
@@ -573,7 +573,7 @@ let ltc_gettransactioninfo h =
 						  if i+2 < String.length extradata then
 						    begin
 						      let port = (Char.code extradata.[i+1]) * 256 + (Char.code extradata.[i+2]) in
-						      ignore (tryconnectpeer (Printf.sprintf "%s:%d" (Buffer.contents onionaddr) port));
+						      ignore (tryconnectpeer (Printf.sprintf "%s.onion:%d" (Buffer.contents onionaddr) port));
 						    end
 						  else
 						    raise Exit
@@ -699,7 +699,7 @@ let rec ltc_process_block h =
 			      let (_,_,_,_,_,dhght) = Hashtbl.find outlinevals (lprevblkh,lprevtx) in
 			      let currhght = Int64.add 1L dhght in
 			      Hashtbl.add outlinevals (hh,txhh) (dnxt,tm,burned,Some(lprevblkh,lprevtx),hashpair hh txhh,currhght);
-			      (*** since the burn is presumably new, add to missing lists ***)
+			      (*** since the burn is presumably new, add to missing lists (unless it was staked by the current node which is handled in staking module) ***)
 			      missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingheaders;
 			      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingdeltas
 			  | None -> ()
