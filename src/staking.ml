@@ -846,7 +846,7 @@ let stakingthread () =
 		  let bdnew = DbBlockDelta.dbget newblkid in
 		  let (_,lmedtm,burned,_,newcsm,currhght) = Hashtbl.find outlinevals (lblkid,ltxid) in
 		  match bhdnew.prevblockhash with
-		  | Some(pbh,Poburn(plblkh,pltxh,lmedtm,burned)) ->
+		  | Some(pbh,Poburn(plblkh,pltxh,plmedtm,pburned)) ->
 		      begin
 			let (_,_,_,_,csm,_) = Hashtbl.find outlinevals (plblkh,pltxh) in
 			let (tar,tmstmp,lr,thtr,sgtr) = Hashtbl.find validheadervals (plblkh,pltxh) in
