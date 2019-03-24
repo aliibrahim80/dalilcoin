@@ -1207,7 +1207,7 @@ let initialize_commands () =
 		try
 		  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
 		  let (_,tm,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
-		  Commands.sendtx oc blkh tm tr sr lr s
+		  Commands.sendtx oc (Int64.add 1L blkh) tm tr sr lr s
 		with Not_found ->
 		  Printf.fprintf oc "Cannot find block height for best block %s\n" (hashval_hexstring dbh)
 	  end
