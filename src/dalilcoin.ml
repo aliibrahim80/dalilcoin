@@ -276,6 +276,34 @@ let dbledgersnapshot_ctree_top (ctreeeltfile,hconseltfile,assetfile) fin supp h 
       in
       dbledgersnapshot_shards (ctreeeltfile,hconseltfile,assetfile) fin supp h (List.map bitseq sl);;
 
+let parse_json_privkeys kl =
+  let (klj,_) = parse_jsonval kl in
+  match klj with
+  | JsonArr(kla) ->
+      List.map
+	(fun kj ->
+	  match kj with
+	  | JsonStr(k) ->
+	    begin
+	      let (k,b) = 
+		try
+		  privkey_from_wif k
+		with _ ->
+		  try
+		    privkey_from_btcwif k
+		  with _ -> raise (Failure "Bad private key")
+	      in
+	      match Secp256k1.smulp k Secp256k1._g with
+	      | Some(x,y) ->
+		  let h = hashval_md160 (pubkey_hashval (x,y) b) in
+		  (k,b,(x,y),h)
+	      | None -> raise (Failure "Bad private key")
+	    end
+	  | _ -> raise BadCommandForm)
+	kla
+  | _ -> raise BadCommandForm;;
+	
+	
 let commandh : (string,(string * string * (out_channel -> string list -> unit))) Hashtbl.t = Hashtbl.create 100;;
 let sortedcommands : string list ref = ref [];;
 
@@ -1018,6 +1046,29 @@ let initialize_commands () =
       match al with
       | [alpha] -> Commands.reclassify_staking oc alpha false
       | _ -> raise BadCommandForm);
+  ac "createp2sh" "createp2sh <script in hex>" "Create a p2sh address by giving the script in hex"
+    (fun oc al ->
+      match al with
+      | [a] ->
+	  let s = hexstring_string a in
+	  let bl = ref [] in
+	  for i = (String.length s) - 1 downto 0 do
+	    bl := Char.code s.[i]::!bl
+	  done;
+	  let alpha = Script.hash160_bytelist !bl in
+	  Printf.fprintf oc "p2sh address: %s\n" (addr_daliladdrstr (p2shaddr_addr alpha));
+      | _ -> raise BadCommandForm);
+  ac "importp2sh" "importp2sh <script in hex>" "Create a p2sh address by giving the script in hex and import it into wallet"
+    (fun oc al ->
+      match al with
+      | [a] ->
+	  let s = hexstring_string a in
+	  let bl = ref [] in
+	  for i = (String.length s) - 1 downto 0 do
+	    bl := Char.code s.[i]::!bl
+	  done;
+	  Commands.importp2sh oc !bl
+      | _ -> raise BadCommandForm);
   ac "createtx" "createtx <inputs as json array> <outputs as json array>" "Create a simple tx spending some assets to create new currency assets.\neach input: {\"<addr>\":\"<assetid>\"}\neach output: {\"addr\":\"<addr>\",\"val\":<fraenks>,\"lock\":<height>,\"obligationaddress\":\"<addr>\"}\nwhere lock is optional (default null, unlocked output)\nand obligationaddress is optional (default null, meaning the holder address is implicitly the obligationaddress)\nSee also: creategeneraltx"
     (fun oc al ->
       match al with
@@ -1111,10 +1162,16 @@ let initialize_commands () =
 		    | _ -> raise BadCommandForm
 	  end
       | _ -> raise BadCommandForm);
-  ac "signtx" "signtx <tx in hex>" "Sign a dalilcoin tx."
+  ac "signtx" "signtx <tx in hex> [<jsonarrayofprivkeys> [<ledgerroot>]]" "Sign a dalilcoin tx."
     (fun oc al ->
       match al with
-      | [s] -> Commands.signtx oc (get_ledgerroot (get_bestblock_print_warnings oc)) s
+      | [s] -> Commands.signtx oc (get_ledgerroot (get_bestblock_print_warnings oc)) s None
+      | [s;kl] ->
+	  let kl = parse_json_privkeys kl in
+	  Commands.signtx oc (get_ledgerroot (get_bestblock_print_warnings oc)) s (Some(kl))
+      | [s;kl;lr] ->
+	  let kl = parse_json_privkeys kl in
+	  Commands.signtx oc (hexstring_hashval lr) s (Some(kl))
       | _ -> raise BadCommandForm);
   ac "savetxtopool" "savetxtopool <tx in hex>" "Save a dalilcoin tx to the local pool without sending it to the network."
     (fun oc al ->

@@ -11,6 +11,13 @@ open Signat
 
 val hash160_bytelist : int list -> p2shaddr
 
+val next_bytes : int -> int list -> int list * int list
+val bytelist_to_pt : int list -> pt
+val push_bytes : int list -> int list
+val pop_bytes : int list -> int list * int list
+val blnum_le : big_int -> int -> int list
+val blnum_be : big_int -> int -> int list
+
 val verify_p2sh : int64 option -> big_int -> p2shaddr -> int list -> bool * int64 option * int64 option
 
 type gensignat =

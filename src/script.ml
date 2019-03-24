@@ -204,6 +204,31 @@ let bytelist_to_pt bl =
       Some(x,y)
   | _ -> None
 
+let pop_bytes bl =
+  match bl with
+  | (b::br) when b > 0 && b < 76 ->
+      next_bytes b br
+  | (76::b::br) ->
+      next_bytes b br
+  | (77::b0::b1::br) ->
+      next_bytes (b0 + (b1 * 256)) br
+  | (78::b0::b1::b2::0::br) -> (*** do not really support pushes too big ***)
+      next_bytes (b0 + (b1 * 256) + (b2 * 65536)) br
+  | _ -> raise Not_found
+
+let push_bytes bl =
+  let bll = List.length bl in
+  if bll = 0 then
+    [0]
+  else if bll < 76 then
+    (bll::bl)
+  else if bll < 256 then
+    (76::bll::bl)
+  else if bll < 65536 then
+    (77::(bll mod 256)::(bll / 256)::bl)
+  else
+    raise (Failure "do not push so many bytes")
+
 let rec data_from_stack n stk =
   if n > 0 then
     begin
@@ -258,6 +283,7 @@ let opmax b1 b2 =
   | _ -> b2
 
 let check_p2sh obday (tosign:big_int) (beta:md160) s =
+  let utm = Int64.of_float (Unix.time()) in
   let minblkh = ref None in
   let mintm = ref None in
   let rec eval_script_r (tosign:big_int) bl stk altstk =
@@ -719,18 +745,22 @@ let check_p2sh obday (tosign:big_int) (beta:md160) s =
 	let (gsgs,stk3) = num_data_from_stack stk2 in
 	if checkmultisig tosign gsgs pubkeys then eval_script_r tosign br stk3 altstk else raise Invalid
     | (171::br) -> eval_script_r tosign br stk altstk (** treat OP_CODESEPARATOR as a no op **)
-    | (177::br) -> (** OP_CLTV (previously OP_NOP2) -- absolute lock time (there is no nlocktime component)  **)
+    | (177::br) when utm >= !Config.may2019hardforktime  -> (** OP_CLTV (previously OP_NOP2) -- absolute lock time (there is no nlocktime component)  **)
 	begin
 	  match stk with
 	  | [] -> raise (Failure("no input for OP_CLTV"))
 	  | (mx::_) ->
-	      let x = num32 mx in
-	      let x = Int64.of_int32 x in
+	      let x = inum_le mx in
+	      let x =
+		if lt_big_int x (shift_left_big_int unit_big_int 62) then
+		  int64_of_big_int x
+		else
+		  -1L
+	      in
 	      if x < 0L then
 		raise Invalid
 	      else if x < 500000000L then (*** block height ***)
 		begin
-		  mintm := opmax (Some(!Config.may2019hardforktime)) !mintm; (*** if OP_CLTV is used, then insist we are past the hard fork time of May 1 2019 ***)
 		  match obday with
 		  | None -> raise Invalid (*** if the birthday is not known (e.g., we are signing an output), then CLTV is not allowed ***)
 		  | Some(bday) ->
@@ -739,13 +769,12 @@ let check_p2sh obday (tosign:big_int) (beta:md160) s =
 		end
 	      else (*** unix time ***)
 		begin
-		  mintm := opmax (Some(!Config.may2019hardforktime)) !mintm; (*** if OP_CLTV is used, then insist we are past the hard fork time of May 1 2019 ***)
 		  mintm := opmax (Some(x)) !mintm;
 		  eval_script_r tosign br stk altstk
 		end
 	end
-    | (178::br) -> (** OP_CSV (previously OP_NOP2) -- relative lock time (there is no sequence number component)
-		       only for relative block height since the asset records its birthday as block height only **)
+    | (178::br) when utm >= !Config.may2019hardforktime -> (** OP_CSV (previously OP_NOP2) -- relative lock time (there is no sequence number component)
+							       only for relative block height since the asset records its birthday as block height only **)
 	begin
 	  match stk with
 	  | [] -> raise (Failure("no input for OP_CSV"))
@@ -759,7 +788,6 @@ let check_p2sh obday (tosign:big_int) (beta:md160) s =
 		  match obday with
 		  | None -> raise Invalid (*** if the birthday is not known (e.g., we are signing an output), then CSV is not allowed ***)
 		  | Some(bday) ->
-		      mintm := opmax (Some(!Config.may2019hardforktime)) !mintm; (*** if OP_CSV is used, then insist we are past the hard fork time of May 1 2019 ***)
 		      minblkh := opmax (Some(Int64.add x bday)) !minblkh;
 		      eval_script_r tosign br stk altstk
 		end
@@ -912,7 +940,7 @@ let verify_gensignat obday e gsg alpha =
 	(false,None,None)
   | P2shSignat(scr) ->
       let (i,x0,x1,x2,x3,x4) = alpha in
-      if i = 0 then (* p2sh *)
+      if i = 1 then (* p2sh *)
 	verify_p2sh obday e (x0,x1,x2,x3,x4) scr
       else
 	(false,None,None)

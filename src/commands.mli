@@ -47,6 +47,7 @@ val btctodaliladdr : out_channel -> string -> unit
 val importprivkey : out_channel -> string -> string -> unit
 val importbtcprivkey : out_channel -> string -> string -> unit
 val importendorsement : out_channel -> string -> string -> string -> unit
+val importp2sh : out_channel -> int list -> unit
 val importwatchaddr : out_channel -> string -> string -> unit
 val importwatchbtcaddr : out_channel -> string -> string -> unit
 val generate_newkeyandaddress : hashval -> string -> big_int * p2pkhaddr
@@ -57,7 +58,7 @@ val reclassify_staking : out_channel -> string -> bool -> unit
 val createtx : jsonval -> jsonval -> tx
 val createsplitlocktx : out_channel -> hashval -> int64 -> payaddr -> payaddr -> addr -> hashval -> int -> int64 -> int64 -> unit
 
-val signtx : out_channel -> hashval -> string -> unit
+val signtx : out_channel -> hashval -> string -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
 val savetxtopool : int64 -> int64 -> hashval -> string -> unit
 val validatetx : out_channel -> int64 -> int64 -> hashval option -> hashval option -> hashval -> string -> unit
 val sendtx : out_channel -> int64 -> int64 -> hashval option -> hashval option -> hashval -> string -> unit
