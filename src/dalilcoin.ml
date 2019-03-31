@@ -1346,7 +1346,7 @@ let initialize_commands () =
     (fun oc al ->
       let (a,sgid) =
 	match al with
-	| [a] -> (a,hashopair2 None (hexstring_hashval a))
+	| [a] -> (a,hexstring_hashval a)
 	| _ -> raise BadCommandForm
       in
       let (_,_,sr) = get_3roots (get_bestblock_print_warnings oc) in
