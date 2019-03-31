@@ -7,6 +7,8 @@ open Logic
 open Hash
 open Mathdata
 
+exception RedexMax
+
 val check_theoryspec : theoryspec -> (theory * gsign) option
 
 val check_signaspec :

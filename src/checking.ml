@@ -89,11 +89,14 @@ let rec upstp_trm t i j =
   | TTpAll t1 -> TTpAll (upstp_trm t1 ((+) i 1) j)
   | _ -> t
 
+exception NotEta
+exception RedexMax
+
 (** val uptrm : trm -> int -> int -> trm **)
 
 let rec uptrm t i j =
   match t with
-  | DB k -> if (<) k i then DB k else DB ((+) k j)
+  | DB k -> if (<) k i then DB k else let k2 = ((+) k j) in if k2 < 0 then raise NotEta else DB k2
   | Ap (t1, t2) -> Ap ((uptrm t1 i j), (uptrm t2 i j))
   | Lam (a1, t1) -> Lam (a1, (uptrm t1 ((+) i 1) j))
   | Imp (t1, t2) -> Imp ((uptrm t1 i j), (uptrm t2 i j))
@@ -190,8 +193,14 @@ let rec beta_eta_norm1 t1 = match t1 with
   (match t2 with
    | Ap (m, t) ->
      (match t with
-      | DB z ->
-        ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+      | DB z when z = 0 ->
+	  begin
+	    try
+	      (uptrm m 0 ((~-) 1), false)
+	    with NotEta ->
+	      ((Lam (a, t2)), r1)
+	  end
+(**        ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
            (fun _ ->
            if free_trm_trm m 0
            then ((uptrm m 0 ((~-) 1)), false)
@@ -200,7 +209,7 @@ let rec beta_eta_norm1 t1 = match t1 with
            r1))
            (fun _ -> ((Lam (a, t2)),
            r1))
-           z)
+           z) **)
       | _ -> ((Lam (a, t2)), r1))
    | _ -> ((Lam (a, t2)), r1))
 | Imp (m1, m2) ->
@@ -237,8 +246,7 @@ let rec beta_eta_norm1 t1 = match t1 with
 
 let rec beta_eta_norm t1 count =
   (fun fO fS n -> if n=0 then fO () else fS (n-1))
-    (fun _ -> (t1,
-    false))
+    (fun _ -> raise RedexMax)
     (fun n1 ->
     let (s, b) = beta_eta_norm1 t1 in
     if b then (s, true) else beta_eta_norm s n1)
@@ -668,7 +676,8 @@ let rec check_doc gvtp gvkn th thy str = function
       | Some p ->
         let (sg, imported) = p in
         (match str with
-         | Some tr -> import_signatures th tr (h :: []) sg imported
+         | Some tr ->
+	     import_signatures th tr (h :: []) sg imported
          | None -> None)
       | None -> None)
    | Docparam (h, a) ->
