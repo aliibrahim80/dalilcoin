@@ -697,11 +697,22 @@ let retarget_dampened tar deltm =
 	  (big_int_of_int32 (Int32.add 1000000l deltm)))
        (big_int_of_int (1000000 + 21600)))
 
+(* target 1 hour blocks on testnet *)
+let retarget_testnet tar deltm =
+  min_big_int
+    !max_target
+    (div_big_int
+       (mult_big_int tar
+	  (big_int_of_int32 (Int32.add 1000000l deltm)))
+       (big_int_of_int (1000000 + 3600)))
+
 let retarget blktm tar deltm =
-  if blktm < !Config.may2019hardforktime then
+  if blktm < !Config.may2019hardforktime then (*** before May 2019 hard fork ***)
     retarget_orig tar deltm
+  else if !Config.testnet && blktm > 1553970000L then
+    retarget_testnet tar deltm
   else
-    retarget_dampened tar deltm (*** after May 01 2019 ***)
+    retarget_dampened tar deltm
 
 let difficulty tar =
   div_big_int !max_target tar
