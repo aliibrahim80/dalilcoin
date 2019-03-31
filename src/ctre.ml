@@ -1700,7 +1700,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
 	  begin
 	    ensure_addr_empty alpha; (*** make sure the publication is new because otherwise publishing it is pointless ***)
 	    try
-	      ignore (match check_theoryspec thy with
+	      ignore (match (try check_theoryspec thy with _ -> None) with
               | None ->
 		  vmsg (fun oc -> Printf.fprintf oc "Theory does not check as correct\n");
 		  raise CheckingFailure
@@ -1757,7 +1757,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
 		| None -> false
 	      in
 	      let thy = ottree_lookup tht th in
-              ignore (match check_signaspec gvtp gvkn th thy sigt sl with
+              ignore (match (try check_signaspec gvtp gvkn th thy sigt sl with _ -> None)  with
               | None ->
 		  vmsg (fun oc -> Printf.fprintf oc "Signature does not check as correct\n");
 		  raise CheckingFailure
@@ -1811,7 +1811,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
 		| None -> false
 	      in
 	      let thy = ottree_lookup tht th in
-              ignore (match check_doc gvtp gvkn th thy sigt dl with
+              ignore (match (try check_doc gvtp gvkn th thy sigt dl with _ -> None) with
               | None ->
 		  vmsg (fun oc -> Printf.fprintf oc "Document does not check as correct\n");
 		  raise CheckingFailure
