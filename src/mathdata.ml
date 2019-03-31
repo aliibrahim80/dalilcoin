@@ -572,17 +572,17 @@ let rec import_signatures th (str:stree) hl sg imported =
   | [] -> Some (sg,imported)
   | (h::hr) ->
     if List.mem h imported then
-	    (import_signatures th str hr sg imported)
+      (import_signatures th str hr sg imported)
     else
-	    match htree_lookup (hashval_bitseq h) str with 
-	    | Some(th2,(sl,(tptml2,kl2))) when th = th2 ->
-       begin
-	       match  import_signatures th str sl sg imported with
-         | Some ((tptml3,kl3),imported) -> Some ((tptml3 @ tptml2,kl3 @ kl2), imported)
-         | None -> None
-       end
-	    | Some(th2,(sl,(tptml2,kl2))) -> raise (Failure "Signatures are for different theories and so cannot be combined.")
-	    | _ -> None
+      match htree_lookup (hashval_bitseq h) str with 
+      | Some(th2,(sl,(tptml2,kl2))) when th = th2 ->
+	  begin
+	    match import_signatures th str (sl @ hr) sg (h::imported) with
+            | Some ((tptml3,kl3),imported) -> Some ((tptml3 @ tptml2,kl3 @ kl2), imported)
+            | None -> None
+	  end
+      | Some(th2,(sl,(tptml2,kl2))) -> raise (Failure "Signatures are for different theories and so cannot be combined.")
+      | _ -> None
 
 let rec print_tp v t base_types =
   match t with
