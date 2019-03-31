@@ -85,9 +85,9 @@ val signaspec_burncost : signaspec -> int64
 module DbSigna :
     sig
       val dbinit : unit -> unit
-      val dbget : hashval -> signa
+      val dbget : hashval -> hashval option * signa
       val dbexists : hashval -> bool
-      val dbput : hashval -> signa -> unit
+      val dbput : hashval -> hashval option * signa -> unit
       val dbdelete : hashval -> unit
     end
 
@@ -122,15 +122,16 @@ val doc_creates_neg_props : doc -> hashval list
 
 (** * htrees to hold theories and signatures **)
 type ttree = theory htree
-type stree = signa htree
+type stree = (hashval option * signa) htree
 
 val ottree_insert : ttree option -> bool list -> theory -> ttree
-val ostree_insert : stree option -> bool list -> signa -> stree
+val ostree_insert : stree option -> bool list -> hashval option * signa -> stree
 
 val ottree_hashroot : ttree option -> hashval option
 val ostree_hashroot : stree option -> hashval option
 
 val ottree_lookup : ttree option -> hashval option -> theory
+val ostree_lookup : stree option -> hashval option -> hashval option * signa
 
 exception CheckingFailure
 exception NotKnown of hashval option * hashval
@@ -148,6 +149,7 @@ val print_tp : int -> stp -> int -> unit
 val json_theoryspec : theoryspec -> jsonval
 val json_signaspec : hashval option -> signaspec -> jsonval
 val json_doc : hashval option -> doc -> jsonval
+val json_stp : stp -> jsonval
 
 val stp_from_json : jsonval -> stp
 val trm_from_json : jsonval -> trm

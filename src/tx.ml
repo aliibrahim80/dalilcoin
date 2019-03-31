@@ -315,6 +315,7 @@ let rec check_tx_out_signatures txhe outpl sl rl =
   match outpl,sl with
   | [],[] -> true
   | [],(_::_) -> false
+  | (_,(_,TheoryPublication(alpha,n,thy)))::outpr,[] -> false
   | (_,(_,TheoryPublication(alpha,n,thy)))::outpr,s::sr ->
       begin
 	try
@@ -329,6 +330,7 @@ let rec check_tx_out_signatures txhe outpl sl rl =
 	    false
 	with Not_found -> false
       end
+  | (_,(_,SignaPublication(alpha,n,th,si)))::outpr,[] -> false
   | (_,(_,SignaPublication(alpha,n,th,si)))::outpr,s::sr ->
       begin
 	try
@@ -343,6 +345,7 @@ let rec check_tx_out_signatures txhe outpl sl rl =
 	    false
 	with Not_found -> false
       end
+  | (_,(_,DocPublication(alpha,n,th,d)))::outpr,[] -> false
   | (_,(_,DocPublication(alpha,n,th,d)))::outpr,s::sr ->
       begin
 	try
@@ -412,7 +415,7 @@ let rec txout_update_ostree outpl sigt =
   | (alpha,(obl,SignaPublication(gamma,nonce,th,d)))::outpr ->
       let sg = signaspec_signa d in
       let thsgh = hashopair2 th (hashsigna sg) in
-      txout_update_ostree outpr (Some(ostree_insert sigt (hashval_bitseq thsgh) sg))
+      txout_update_ostree outpr (Some(ostree_insert sigt (hashval_bitseq thsgh) (th,sg)))
   | _::outpr -> txout_update_ostree outpr sigt
 
 let tx_update_ostree tau sigt = txout_update_ostree (tx_outputs tau) sigt

@@ -513,7 +513,7 @@ let signa_to_str s =
   seosbf (seo_signa seosb s (c,None));
   Buffer.contents c
 
-module DbSigna = Dbbasic (struct type t = signa let basedir = "signa" let seival = sei_signa seic let seoval = seo_signa seoc end)
+module DbSigna = Dbbasic (struct type t = hashval option * signa let basedir = "signa" let seival = sei_prod (sei_option sei_hashval) sei_signa seic let seoval = seo_prod (seo_option seo_hashval) seo_signa seoc end)
 
 module DbSignaTree =
   Dbbasic
@@ -527,7 +527,7 @@ module DbSignaTree =
 (** * htrees to hold theories and signatures **)
 
 type ttree = theory htree
-type stree = signa htree
+type stree = (hashval option * signa) htree
 
 let ottree_insert t bl thy =
   match t with
@@ -541,7 +541,7 @@ let ostree_insert t bl s =
 
 let ottree_hashroot t = ohtree_hashroot hashtheory 256 t
 
-let ostree_hashroot t = ohtree_hashroot (fun s -> Some(hashsigna s)) 256 t
+let ostree_hashroot t = ohtree_hashroot (fun (th,s) -> Some(hashopair2 th (hashsigna s))) 256 t
 
 let ottree_lookup (t:ttree option) h =
   match t, h with
@@ -554,6 +554,17 @@ let ottree_lookup (t:ttree option) h =
   | _,None -> ([],[])
   | _,_ -> raise Not_found
 
+let ostree_lookup (t:stree option) h =
+  match t, h with
+  | Some(t), Some(h) ->
+    begin
+	    match htree_lookup (hashval_bitseq h) t with
+	    | None -> raise Not_found
+	    | Some(sg) -> sg
+    end
+  | _,None -> (None,([],([],[])))
+  | _,_ -> raise Not_found
+
 (** * operations including type checking and proof checking ***)
 
 let rec import_signatures th (str:stree) hl sg imported =
@@ -563,14 +574,15 @@ let rec import_signatures th (str:stree) hl sg imported =
     if List.mem h imported then
 	    (import_signatures th str hr sg imported)
     else
-	    match htree_lookup (hashval_bitseq (hashopair2 th h)) str with 
-	    | Some(sl,(tptml2,kl2)) ->
+	    match htree_lookup (hashval_bitseq h) str with 
+	    | Some(th2,(sl,(tptml2,kl2))) when th = th2 ->
        begin
 	       match  import_signatures th str sl sg imported with
          | Some ((tptml3,kl3),imported) -> Some ((tptml3 @ tptml2,kl3 @ kl2), imported)
          | None -> None
        end
-	    | None -> None
+	    | Some(th2,(sl,(tptml2,kl2))) -> raise (Failure "Signatures are for different theories and so cannot be combined.")
+	    | _ -> None
 
 let rec print_tp v t base_types =
   match t with

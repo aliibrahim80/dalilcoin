@@ -119,7 +119,7 @@ let rec get_all_theories t =
 let rec get_all_signas t loc =
   match t with
   | None -> []
-  | Some(HLeaf(x)) -> [(bitseq_hashval (List.rev loc),hashsigna x,x)]
+  | Some(HLeaf(th,x)) -> [(bitseq_hashval (List.rev loc),hashopair2 th (hashsigna x),(th,x))]
   | Some(HBin(tl,tr)) -> get_all_signas tl (false::loc) @ get_all_signas tr (true::loc)
 
 let rec get_added_theories t1 t2 =
@@ -161,7 +161,8 @@ let update_signatures oldsigroot oldsigtree newsigtree =
       | Some(newsigrootreal) ->
 	  let addedsignas = get_added_signas oldsigtree newsigtree [] in
 	  List.iter
-	    (fun (_,k,signa) -> DbSigna.dbput k signa)
+	    (fun (loc,k,(th,signa)) ->
+	      DbSigna.dbput k (th,signa))
 	    addedsignas;
 	  DbSignaTree.dbput newsigrootreal (oldsigroot,List.map (fun (_,k,_) -> k) addedsignas);
 	  add_sigtree newsigroot newsigtree
@@ -183,6 +184,49 @@ let invalid_or_blacklisted_p h =
 	with Not_found ->
 	  false
     end
+
+let rec recursively_invalidate_blocks_2 lbk ltx =
+  try
+    begin
+      let (h,_,_,_,_,_) = Hashtbl.find outlinevals (lbk,ltx) in
+      if not (Hashtbl.mem blockinvalidated h) then
+	begin
+	  Hashtbl.add blockinvalidated h ();
+	  DbInvalidatedBlocks.dbput h true;
+	end;
+      List.iter
+	(fun (nlbk,nltx) -> recursively_invalidate_blocks_2 nlbk nltx)
+	(Hashtbl.find_all outlinesucc (lbk,ltx))
+    end
+  with Not_found -> ()
+
+let recursively_invalidate_blocks h =
+  Hashtbl.add blockinvalidated h ();
+  DbInvalidatedBlocks.dbput h true;
+  List.iter
+    (fun (lbk,ltx) -> recursively_invalidate_blocks_2 lbk ltx)
+    (Hashtbl.find_all blockburns h)
+
+let rec recursively_revalidate_blocks_2 lbk ltx =
+  try
+    begin
+      let (h,_,_,p,_,_) = Hashtbl.find outlinevals (lbk,ltx) in
+      Hashtbl.remove blockinvalidated h;
+      if DbInvalidatedBlocks.dbexists h then DbInvalidatedBlocks.dbdelete h;
+      if DbBlacklist.dbexists h then DbBlacklist.dbdelete h;
+      match p with
+      | Some(plbk,pltx) -> recursively_revalidate_blocks_2 plbk pltx
+      | None -> ()
+    end
+  with Not_found -> ()
+
+let recursively_revalidate_blocks h =
+  Hashtbl.remove blockinvalidated h;
+  if DbInvalidatedBlocks.dbexists h then DbInvalidatedBlocks.dbdelete h;
+  if DbBlacklist.dbexists h then DbBlacklist.dbdelete h;
+  List.iter
+    (fun (lbk,ltx) -> recursively_revalidate_blocks_2 lbk ltx)
+    (Hashtbl.find_all blockburns h)
 
 (*** assumes ancestors have been validated and info for parent is on validheadervals ***)
 let process_header sout validate forw dbp (lbh,ltxh) h (bhd,bhs) currhght csm tar lmedtm burned =
@@ -223,7 +267,6 @@ let process_header sout validate forw dbp (lbh,ltxh) h (bhd,bhs) currhght csm ta
       Hashtbl.add validheadervals (lbh,ltxh) (bhd.tinfo,bhd.timestamp,bhd.newledgerroot,bhd.newtheoryroot,bhd.newsignaroot);
       if not (DbBlockDelta.dbexists h) then missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,h)] !missingdeltas;
     end
-
 
 (*** this is for saving the new ctree elements in the database ***)
 let process_delta_ctree h blkhght blk =
@@ -328,7 +371,8 @@ let rec process_block sout validate forw dbp (lbh,ltxh) h ((bhd,bhs),bd) thtr th
 	  verbose_blockcheck := Some(!Utils.log);
 	  ignore (valid_block tht sgt currhght csm tar ((bhd,bhs),bd) lmedtm burned);
 	  verbose_blockcheck := None;
-          DbInvalidatedBlocks.dbput h true
+	  Hashtbl.add blockinvalidated h ();
+	  DbInvalidatedBlocks.dbput h true
     end
   else
     begin
@@ -396,57 +440,64 @@ let initialize_dlc_from_ltc sout lblkh =
 		  let lprevblkh = Hashtbl.find ltx_lblk lprevtx in
 		  try
 		    let (prevdbh,prevlmedtm,prevburned,_,csm,prevhght) = Hashtbl.find outlinevals (lprevblkh,lprevtx) in
-		    let currhght = Int64.add 1L prevhght in
-		    Hashtbl.add outlinevals (lbh,ltx) (dnxt,lmedtm,burned,Some(lprevblkh,lprevtx),hashpair lbh ltx,currhght);
-		    Hashtbl.add outlinesucc (lprevblkh,lprevtx) (lbh,ltx);
-		    if invalid_or_blacklisted_p dnxt then
-		      Hashtbl.add blockinvalidated dnxt ()
-		    else (*** process header and delta if we have them ***)
+		    if invalid_or_blacklisted_p prevdbh then
 		      begin
-			try
-			  let (bhd,bhs) = DbBlockHeader.dbget dnxt in
-			  begin
-			    match bhd.prevblockhash with
-			    | None ->
-				Printf.fprintf sout "Alleged block %s at height %Ld had an invalid header, points to no previous block but should point to %s.\n" (hashval_hexstring dnxt) currhght (hashval_hexstring prevdbh);
-				DbInvalidatedBlocks.dbput dnxt true
-			    | Some(prevdbh2,Poburn(lbh2,ltx2,lmedtm2,burned2)) ->
-				if prevdbh = prevdbh2 && lbh2 = lprevblkh && ltx2 = lprevtx && lmedtm2 = prevlmedtm && burned2 = prevburned then
-				  begin
-				    try
-				      let (tar,tmstmp,lr,thtr,sgtr) = Hashtbl.find validheadervals (lprevblkh,lprevtx) in
-				      if not (blockheader_succ_b prevdbh lr tmstmp tar (bhd,bhs)) then
-					begin
-					  Printf.fprintf sout "Block %s at height %Ld is not a valid successor for %s.\n" (hashval_hexstring dnxt) currhght (hashval_hexstring prevdbh);
-					  DbInvalidatedBlocks.dbput dnxt true
-					end
-				      else
-					begin
-					  if Hashtbl.mem validblockvals (lprevblkh,lprevtx) then (*** full blocks up to here have been validated ***)
-					    begin
-					      try
-						let bd = DbBlockDelta.dbget dnxt in
-						let tht = lookup_thytree thtr in
-						let sgt = lookup_sigtree sgtr in
-						process_block sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt ((bhd,bhs),bd) thtr tht sgtr sgt currhght csm tar lmedtm burned;
-					      with Not_found -> (*** check if header is valid, report delta as missing ***)
-						process_header sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt (bhd,bhs) currhght csm tar lmedtm burned
-					    end
-					  else (*** an ancestor delta was not validated/is missing ***)
-					    process_header sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt (bhd,bhs) currhght csm tar lmedtm burned
-					end
-				    with Not_found -> (*** an ancestor header was not validated/is missing ***)
-				      if not (DbBlockHeader.dbexists dnxt) then missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingheaders
-				  end
-				else
-				  begin
-				    Printf.fprintf sout "Alleged block %s at height %Ld had an invalid header, pointing to an incorrect previous block or proof of burn.\n" (hashval_hexstring dnxt) currhght;
-				    DbInvalidatedBlocks.dbput dnxt true
-				  end
-			  end
-			with Not_found ->
-			  missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingheaders
+			Hashtbl.add blockinvalidated dnxt ();
+			DbInvalidatedBlocks.dbput dnxt true;
+			Printf.fprintf sout "Block %s invalid since parent is invalid.\n" (hashval_hexstring dnxt);
 		      end
+		    else
+		      let currhght = Int64.add 1L prevhght in
+		      Hashtbl.add outlinevals (lbh,ltx) (dnxt,lmedtm,burned,Some(lprevblkh,lprevtx),hashpair lbh ltx,currhght);
+		      Hashtbl.add outlinesucc (lprevblkh,lprevtx) (lbh,ltx);
+		      if invalid_or_blacklisted_p dnxt then
+			Hashtbl.add blockinvalidated dnxt ()
+		      else (*** process header and delta if we have them ***)
+			begin
+			  try
+			    let (bhd,bhs) = DbBlockHeader.dbget dnxt in
+			    begin
+			      match bhd.prevblockhash with
+			      | None ->
+				  Printf.fprintf sout "Alleged block %s at height %Ld had an invalid header, points to no previous block but should point to %s.\n" (hashval_hexstring dnxt) currhght (hashval_hexstring prevdbh);
+				  DbInvalidatedBlocks.dbput dnxt true
+			      | Some(prevdbh2,Poburn(lbh2,ltx2,lmedtm2,burned2)) ->
+				  if prevdbh = prevdbh2 && lbh2 = lprevblkh && ltx2 = lprevtx && lmedtm2 = prevlmedtm && burned2 = prevburned then
+				    begin
+				      try
+					let (tar,tmstmp,lr,thtr,sgtr) = Hashtbl.find validheadervals (lprevblkh,lprevtx) in
+					if not (blockheader_succ_b prevdbh lr tmstmp tar (bhd,bhs)) then
+					  begin
+					    Printf.fprintf sout "Block %s at height %Ld is not a valid successor for %s.\n" (hashval_hexstring dnxt) currhght (hashval_hexstring prevdbh);
+					    DbInvalidatedBlocks.dbput dnxt true
+					  end
+					else
+					  begin
+					    if Hashtbl.mem validblockvals (lprevblkh,lprevtx) then (*** full blocks up to here have been validated ***)
+					      begin
+						try
+						  let bd = DbBlockDelta.dbget dnxt in
+						  let tht = lookup_thytree thtr in
+						  let sgt = lookup_sigtree sgtr in
+						  process_block sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt ((bhd,bhs),bd) thtr tht sgtr sgt currhght csm tar lmedtm burned;
+						with Not_found -> (*** check if header is valid, report delta as missing ***)
+						  process_header sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt (bhd,bhs) currhght csm tar lmedtm burned
+					      end
+					    else (*** an ancestor delta was not validated/is missing ***)
+					      process_header sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt (bhd,bhs) currhght csm tar lmedtm burned
+					  end
+				      with Not_found -> (*** an ancestor header was not validated/is missing ***)
+					if not (DbBlockHeader.dbexists dnxt) then missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingheaders
+				    end
+				  else
+				    begin
+				      Printf.fprintf sout "Alleged block %s at height %Ld had an invalid header, pointing to an incorrect previous block or proof of burn.\n" (hashval_hexstring dnxt) currhght;
+				      DbInvalidatedBlocks.dbput dnxt true
+				    end
+			    end
+			  with Not_found ->
+			    missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingheaders
+			end
 		  with Not_found ->
 		    Printf.fprintf sout "Missing outline info for %s:%s\n" (hashval_hexstring lprevblkh) (hashval_hexstring lprevtx)
 		end
@@ -1113,49 +1164,6 @@ let print_best_block () =
   match b with
   | Some(bh,lbk,ltx) -> log_string (Printf.sprintf "bestblock %s\nsupported by %s %s\n" (hashval_hexstring bh) (hashval_hexstring lbk) (hashval_hexstring ltx))
   | None -> log_string (Printf.sprintf "no bestblock\n")
-
-let rec recursively_invalidate_blocks_2 lbk ltx =
-  try
-    begin
-      let (h,_,_,_,_,_) = Hashtbl.find outlinevals (lbk,ltx) in
-      if not (Hashtbl.mem blockinvalidated h) then
-	begin
-	  Hashtbl.add blockinvalidated h ();
-	  DbInvalidatedBlocks.dbput h true;
-	end;
-      List.iter
-	(fun (nlbk,nltx) -> recursively_invalidate_blocks_2 nlbk nltx)
-	(Hashtbl.find_all outlinesucc (lbk,ltx))
-    end
-  with Not_found -> ()
-
-let recursively_invalidate_blocks h =
-  Hashtbl.add blockinvalidated h ();
-  DbInvalidatedBlocks.dbput h true;
-  List.iter
-    (fun (lbk,ltx) -> recursively_invalidate_blocks_2 lbk ltx)
-    (Hashtbl.find_all blockburns h)
-
-let rec recursively_revalidate_blocks_2 lbk ltx =
-  try
-    begin
-      let (h,_,_,p,_,_) = Hashtbl.find outlinevals (lbk,ltx) in
-      Hashtbl.remove blockinvalidated h;
-      if DbInvalidatedBlocks.dbexists h then DbInvalidatedBlocks.dbdelete h;
-      if DbBlacklist.dbexists h then DbBlacklist.dbdelete h;
-      match p with
-      | Some(plbk,pltx) -> recursively_revalidate_blocks_2 plbk pltx
-      | None -> ()
-    end
-  with Not_found -> ()
-
-let recursively_revalidate_blocks h =
-  Hashtbl.remove blockinvalidated h;
-  if DbInvalidatedBlocks.dbexists h then DbInvalidatedBlocks.dbdelete h;
-  if DbBlacklist.dbexists h then DbBlacklist.dbdelete h;
-  List.iter
-    (fun (lbk,ltx) -> recursively_revalidate_blocks_2 lbk ltx)
-    (Hashtbl.find_all blockburns h)
 
 let reprocessblock oc h =
   try
