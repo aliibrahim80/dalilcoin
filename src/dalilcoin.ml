@@ -1173,6 +1173,51 @@ let initialize_commands () =
 	  let kl = parse_json_privkeys kl in
 	  Commands.signtx oc (hexstring_hashval lr) s (Some(kl))
       | _ -> raise BadCommandForm);
+  ac "signtxfiles" "signtxfiles <infile> <outfile> [<jsonarrayofprivkeys> [<ledgerroot>]]" "Sign a dalilcoin tx.\n<infile> is an existing binary file with the (possibly partially signed) tx.\n<outfile> is a binary file created with the output tx."
+    (fun oc al ->
+      match al with
+      | [s1;s2] -> (*** here ***)
+	  let c1 = open_in_bin s1 in
+	  let (stau,_) = Tx.sei_stx seic (c1,None) in
+	  close_in c1;
+	  let c2 = open_out_bin s2 in
+	  begin
+	    try
+	      Commands.signtxc oc (get_ledgerroot (get_bestblock_print_warnings oc)) stau c2 None;
+	      close_out c2
+	    with e ->
+	      close_out c2;
+	      raise e
+	  end
+      | [s1;s2;kl] ->
+	  let c1 = open_in_bin s1 in
+	  let (stau,_) = Tx.sei_stx seic (c1,None) in
+	  close_in c1;
+	  let kl = parse_json_privkeys kl in
+	  let c2 = open_out_bin s2 in
+	  begin
+	    try
+	      Commands.signtxc oc (get_ledgerroot (get_bestblock_print_warnings oc)) stau c2 (Some(kl));
+	      close_out c2
+	    with e ->
+	      close_out c2;
+	      raise e
+	  end
+      | [s1;s2;kl;lr] ->
+	  let c1 = open_in_bin s1 in
+	  let (stau,_) = Tx.sei_stx seic (c1,None) in
+	  close_in c1;
+	  let kl = parse_json_privkeys kl in
+	  let c2 = open_out_bin s2 in
+	  begin
+	    try
+	      Commands.signtxc oc (hexstring_hashval lr) stau c2 (Some(kl));
+	      close_out c2
+	    with e ->
+	      close_out c2;
+	      raise e
+	  end
+      | _ -> raise BadCommandForm);
   ac "savetxtopool" "savetxtopool <tx in hex>" "Save a dalilcoin tx to the local pool without sending it to the network."
     (fun oc al ->
       match al with
@@ -1212,6 +1257,25 @@ let initialize_commands () =
 		  Printf.fprintf oc "Cannot find block height for best block %s\n" (hashval_hexstring dbh)
 	  end
       | _ -> raise BadCommandForm);
+  ac "sendtxfile" "sendtxfile <file with tx in binary>" "Send a dalilcoin tx to other nodes on the network."
+    (fun oc al ->
+      match al with
+      | [s] ->
+	  begin
+	    match get_bestblock_print_warnings oc with
+	    | None -> Printf.fprintf oc "Cannot find best block.\n"
+	    | Some(dbh,lbk,ltx) ->
+		try
+		  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+		  let (_,tm,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
+		  let c = open_in_bin s in
+		  let (stau,_) = Tx.sei_stx seic (c,None) in
+		  close_in c;
+		  Commands.sendtx2 oc (Int64.add 1L blkh) tm tr sr lr stau
+		with Not_found ->
+		  Printf.fprintf oc "Cannot find block height for best block %s\n" (hashval_hexstring dbh)
+	  end
+      | _ -> raise BadCommandForm);
   ac "validatetx" "validatetx <tx in hex>" "Print information about the tx and whether or not it is valid.\nIf the tx is not valid, information about why it is not valid is given."
     (fun oc al ->
       match al with
@@ -1225,13 +1289,87 @@ let initialize_commands () =
 		  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
 		  try
 		    let (_,tm,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
-		    Commands.validatetx oc blkh tm tr sr lr s
+		    Commands.validatetx oc (Int64.add 1L blkh) tm tr sr lr s
 		  with Not_found ->
 		    Printf.fprintf oc "Cannot determine information about best block %s at height %Ld\n" (hashval_hexstring dbh) blkh
 		with Not_found ->
 		  Printf.fprintf oc "Cannot find block height for best block %s\n" (hashval_hexstring dbh)
 	  end
       | _ -> raise BadCommandForm);
+  ac "validatetxfile" "validatetxfile <file with tx in binary>" "Print information about the tx and whether or not it is valid.\nIf the tx is not valid, information about why it is not valid is given."
+    (fun oc al ->
+      match al with
+      | [s] ->
+	  begin
+	    let best = get_bestblock_print_warnings oc in
+	    match best with
+	    | None -> Printf.fprintf oc "Cannot determine best block\n"
+	    | Some(dbh,lbk,ltx) ->
+		try
+		  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+		  try
+		    let (_,tm,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
+		    let c = open_in_bin s in
+		    let (stau,_) = Tx.sei_stx seic (c,None) in
+		    close_in c;
+		    Commands.validatetx2 oc (Int64.add 1L blkh) tm tr sr lr stau
+		  with Not_found ->
+		    Printf.fprintf oc "Cannot determine information about best block %s at height %Ld\n" (hashval_hexstring dbh) blkh
+		with Not_found ->
+		  Printf.fprintf oc "Cannot find block height for best block %s\n" (hashval_hexstring dbh)
+	  end
+      | _ -> raise BadCommandForm);
+  ac "theory" "theory <theoryid>" "Print information about a confirmed theory"
+    (fun oc al ->
+      match al with
+      | [a] ->
+	  begin
+	    let thyid = hexstring_hashval a in
+	    let (_,tr,_) = get_3roots (get_bestblock_print_warnings oc) in
+	    try
+	      let tht = lookup_thytree tr in
+	      let thy = ottree_lookup tht (Some(thyid)) in
+	      let (prms,axs) = thy in
+	      Printf.fprintf oc "Theory %s %d Prims %d Axioms:\nTypes of Prims:\n" a (List.length prms) (List.length axs);
+	      List.iter
+		(fun a -> print_jsonval oc (json_stp a); Printf.fprintf oc "\n")
+		prms;
+	      Printf.printf "Ids of Axioms:\n";
+	      List.iter
+		(fun h -> Printf.fprintf oc "%s\n" (hashval_hexstring h))
+		axs;
+	    with Not_found ->
+	      Printf.fprintf oc "Theory not found.\n"
+	  end
+      | _ -> raise BadCommandForm);
+  ac "signature" "signature <signatureid>" "Print information about a confirmed signature"
+    (fun oc al ->
+      let (a,sgid) =
+	match al with
+	| [a] -> (a,hashopair2 None (hexstring_hashval a))
+	| _ -> raise BadCommandForm
+      in
+      let (_,_,sr) = get_3roots (get_bestblock_print_warnings oc) in
+      try
+	let sgt = lookup_sigtree sr in
+	let (th,sg) = ostree_lookup sgt (Some(sgid)) in
+	let ths = match th with Some(h) -> hashval_hexstring h | None -> "empty" in
+	let (imps,(objs,kns)) = sg in
+	Printf.fprintf oc "Signature %s in Theory %s\n%d Imported Signatures %d Objects %d Knowns:\n" a ths (List.length imps) (List.length objs) (List.length kns);
+	Printf.fprintf oc "Imports:\n";
+	List.iter
+	  (fun h -> Printf.fprintf oc "%s\n" (hashval_hexstring h))
+	  imps;
+	Printf.fprintf oc "Objects:\n";
+	List.iter
+	  (fun ((h,_),_) -> Printf.fprintf oc "%s\n" (hashval_hexstring h))
+	  objs;
+	Printf.fprintf oc "Knowns:\n";
+	List.iter
+	  (fun (h,_) -> Printf.fprintf oc "%s\n" (hashval_hexstring h))
+	  kns;
+      with Not_found ->
+	Printf.fprintf oc "Signature not found.\n");
   ac "preassetinfo" "preassetinfo <preasset as json>" "Print information about a preasset given in json form.\nTypes of assets are currency, bounties,\n ownership of objects, ownership of propositions, ownership of negations of propositions,\nrights to use an object, rights to use a proposition,\ncommitment markers published before publishing a document, theory or signature,\na theories, signatures and documents."
     (fun oc al ->
       match al with

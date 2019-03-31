@@ -171,7 +171,9 @@ let load_wallet () =
 	close_in s
 
 let save_wallet () =
+  let bkpwallfn = Filename.concat (datadir()) (Printf.sprintf "walletbkp%Ld" (Int64.of_float (Unix.time()))) in
   let wallfn = Filename.concat (datadir()) "wallet" in
+  Sys.rename wallfn bkpwallfn;
   let s = open_out_bin wallfn in
   List.iter
     (fun (k,b,_,_,_,_) ->
@@ -1472,9 +1474,8 @@ let rec signtx_outs kl taue outpl sl rl rsl co =
   | _::outpr -> signtx_outs kl taue outpr sl rl rsl co
   | [] -> (List.rev rsl,co)
 
-let signtx oc lr taustr kl =
-  let s = hexstring_string taustr in
-  let (((tauin,tauout) as tau,(tausgin,tausgout)),_) = sei_stx seis (s,String.length s,None,0,0) in (*** may be partially signed ***)
+let signtx2 oc lr stau kl =
+  let ((tauin,tauout) as tau,(tausgin,tausgout)) = stau in
   let unsupportederror alpha h = Printf.printf "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
   let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
   let rec get_propowns tauin al =
@@ -1490,9 +1491,22 @@ let signtx oc lr taustr kl =
   let taue = hashval_big_int tauh2 in
   let (tausgin1,ci) = signtx_ins kl taue tauin al tauout tausgin [] [] true (get_propowns tauin al) in
   let (tausgout1,co) = signtx_outs kl taue tauout tausgout [] [] true in
-  let stau = (tau,(tausgin1,tausgout1)) in
+  ((tau,(tausgin1,tausgout1)),ci,co)
+
+let signtxc oc lr stau oc2 kl =
+  let (stau2,ci,co) = signtx2 oc lr stau kl in
+  seocf (seo_stx seoc stau2 (oc2,None));
+  if ci && co then
+    Printf.fprintf oc "Completely signed.\n"
+  else
+    Printf.fprintf oc "Partially signed.\n"
+
+let signtx oc lr taustr kl =
+  let s = hexstring_string taustr in
+  let (stau,_) = sei_stx seis (s,String.length s,None,0,0) in (*** may be partially signed ***)
+  let (stau2,ci,co) = signtx2 oc lr stau kl in
   let s = Buffer.create 100 in
-  seosbf (seo_stx seosb stau (s,None));
+  seosbf (seo_stx seosb stau2 (s,None));
   let hs = string_hexstring (Buffer.contents s) in
   Printf.fprintf oc "%s\n" hs;
   if ci && co then
@@ -1514,9 +1528,8 @@ let savetxtopool blkh tm lr staustr =
   else
     Printf.printf "Invalid tx\n"
 
-let validatetx oc blkh tm tr sr lr staustr =
-  let s = hexstring_string staustr in
-  let (((tauin,tauout) as tau,tausg) as stau,_) = sei_stx seis (s,String.length s,None,0,0) in
+let validatetx2 oc blkh tm tr sr lr stau =
+  let ((tauin,tauout) as tau,tausg) = stau in
   if tx_valid_oc oc tm tau then
     begin
       let unsupportederror alpha h = Printf.fprintf oc "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
@@ -1594,9 +1607,13 @@ let validatetx oc blkh tm tr sr lr staustr =
   else
     Printf.fprintf oc "Invalid tx\n"
 
-let sendtx oc blkh tm tr sr lr staustr =
+let validatetx oc blkh tm tr sr lr staustr =
   let s = hexstring_string staustr in
-  let (((tauin,tauout) as tau,tausg) as stau,_) = sei_stx seis (s,String.length s,None,0,0) in
+  let (stau,_) = sei_stx seis (s,String.length s,None,0,0) in
+  validatetx2 oc blkh tm tr sr lr stau
+
+let sendtx2 oc blkh tm tr sr lr stau =
+  let ((tauin,tauout) as tau,tausg) = stau in
   if tx_valid tm tau then
     begin
       let unsupportederror alpha h = Printf.fprintf oc "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
@@ -1673,6 +1690,11 @@ let sendtx oc blkh tm tr sr lr staustr =
     end
   else
     Printf.fprintf oc "Invalid tx\n"
+
+let sendtx oc blkh tm tr sr lr staustr =
+  let s = hexstring_string staustr in
+  let (stau,_) = sei_stx seis (s,String.length s,None,0,0) in
+  sendtx2 oc blkh tm tr sr lr stau
 
 (*** should gather historic information as well ***)
 let dalilcoin_addr_jsoninfo raiseempty alpha pbh ledgerroot blkh =
