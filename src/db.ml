@@ -33,7 +33,7 @@ let load_index d =
       try
 	while true do
 	  let (h,c2) = sei_hashval seic !c in
-	  let (p,c2) = sei_int32 seic !c in
+	  let (p,c2) = sei_int32 seic c2 in
 	  r := (h,Int32.to_int p)::!r;
 	  c := c2
 	done;
@@ -58,7 +58,7 @@ let load_index_to_hashtable ht d =
       try
 	while true do
 	  let (h,c2) = sei_hashval seic !c in
-	  let (p,c2) = sei_int32 seic !c in
+	  let (p,c2) = sei_int32 seic c2 in
 	  Hashtbl.add ht h (d,Int32.to_int p);
 	  c := c2
 	done
