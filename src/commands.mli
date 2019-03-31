@@ -58,10 +58,13 @@ val reclassify_staking : out_channel -> string -> bool -> unit
 val createtx : jsonval -> jsonval -> tx
 val createsplitlocktx : out_channel -> hashval -> int64 -> payaddr -> payaddr -> addr -> hashval -> int -> int64 -> int64 -> unit
 
+val signbatchtxsc : out_channel -> hashval -> stx list -> out_channel -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
 val signtx2 : out_channel -> hashval -> stx -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> stx * bool * bool
 val signtxc : out_channel -> hashval -> stx -> out_channel -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
 val signtx : out_channel -> hashval -> string -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
 val savetxtopool : int64 -> int64 -> hashval -> string -> unit
+val signtx : out_channel -> hashval -> string -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
+val validatebatchtxs : out_channel -> int64 -> int64 -> hashval option -> hashval option -> hashval -> stx list -> unit
 val validatetx2 : out_channel -> int64 -> int64 -> hashval option -> hashval option -> hashval -> stx -> unit
 val validatetx : out_channel -> int64 -> int64 -> hashval option -> hashval option -> hashval -> string -> unit
 val sendtx2 : out_channel -> int64 -> int64 -> hashval option -> hashval option -> hashval -> stx -> unit

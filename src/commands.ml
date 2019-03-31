@@ -1493,6 +1493,19 @@ let signtx2 oc lr stau kl =
   let (tausgout1,co) = signtx_outs kl taue tauout tausgout [] [] true in
   ((tau,(tausgin1,tausgout1)),ci,co)
 
+let signbatchtxsc oc lr staul oc2 kl =
+  let i = ref 0 in
+  List.iter
+    (fun stau ->
+      incr i;
+      let (stau2,ci,co) = signtx2 oc lr stau kl in
+      seocf (seo_stx seoc stau2 (oc2,None));
+      if ci && co then
+	Printf.fprintf oc "Tx %d Completely signed.\n" !i
+      else
+	Printf.fprintf oc "Tx %d Partially signed.\n" !i)
+    staul
+
 let signtxc oc lr stau oc2 kl =
   let (stau2,ci,co) = signtx2 oc lr stau kl in
   seocf (seo_stx seoc stau2 (oc2,None));
@@ -1528,18 +1541,18 @@ let savetxtopool blkh tm lr staustr =
   else
     Printf.printf "Invalid tx\n"
 
-let validatetx2 oc blkh tm tr sr lr stau =
+let validatetx3 oc blkh tm thtr sgtr ltr stau transform =
   let ((tauin,tauout) as tau,tausg) = stau in
   if tx_valid_oc oc tm tau then
     begin
-      let unsupportederror alpha h = Printf.fprintf oc "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
+      let unsupportederror alpha h = Printf.fprintf oc "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring (ctree_hashroot ltr)) in
       let validatetx_report() =
 	let stxh = hashstx stau in
 	Printf.fprintf oc "Tx is valid and has id %s\n" (hashval_hexstring stxh);
 	begin
 	  try
 	    verbose_supportedcheck := Some(oc);
-	    let nfee = ctree_supports_tx true false (lookup_thytree tr) (lookup_sigtree sr) blkh tau (CHash(lr)) in
+	    let nfee = ctree_supports_tx true false thtr sgtr blkh tau ltr in
 	    verbose_supportedcheck := None;
 	    let fee = Int64.sub 0L nfee in
 	    if fee < 0L then
@@ -1560,25 +1573,37 @@ let validatetx2 oc blkh tm tr sr lr stau =
 	      flush oc;
 	end
       in
-      let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
+      let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin ltr unsupportederror) in
       try
 	let (mbh,mtm) = tx_signatures_valid_asof_blkh al (tau,tausg) in
+	let retval () =
+	  if transform then
+	    begin
+	      try
+		match tx_octree_trans true false blkh tau (Some(ltr)) with
+		| None -> None
+		| Some(ltr2) -> Some(txout_update_ottree tauout thtr,txout_update_ostree tauout sgtr,ltr2)
+	      with exn -> Printf.fprintf oc "Tx transformation problem %s\n" (Printexc.to_string exn); flush oc; None
+	    end
+	  else
+	    None
+	in
 	match (mbh,mtm) with
-	| (None,None) -> validatetx_report()
+	| (None,None) -> validatetx_report(); retval()
 	| (Some(bh2),None) ->
 	    if bh2 > blkh then
 	      begin
 		Printf.fprintf oc "Tx is not valid until block height %Ld\n" bh2;
 		flush oc
 	      end;
-	    validatetx_report()
+	    validatetx_report(); retval()
 	| (None,Some(tm2)) ->
 	    if tm2 > tm then
 	      begin
 		Printf.fprintf oc "Tx is not valid until time %Ld\n" tm2;
 		flush oc
 	      end;
-	    validatetx_report()
+	    validatetx_report(); retval()
 	| (Some(bh2),Some(tm2)) ->
 	    if (bh2 > blkh) && (tm2 > tm) then
 	      begin
@@ -1595,17 +1620,44 @@ let validatetx2 oc blkh tm tr sr lr stau =
 		Printf.fprintf oc "Tx is not valid until time %Ld\n" tm2;
 		flush oc
 	      end;
-	    validatetx_report()
+	    validatetx_report(); retval()
+	    
       with
       | BadOrMissingSignature ->
 	  Printf.fprintf oc "Invalid or incomplete signatures\n";
-	  validatetx_report()
+	  validatetx_report();
+	  None
       | e ->
 	  Printf.fprintf oc "Exception: %s\n" (Printexc.to_string e);
-	  validatetx_report()
+	  validatetx_report();
+	  None
     end
   else
-    Printf.fprintf oc "Invalid tx\n"
+    (Printf.fprintf oc "Invalid tx\n"; None)
+
+let validatetx2 oc blkh tm tr sr lr stau =
+  ignore (validatetx3 oc blkh tm (lookup_thytree tr) (lookup_sigtree sr) (CHash(lr)) stau false)
+
+let validatebatchtxs oc blkh tm tr sr lr staul =
+  let i = ref 0 in
+  let thtr = ref (lookup_thytree tr) in
+  let sgtr = ref (lookup_sigtree sr) in
+  let ltr = ref (CHash(lr)) in
+  try
+    List.iter
+      (fun stau ->
+	incr i;
+	Printf.fprintf oc "Validating tx %d\n" !i;
+	match validatetx3 oc blkh tm !thtr !sgtr !ltr stau true with
+	| Some(thtr2,sgtr2,ltr2) ->
+	    thtr := thtr2;
+	    sgtr := sgtr2;
+	    ltr := ltr2
+	| None ->
+	    Printf.fprintf oc "Cannot continue validating tx.\n";
+	    raise Exit)
+      staul
+  with Exit -> ()
 
 let validatetx oc blkh tm tr sr lr staustr =
   let s = hexstring_string staustr in

@@ -1176,7 +1176,7 @@ let initialize_commands () =
   ac "signtxfiles" "signtxfiles <infile> <outfile> [<jsonarrayofprivkeys> [<ledgerroot>]]" "Sign a dalilcoin tx.\n<infile> is an existing binary file with the (possibly partially signed) tx.\n<outfile> is a binary file created with the output tx."
     (fun oc al ->
       match al with
-      | [s1;s2] -> (*** here ***)
+      | [s1;s2] ->
 	  let c1 = open_in_bin s1 in
 	  let (stau,_) = Tx.sei_stx seic (c1,None) in
 	  close_in c1;
@@ -1212,6 +1212,58 @@ let initialize_commands () =
 	  begin
 	    try
 	      Commands.signtxc oc (hexstring_hashval lr) stau c2 (Some(kl));
+	      close_out c2
+	    with e ->
+	      close_out c2;
+	      raise e
+	  end
+      | _ -> raise BadCommandForm);
+  ac "signbatchtxsfiles" "signbatchtxsfiles <infile> <outfile> [<jsonarrayofprivkeys> [<ledgerroot>]]" "Sign a dalilcoin tx.\n<infile> is an existing binary file with several (possibly partially signed) txs.\n<outfile> is a binary file created with the txs after signing."
+    (fun oc al ->
+      let read_staul s1 =
+	let staur = ref [] in
+	let c1 = open_in_bin s1 in
+	try
+	  while true do
+	    let (stau,_) = Tx.sei_stx seic (c1,None) in
+	    staur := stau::!staur
+	  done;
+	  []
+	with
+	| End_of_file -> close_in c1; List.rev !staur
+	| _ -> close_in c1; raise BadCommandForm
+      in
+      match al with
+      | [s1;s2] ->
+	  let staul = read_staul s1 in
+	  let c2 = open_out_bin s2 in
+	  begin
+	    try
+	      Commands.signbatchtxsc oc (get_ledgerroot (get_bestblock_print_warnings oc)) staul c2 None;
+	      close_out c2
+	    with e ->
+	      close_out c2;
+	      raise e
+	  end
+      | [s1;s2;kl] ->
+	  let staul = read_staul s1 in
+	  let kl = parse_json_privkeys kl in
+	  let c2 = open_out_bin s2 in
+	  begin
+	    try
+	      Commands.signbatchtxsc oc (get_ledgerroot (get_bestblock_print_warnings oc)) staul c2 (Some(kl));
+	      close_out c2
+	    with e ->
+	      close_out c2;
+	      raise e
+	  end
+      | [s1;s2;kl;lr] ->
+	  let staul = read_staul s1 in
+	  let kl = parse_json_privkeys kl in
+	  let c2 = open_out_bin s2 in
+	  begin
+	    try
+	      Commands.signbatchtxsc oc (hexstring_hashval lr) staul c2 (Some(kl));
 	      close_out c2
 	    with e ->
 	      close_out c2;
@@ -1313,6 +1365,37 @@ let initialize_commands () =
 		    let (stau,_) = Tx.sei_stx seic (c,None) in
 		    close_in c;
 		    Commands.validatetx2 oc (Int64.add 1L blkh) tm tr sr lr stau
+		  with Not_found ->
+		    Printf.fprintf oc "Cannot determine information about best block %s at height %Ld\n" (hashval_hexstring dbh) blkh
+		with Not_found ->
+		  Printf.fprintf oc "Cannot find block height for best block %s\n" (hashval_hexstring dbh)
+	  end
+      | _ -> raise BadCommandForm);
+  ac "validatebatchtxsfile" "validatebatchtxsfile <file with several tx in binary>" "Print information about the txs and whether or not it they valid.\nThe txs are considered in sequences with the previous txs modifying the ledger before evaluating the next.\nIf a tx is not valid, information about why it is not valid is given."
+    (fun oc al ->
+      match al with
+      | [s] ->
+	  begin
+	    let best = get_bestblock_print_warnings oc in
+	    match best with
+	    | None -> Printf.fprintf oc "Cannot determine best block\n"
+	    | Some(dbh,lbk,ltx) ->
+		try
+		  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+		  try
+		    let (_,tm,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
+		    let c = open_in_bin s in
+		    let staur = ref [] in
+		    begin
+		      try
+			while true do
+			  let (stau,_) = Tx.sei_stx seic (c,None) in
+			  staur := stau::!staur
+			done
+		      with End_of_file ->
+			close_in c;
+			Commands.validatebatchtxs oc (Int64.add 1L blkh) tm tr sr lr (List.rev !staur)
+		    end
 		  with Not_found ->
 		    Printf.fprintf oc "Cannot determine information about best block %s at height %Ld\n" (hashval_hexstring dbh) blkh
 		with Not_found ->
@@ -1767,46 +1850,48 @@ let initialize () =
       | Some(lr) ->
 	  let totcants = ref 0L in
 	  let totbounties = ref 0L in
-	  let rec check_asset h =
+	  let rec check_asset beta h =
 	    try
 	      let a = DbAsset.dbget h in
 	      match a with
-	      | (_,_,_,Currency(v)) -> totcants := Int64.add v !totcants
+	      | (_,_,_,Currency(v)) ->
+		  if v > 100000000000000L then (Printf.printf "%s %s %Ld\n" (Cryptocurr.addr_daliladdrstr beta) (hashval_hexstring h) v; flush stdout); (* delete *)
+		  totcants := Int64.add v !totcants
 	      | (_,_,_,Bounty(v)) -> totbounties := Int64.add v !totbounties
 	      | _ -> ()
 	    with Not_found ->
 	      Printf.fprintf sout "WARNING: asset %s is not in database\n" (hashval_hexstring h)
 	  in
-	  let rec check_hconselt h =
+	  let rec check_hconselt beta h =
 	    try
 	      let (ah,hr) = DbHConsElt.dbget h in
-	      check_asset ah;
+	      check_asset beta ah;
 	      match hr with
-	      | Some(h,_) -> check_hconselt h
+	      | Some(h,_) -> check_hconselt beta h
 	      | None -> ()
 	    with Not_found ->
 	      Printf.fprintf sout "WARNING: hconselt %s is not in database\n" (hashval_hexstring h)
 	  in
-	  let rec check_ledger_rec h =
+	  let rec check_ledger_rec loc h =
 	    try
 	      let c = DbCTreeElt.dbget h in
-	      check_ctree_rec c 9
+	      check_ctree_rec loc c 9
 	    with Not_found ->
 	      Printf.fprintf sout "WARNING: ctreeelt %s is not in database\n" (hashval_hexstring h)
-	  and check_ctree_rec c i =
+	  and check_ctree_rec loc c i =
 	    match c with
-	    | CHash(h) -> check_ledger_rec h
-	    | CLeaf(_,NehHash(h,_)) -> check_hconselt h
-	    | CLeft(c0) -> check_ctree_rec c0 (i-1)
-	    | CRight(c1) -> check_ctree_rec c1 (i-1)
+	    | CHash(h) -> check_ledger_rec loc h
+	    | CLeaf(zl,NehHash(h,_)) -> check_hconselt (bitseq_addr ((List.rev loc) @ zl)) h
+	    | CLeft(c0) -> check_ctree_rec (false::loc) c0 (i-1)
+	    | CRight(c1) -> check_ctree_rec (true::loc) c1 (i-1)
 	    | CBin(c0,c1) ->
-		check_ctree_rec c0 (i-1);
-		check_ctree_rec c1 (i-1)
+		check_ctree_rec (false::loc) c0 (i-1);
+		check_ctree_rec (true::loc) c1 (i-1)
 	    | _ ->
 		Printf.fprintf sout "WARNING: unexpected non-element ctree at level %d:\n" i;
 		print_ctree sout c
 	  in
-	  check_ledger_rec lr;
+	  check_ledger_rec [] lr;
 	  Printf.fprintf sout "Total Currency Assets: %Ld cants (%s fraenks)\n" !totcants (fraenks_of_cants !totcants);
 	  Printf.fprintf sout "Total Bounties: %Ld cants (%s fraenks)\n" !totbounties (fraenks_of_cants !totbounties);
 	  !exitfn 0

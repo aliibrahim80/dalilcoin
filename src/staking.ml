@@ -297,65 +297,80 @@ let stakingthread () =
 			let fees = ref 0L in
 			let otherstxs = ref [] in
 			let rembytesestimate = ref (maxblockdeltasize blkh - (2048 * 2)) in (*** estimate the remaining room in the block delta if the tx is added ***)
-			Hashtbl.iter
-			  (fun h ((tauin,tauout),sg) ->
+			let try_to_incl_stx h stau =
+			  let ((tauin,tauout) as tau,sg) = stau in
 (*		    log_string (Printf.sprintf "Trying to include tx %s\n" (hashval_hexstring h)); *)
-			    try
-			      ignore (List.find (fun (_,h) -> h = aid) tauin);
+			  try
+			    ignore (List.find (fun (_,h) -> h = aid) tauin);
 (*		      log_string (Printf.sprintf "tx spends the staked asset; removing tx from pool\n"); *)
-			      remove_from_txpool h
+			    remove_from_txpool h
+			  with Not_found ->
+			    try
+			      ignore (List.find (fun (alpha,_) -> alpha = alpha2) tauout) (*** Do not include txs that spend to the staking address, to avoid the possibility of ending up with too many assets at the staking address ***)
 			    with Not_found ->
-			      try
-				ignore (List.find (fun (alpha,_) -> alpha = alpha2) tauout) (*** Do not include txs that spend to the staking address, to avoid the possibility of ending up with too many assets at the stakign address ***)
-			      with Not_found ->
-				if tx_valid tm (tauin,tauout) then
-				  try
-				    let unsupportederror alpha h = log_string (Printf.sprintf "Could not find asset %s at address %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha)) in
-				    let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin !dync unsupportederror) in
-				    if tx_signatures_valid blkh tm al ((tauin,tauout),sg) then
-				      begin
-					let nfee = ctree_supports_tx true false !dyntht !dynsigt blkh (tauin,tauout) !dync in
-					if nfee > 0L then
-					  begin
+			      if tx_valid tm (tauin,tauout) then
+				try
+				  let unsupportederror alpha h = log_string (Printf.sprintf "Could not find asset %s at address %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha)) in
+				  let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin !dync unsupportederror) in
+				  if tx_signatures_valid blkh tm al ((tauin,tauout),sg) then
+				    begin
+				      let nfee = ctree_supports_tx true false !dyntht !dynsigt blkh (tauin,tauout) !dync in
+				      if nfee > 0L then (*** note: nfee is negative of the fee, not the fee itself ***)
+					begin
 (*				  log_string (Printf.sprintf "tx %s has negative fees %Ld; removing from pool\n" (hashval_hexstring h) nfee); *)
-					    remove_from_txpool h;
+					  remove_from_txpool h;
+					end
+				      else
+					let bytesestimate = 2048 * List.length tauin + 2048 * List.length tauout in (*** simple 2K per input and output (since must include relevant parts of ctree) ***)
+					if bytesestimate < !rembytesestimate then
+					  begin
+					    try
+					      let c = octree_ctree (tx_octree_trans true false blkh (tauin,tauout) (Some(!dync))) in
+					      otherstxs := (h,((tauin,tauout),sg))::!otherstxs;
+					      fees := Int64.sub !fees nfee;
+					      dync := c;
+					      dyntht := txout_update_ottree tauout !dyntht;
+					      dynsigt := txout_update_ostree tauout !dynsigt;
+					      rembytesestimate := !rembytesestimate - bytesestimate
+					    with MaxAssetsAtAddress -> ()
 					  end
 					else
-					  let bytesestimate = 2048 * List.length tauin + 2048 * List.length tauout in (*** simple 2K per input and output (since must include relevant parts of ctree) ***)
-					  if bytesestimate < !rembytesestimate then
-					    begin
-					      try
-						let c = octree_ctree (tx_octree_trans true false blkh (tauin,tauout) (Some(!dync))) in
-						otherstxs := (h,((tauin,tauout),sg))::!otherstxs;
-						fees := Int64.sub !fees nfee;
-						dync := c;
-						dyntht := txout_update_ottree tauout !dyntht;
-						dynsigt := txout_update_ostree tauout !dynsigt;
-						rembytesestimate := !rembytesestimate - bytesestimate
-					      with MaxAssetsAtAddress -> ()
-					    end
-					  else
-					    begin
+					  begin
 (*				    log_string (Printf.sprintf "tx %s not being included because estimated block size would be too big (rembytesestimate %d, bytesestimate %d)\n" (hashval_hexstring h) !rembytesestimate bytesestimate); *)
-					    end
-				      end
-				    else
-				      begin
-(*			      log_string (Printf.sprintf "tx %s has an invalid signature; removing from pool\n" (hashval_hexstring h)); *)
-					remove_from_txpool h;
-				      end
-				  with exn ->
-				    begin
-(*			    log_string (Printf.sprintf "Exception %s raised while trying to validate tx %s; this may mean the tx is not yet supported so leaving it in the pool\n" (Printexc.to_string exn) (hashval_hexstring h)); *)
+					  end
 				    end
-				else
+				  else
+				    begin
+(*			      log_string (Printf.sprintf "tx %s has an invalid signature; removing from pool\n" (hashval_hexstring h)); *)
+				      remove_from_txpool h;
+				    end
+				with exn ->
 				  begin
+(*			    log_string (Printf.sprintf "Exception %s raised while trying to validate tx %s; this may mean the tx is not yet supported so leaving it in the pool\n" (Printexc.to_string exn) (hashval_hexstring h)); *)
+				  end
+			      else
+				begin
 (*			  log_string (Printf.sprintf "tx %s is invalid; removing from pool\n" (hashval_hexstring h)); *)
-				    remove_from_txpool h;
-				  end)
+				  remove_from_txpool h;
+				end
+			in
+			let localbatchtxsfile = Filename.concat (datadir()) "localbatchtxs" in
+			if Sys.file_exists localbatchtxsfile then (*** if localbatchtxs file exists in the datadir, then first try to include these txs (in order) ***)
+			  begin
+			    let ch = open_in_bin localbatchtxsfile in
+			    try
+			      while true do
+				let (stau,_) = sei_stx seic (ch,None) in
+				let (tau,_) = stau in
+				try_to_incl_stx (hashtx tau) stau
+			      done
+			    with _ -> (try close_in ch with _ -> ())
+			  end;
+			Hashtbl.iter
+			  (fun h stau -> try_to_incl_stx h stau)
 			  stxpool;
 			let ostxs = !otherstxs in
-			let otherstxs = ref [] in
+			let otherstxs = ref [] in (*** reverse them during this process so they will be evaluated in the intended order ***)
 			List.iter
 			  (fun (h,stau) ->
 			    remove_from_txpool h;
