@@ -1546,6 +1546,18 @@ let validatetx3 oc blkh tm thtr sgtr ltr stau transform =
   if tx_valid_oc oc tm tau then
     begin
       let unsupportederror alpha h = Printf.fprintf oc "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring (ctree_hashroot ltr)) in
+      let retval () =
+	if transform then
+	  begin
+	    try
+	      match tx_octree_trans true false blkh tau (Some(ltr)) with
+	      | None -> None
+	      | Some(ltr2) -> Some(txout_update_ottree tauout thtr,txout_update_ostree tauout sgtr,ltr2)
+	    with exn -> Printf.fprintf oc "Tx transformation problem %s\n" (Printexc.to_string exn); flush oc; None
+	  end
+	else
+	  None
+      in
       let validatetx_report() =
 	let stxh = hashstx stau in
 	Printf.fprintf oc "Tx is valid and has id %s\n" (hashval_hexstring stxh);
@@ -1561,49 +1573,40 @@ let validatetx3 oc blkh tm thtr sgtr ltr stau transform =
 	      Printf.fprintf oc "Tx is supported by the current ledger and has fee %s fraenks (above minrelayfee %s fraenks)\n" (Cryptocurr.fraenks_of_cants fee) (Cryptocurr.fraenks_of_cants !Config.minrelayfee)
             else
 	      Printf.fprintf oc "Tx is supported by the current ledger and has fee %s fraenks (below minrelayfee %s fraenks)\n" (Cryptocurr.fraenks_of_cants fee) (Cryptocurr.fraenks_of_cants !Config.minrelayfee);
-	    flush oc
+	    flush oc;
+	    retval()
 	  with
 	  | NotSupported ->
 	      verbose_supportedcheck := None;
 	      Printf.fprintf oc "Tx is not supported by the current ledger\n";
 	      flush oc;
+	      None
 	  | exn ->
 	      verbose_supportedcheck := None;
 	      Printf.fprintf oc "Tx is not supported by the current ledger: %s\n" (Printexc.to_string exn);
 	      flush oc;
+	      None
 	end
       in
       let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin ltr unsupportederror) in
       try
 	let (mbh,mtm) = tx_signatures_valid_asof_blkh al (tau,tausg) in
-	let retval () =
-	  if transform then
-	    begin
-	      try
-		match tx_octree_trans true false blkh tau (Some(ltr)) with
-		| None -> None
-		| Some(ltr2) -> Some(txout_update_ottree tauout thtr,txout_update_ostree tauout sgtr,ltr2)
-	      with exn -> Printf.fprintf oc "Tx transformation problem %s\n" (Printexc.to_string exn); flush oc; None
-	    end
-	  else
-	    None
-	in
 	match (mbh,mtm) with
-	| (None,None) -> validatetx_report(); retval()
+	| (None,None) -> validatetx_report()
 	| (Some(bh2),None) ->
 	    if bh2 > blkh then
 	      begin
 		Printf.fprintf oc "Tx is not valid until block height %Ld\n" bh2;
 		flush oc
 	      end;
-	    validatetx_report(); retval()
+	    validatetx_report()
 	| (None,Some(tm2)) ->
 	    if tm2 > tm then
 	      begin
 		Printf.fprintf oc "Tx is not valid until time %Ld\n" tm2;
 		flush oc
 	      end;
-	    validatetx_report(); retval()
+	    validatetx_report()
 	| (Some(bh2),Some(tm2)) ->
 	    if (bh2 > blkh) && (tm2 > tm) then
 	      begin
@@ -1620,17 +1623,15 @@ let validatetx3 oc blkh tm thtr sgtr ltr stau transform =
 		Printf.fprintf oc "Tx is not valid until time %Ld\n" tm2;
 		flush oc
 	      end;
-	    validatetx_report(); retval()
+	    validatetx_report()
 	    
       with
       | BadOrMissingSignature ->
 	  Printf.fprintf oc "Invalid or incomplete signatures\n";
-	  validatetx_report();
-	  None
+	  validatetx_report()
       | e ->
 	  Printf.fprintf oc "Exception: %s\n" (Printexc.to_string e);
-	  validatetx_report();
-	  None
+	  validatetx_report()
     end
   else
     (Printf.fprintf oc "Invalid tx\n"; None)
