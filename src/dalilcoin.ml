@@ -1850,48 +1850,46 @@ let initialize () =
       | Some(lr) ->
 	  let totcants = ref 0L in
 	  let totbounties = ref 0L in
-	  let rec check_asset beta h =
+	  let rec check_asset h =
 	    try
 	      let a = DbAsset.dbget h in
 	      match a with
-	      | (_,_,_,Currency(v)) ->
-		  if v > 100000000000000L then (Printf.printf "%s %s %Ld\n" (Cryptocurr.addr_daliladdrstr beta) (hashval_hexstring h) v; flush stdout); (* delete *)
-		  totcants := Int64.add v !totcants
+	      | (_,_,_,Currency(v)) -> totcants := Int64.add v !totcants
 	      | (_,_,_,Bounty(v)) -> totbounties := Int64.add v !totbounties
 	      | _ -> ()
 	    with Not_found ->
 	      Printf.fprintf sout "WARNING: asset %s is not in database\n" (hashval_hexstring h)
 	  in
-	  let rec check_hconselt beta h =
+	  let rec check_hconselt h =
 	    try
 	      let (ah,hr) = DbHConsElt.dbget h in
-	      check_asset beta ah;
+	      check_asset ah;
 	      match hr with
-	      | Some(h,_) -> check_hconselt beta h
+	      | Some(h,_) -> check_hconselt h
 	      | None -> ()
 	    with Not_found ->
 	      Printf.fprintf sout "WARNING: hconselt %s is not in database\n" (hashval_hexstring h)
 	  in
-	  let rec check_ledger_rec loc h =
+	  let rec check_ledger_rec h =
 	    try
 	      let c = DbCTreeElt.dbget h in
-	      check_ctree_rec loc c 9
+	      check_ctree_rec c 9
 	    with Not_found ->
 	      Printf.fprintf sout "WARNING: ctreeelt %s is not in database\n" (hashval_hexstring h)
-	  and check_ctree_rec loc c i =
+	  and check_ctree_rec c i =
 	    match c with
-	    | CHash(h) -> check_ledger_rec loc h
-	    | CLeaf(zl,NehHash(h,_)) -> check_hconselt (bitseq_addr ((List.rev loc) @ zl)) h
-	    | CLeft(c0) -> check_ctree_rec (false::loc) c0 (i-1)
-	    | CRight(c1) -> check_ctree_rec (true::loc) c1 (i-1)
+	    | CHash(h) -> check_ledger_rec h
+	    | CLeaf(_,NehHash(h,_)) -> check_hconselt h
+	    | CLeft(c0) -> check_ctree_rec c0 (i-1)
+	    | CRight(c1) -> check_ctree_rec c1 (i-1)
 	    | CBin(c0,c1) ->
-		check_ctree_rec (false::loc) c0 (i-1);
-		check_ctree_rec (true::loc) c1 (i-1)
+		check_ctree_rec c0 (i-1);
+		check_ctree_rec c1 (i-1)
 	    | _ ->
 		Printf.fprintf sout "WARNING: unexpected non-element ctree at level %d:\n" i;
 		print_ctree sout c
 	  in
-	  check_ledger_rec [] lr;
+	  check_ledger_rec lr;
 	  Printf.fprintf sout "Total Currency Assets: %Ld cants (%s fraenks)\n" !totcants (fraenks_of_cants !totcants);
 	  Printf.fprintf sout "Total Bounties: %Ld cants (%s fraenks)\n" !totbounties (fraenks_of_cants !totbounties);
 	  !exitfn 0
