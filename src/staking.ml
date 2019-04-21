@@ -292,10 +292,11 @@ let stakingthread () =
 			  | None -> raise (Failure "tree should not be empty")
 			in
 			let dync = ref (octree_ctree prevc) in
-			let dyntht = ref (lookup_thytree thtr) in
-			let dynsigt = ref (lookup_sigtree sgtr) in
+			let dyntht = ref (lookup_thytree thtr) in (** The theory tree and signature tree change all at once at the end of processing the block **)
+			let dynsigt = ref (lookup_sigtree sgtr) in (** so these two do not really need to be refs. **)
 			let fees = ref 0L in
 			let otherstxs = ref [] in
+			let othersout = ref [] in
 			let rembytesestimate = ref (maxblockdeltasize blkh - (2048 * 2)) in (*** estimate the remaining room in the block delta if the tx is added ***)
 			let try_to_incl_stx h stau =
 			  let ((tauin,tauout) as tau,sg) = stau in
@@ -327,10 +328,9 @@ let stakingthread () =
 					    try
 					      let c = octree_ctree (tx_octree_trans true false blkh (tauin,tauout) (Some(!dync))) in
 					      otherstxs := (h,((tauin,tauout),sg))::!otherstxs;
+					      othersout := !othersout @ tauout;
 					      fees := Int64.sub !fees nfee;
 					      dync := c;
-					      dyntht := txout_update_ottree tauout !dyntht;
-					      dynsigt := txout_update_ostree tauout !dynsigt;
 					      rembytesestimate := !rembytesestimate - bytesestimate
 					    with MaxAssetsAtAddress -> ()
 					  end
@@ -474,6 +474,8 @@ let stakingthread () =
 			  let newcr = save_ctree_elements !dync in
 (*		log_string (Printf.sprintf "finished saving ctree elements of dync\n"); *)
 (*		    Hashtbl.add recentledgerroots newcr (blkh,newcr); *)
+			  dyntht := txout_update_ottree !othersout !dyntht;
+			  dynsigt := txout_update_ostree !othersout !dynsigt;
 			  let newthtroot = ottree_hashroot !dyntht in
 			  let newsigtroot = ostree_hashroot !dynsigt in
 (*		log_string (Printf.sprintf "Including %d txs in block\n" (List.length !otherstxs)); *)
@@ -576,10 +578,17 @@ let stakingthread () =
 				  update_signatures sigroot sigtree sigt2;
 			      | None ->
 				  log_string (Printf.sprintf "New block is not valid\n");
-				  verbose_blockcheck := Some(!Utils.log); (* the next two calls are intended to log info about why the block is invalid *)
-				  ignore (valid_block thytree sigtree blkh csm0 tar0 (bhnew,bdnew) tm (match toburn with Some(burn) -> burn | _ -> 0L));
-				  ignore (valid_blockheader blkh csm0 tar0 bhnew tm (match toburn with Some(burn) -> burn | _ -> 0L));
-				  verbose_blockcheck := None;
+				  begin
+				    try
+				      verbose_blockcheck := Some(!Utils.log); (* the next call is intended to log info about why the block is invalid *)
+				      verbose_supportedcheck := Some(!Utils.log);
+				      ignore (valid_block thytree sigtree blkh csm0 tar0 (bhnew,bdnew) tm (match toburn with Some(burn) -> burn | _ -> 0L));
+				      verbose_blockcheck := None;
+				      verbose_supportedcheck := None;
+				    with _ ->
+				      verbose_blockcheck := None;
+				      verbose_supportedcheck := None;
+				  end;
 				  let datadir = if !Config.testnet then (Filename.concat !Config.datadir "testnet") else !Config.datadir in dumpstate (Filename.concat datadir "stakedinvalidblockstate");
 				  Hashtbl.remove nextstakechances (lbk,ltx);
 				  raise StakingProblemPause
