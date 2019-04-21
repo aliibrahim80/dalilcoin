@@ -99,12 +99,17 @@ let rec tx_outputs_valid_one_owner_oc oc outpl ool pol nol =
 (*** Ensure ownership deeds are sent to term addresses and publications are sent to publication addresses. ***)
 let rec tx_outputs_valid_addr_cats tm outpl =
   match outpl with
+  | (alpha,(_,Currency(_)))::outpr -> payaddr_p alpha && tx_outputs_valid_addr_cats tm outpr (*** currency should only be published to pay addresses ***)
   | (alpha,(_,Bounty(_)))::outpr -> termaddr_p alpha && tx_outputs_valid_addr_cats tm outpr (*** bounties should only be published to term addresses ***)
   | (alpha,(_,OwnsObj(h,beta,u)))::outpr -> hashval_term_addr h = alpha && tx_outputs_valid_addr_cats tm outpr
   | (alpha,(_,OwnsProp(h,beta,u)))::outpr -> hashval_term_addr h = alpha && tx_outputs_valid_addr_cats tm outpr
   | (alpha,(_,OwnsNegProp))::outpr -> termaddr_p alpha && tx_outputs_valid_addr_cats tm outpr
   | (alpha,(_,TheoryPublication(beta,h,dl)))::outpr ->
-      if tm < !Config.may2019hardforktime then (*** May 01 2019 hard fork ***)
+(***	
+      if tm < !Config.secondhardforktime then (*** Delayed until a second hard fork after the one on May 01 2019 ***)
+	false
+***)
+      if not !Config.testnet then
 	false
       else
 	begin
@@ -114,17 +119,39 @@ let rec tx_outputs_valid_addr_cats tm outpl =
 	  | None -> false
 	end
   | (alpha,(_,SignaPublication(beta,h,th,dl)))::outpr ->
-      if tm < !Config.may2019hardforktime then (*** May 01 2019 hard fork ***)
+(***	
+      if tm < !Config.secondhardforktime then (*** Delayed until a second hard fork after the one on May 01 2019 ***)
+	false
+***)
+      if not !Config.testnet then
 	false
       else
 	alpha = hashval_pub_addr (hashopair2 th (hashsigna (signaspec_signa dl))) && tx_outputs_valid_addr_cats tm outpr
-  | (alpha,(_,DocPublication(beta,h,th,dl)))::outpr -> alpha = hashval_pub_addr (hashopair2 th (hashdoc dl)) && tx_outputs_valid_addr_cats tm outpr
+  | (alpha,(_,DocPublication(beta,h,th,dl)))::outpr ->
+(***	
+      if tm < !Config.secondhardforktime then (*** Delayed until a second hard fork after the one on May 01 2019 ***)
+	false
+***)
+      if not !Config.testnet then
+	false
+      else
+	(alpha = hashval_pub_addr (hashopair2 th (hashdoc dl)) && tx_outputs_valid_addr_cats tm outpr)
   | (alpha,(_,Marker))::outpr -> pubaddr_p alpha && tx_outputs_valid_addr_cats tm outpr (*** markers should only be published to publication addresses, since they're used to prepublish an intention to publish ***)
   | _::outpr -> tx_outputs_valid_addr_cats tm outpr
   | [] -> true
 
 let rec tx_outputs_valid_addr_cats_oc oc tm outpl =
   match outpl with
+  | (alpha,(_,Currency(_)))::outpr ->
+      if payaddr_p alpha then (*** currency should only be published to pay addresses ***)
+	tx_outputs_valid_addr_cats tm outpr
+      else
+	(Printf.fprintf oc "tx invalid since Currency should be sent to a pay address, not %s\n" (Cryptocurr.addr_daliladdrstr alpha); false)
+  | (alpha,(_,Bounty(_)))::outpr ->
+      if termaddr_p alpha then (*** bounties should only be published to term addresses ***)
+	tx_outputs_valid_addr_cats tm outpr
+      else
+	(Printf.fprintf oc "tx invalid since Bounty should be sent to a term address, not %s\n" (Cryptocurr.addr_daliladdrstr alpha); false)
   | (alpha,(_,OwnsObj(h,beta,u)))::outpr ->
       if hashval_term_addr h = alpha then
 	tx_outputs_valid_addr_cats_oc oc tm outpr
@@ -141,8 +168,12 @@ let rec tx_outputs_valid_addr_cats_oc oc tm outpl =
       else
 	(Printf.fprintf oc "tx invalid since OwnsNegProp should be sent to a term address\n"; false)
   | (alpha,(_,TheoryPublication(beta,h,dl)))::outpr ->
-      if tm < !Config.may2019hardforktime then (*** May 01 2019 hard fork ***)
-	(Printf.fprintf oc "tx invalid since Theory could not be published before May 01 2019 hard fork."; false)
+(***
+      if tm < !Config.secondhardforktime then (*** Delayed until a second hard fork after the one on May 01 2019 ***)
+	(Printf.fprintf oc "tx invalid since Theory could not be published before second hard fork."; false)
+***)
+      if not !Config.testnet then
+	false
       else
 	begin
 	  match hashtheory (theoryspec_theory dl) with
@@ -154,14 +185,24 @@ let rec tx_outputs_valid_addr_cats_oc oc tm outpl =
 	  | None -> false
 	end
   | (alpha,(_,SignaPublication(beta,h,th,dl)))::outpr ->
-      if tm < !Config.may2019hardforktime then (*** May 01 2019 hard fork ***)
-	(Printf.fprintf oc "tx invalid since Signature could not be published before May 01 2019 hard fork."; false)
+(***
+      if tm < !Config.secondhardforktime then (*** Delayed until a second hard fork after the one on May 01 2019 ***)
+	(Printf.fprintf oc "tx invalid since Signature could not be published before second hard fork."; false)
+***)
+      if not !Config.testnet then
+	false
       else if alpha = hashval_pub_addr (hashopair2 th (hashsigna (signaspec_signa dl))) then
 	tx_outputs_valid_addr_cats_oc oc tm outpr
       else
 	(Printf.fprintf oc "tx invalid since Signature should be sent to %s\n" (Cryptocurr.addr_daliladdrstr (hashval_pub_addr (hashopair2 th (hashsigna (signaspec_signa dl))))); false)
   | (alpha,(_,DocPublication(beta,h,th,dl)))::outpr ->
-      if alpha = hashval_pub_addr (hashopair2 th (hashdoc dl)) then
+(***
+      if tm < !Config.secondhardforktime then (*** Delayed until a second hard fork after the one on May 01 2019 ***)
+	(Printf.fprintf oc "tx invalid since Document could not be published before second hard fork."; false)
+***)
+      if not !Config.testnet then
+	false
+      else if alpha = hashval_pub_addr (hashopair2 th (hashdoc dl)) then
 	tx_outputs_valid_addr_cats_oc oc tm outpr
       else
 	(Printf.fprintf oc "tx invalid since Document should be sent to %s\n" (Cryptocurr.addr_daliladdrstr (hashval_pub_addr (hashopair2 th (hashdoc dl)))); false)
