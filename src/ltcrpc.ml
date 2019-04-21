@@ -19,7 +19,8 @@ let ltc_oldest_to_consider_height = ref 1400000L
 let ltc_oldblocks = (*** add an ltc block every 50,000 blocks or so to help nodes with initial sync; order them from oldest to newest ***)
   ["01e0b239508af020122b2beb20985b59ad65effae4bf6449c25efcbd7b089b28";
    "3eb72e473ce35c3b88c0a3c96ffa4a7ab01f40e476034c9caf82fba8e0270cb0";
-   "458bdbb339f30b349cb2478da3afb6a7b1eb02044ad504b156fa17da047f848b"]
+   "458bdbb339f30b349cb2478da3afb6a7b1eb02044ad504b156fa17da047f848b";
+   "d136037e14d275b7b71c06994b83a297297e045b74d48b84dc0ad5c893fc7fa9"]
 
 let ltc_testnet_oldblocks = (*** add an ltc block every 50,000 blocks or so to help nodes with initial sync; order them from oldest to newest ***)
   []
