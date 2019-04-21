@@ -312,6 +312,17 @@ let ac c h longhelp f =
   Hashtbl.add commandh c (h,longhelp,(fun oc al -> try f oc al with BadCommandForm -> Printf.fprintf oc "%s\n" h));;
 
 let initialize_commands () =
+  ac "missing" "missing" "Report current list of missing headers/deltas"
+    (fun oc al ->
+      Printf.fprintf oc "%d missing headers\n" (List.length !missingheaders);
+      List.iter
+	(fun (i,h) -> Printf.fprintf oc "%Ld %s\n" i (hashval_hexstring h))
+	!missingheaders;
+      Printf.fprintf oc "%d missing deltas\n" (List.length !missingdeltas);
+      List.iter
+	(fun (i,h) -> Printf.fprintf oc "%Ld %s\n" i (hashval_hexstring h))
+	!missingdeltas;
+      );
   ac "setbestblock" "setbestblock <blockid> [<blockheight> <ltcblockid> <ltcburntx>]" "Manually set the current best block. This is mostly useful if -ltcoffline is being used."
     (fun oc al ->
       match al with
@@ -1173,7 +1184,7 @@ let initialize_commands () =
 	  let kl = parse_json_privkeys kl in
 	  Commands.signtx oc (hexstring_hashval lr) s (Some(kl))
       | _ -> raise BadCommandForm);
-  ac "signtxfiles" "signtxfiles <infile> <outfile> [<jsonarrayofprivkeys> [<ledgerroot>]]" "Sign a dalilcoin tx.\n<infile> is an existing binary file with the (possibly partially signed) tx.\n<outfile> is a binary file created with the output tx."
+  ac "signtxfile" "signtxfile <infile> <outfile> [<jsonarrayofprivkeys> [<ledgerroot>]]" "Sign a dalilcoin tx.\n<infile> is an existing binary file with the (possibly partially signed) tx.\n<outfile> is a binary file created with the output tx."
     (fun oc al ->
       match al with
       | [s1;s2] ->
@@ -1341,7 +1352,10 @@ let initialize_commands () =
 		  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
 		  try
 		    let (_,tm,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
-		    Commands.validatetx oc (Int64.add 1L blkh) tm tr sr lr s
+		    try
+		      Commands.validatetx oc (Int64.add 1L blkh) tm tr sr lr s
+		    with exn ->
+		      Printf.fprintf oc "Trouble validating tx %s\n" (Printexc.to_string exn)
 		  with Not_found ->
 		    Printf.fprintf oc "Cannot determine information about best block %s at height %Ld\n" (hashval_hexstring dbh) blkh
 		with Not_found ->
@@ -1361,10 +1375,13 @@ let initialize_commands () =
 		  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
 		  try
 		    let (_,tm,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
-		    let c = open_in_bin s in
-		    let (stau,_) = Tx.sei_stx seic (c,None) in
-		    close_in c;
-		    Commands.validatetx2 oc (Int64.add 1L blkh) tm tr sr lr stau
+		    try
+		      let c = open_in_bin s in
+		      let (stau,_) = Tx.sei_stx seic (c,None) in
+		      close_in c;
+		      Commands.validatetx2 oc (Int64.add 1L blkh) tm tr sr lr stau
+		    with exn ->
+		      Printf.fprintf oc "Trouble validating tx %s\n" (Printexc.to_string exn)
 		  with Not_found ->
 		    Printf.fprintf oc "Cannot determine information about best block %s at height %Ld\n" (hashval_hexstring dbh) blkh
 		with Not_found ->
@@ -1384,18 +1401,21 @@ let initialize_commands () =
 		  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
 		  try
 		    let (_,tm,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
-		    let c = open_in_bin s in
-		    let staur = ref [] in
-		    begin
-		      try
-			while true do
-			  let (stau,_) = Tx.sei_stx seic (c,None) in
-			  staur := stau::!staur
-			done
-		      with End_of_file ->
-			close_in c;
-			Commands.validatebatchtxs oc (Int64.add 1L blkh) tm tr sr lr (List.rev !staur)
-		    end
+		    try
+		      let c = open_in_bin s in
+		      let staur = ref [] in
+		      begin
+			try
+			  while true do
+			    let (stau,_) = Tx.sei_stx seic (c,None) in
+			    staur := stau::!staur
+			  done
+			with End_of_file ->
+			  close_in c;
+			  Commands.validatebatchtxs oc (Int64.add 1L blkh) tm tr sr lr (List.rev !staur)
+		      end
+		    with exn ->
+		      Printf.fprintf oc "Trouble validating tx %s\n" (Printexc.to_string exn)
 		  with Not_found ->
 		    Printf.fprintf oc "Cannot determine information about best block %s at height %Ld\n" (hashval_hexstring dbh) blkh
 		with Not_found ->
