@@ -171,7 +171,20 @@ let load_wallet () =
 	close_in s
 
 let save_wallet () =
-  let bkpwallfn = Filename.concat (datadir()) (Printf.sprintf "walletbkp%Ld" (Int64.of_float (Unix.time()))) in
+  let bkpwalldir =
+    let bkpwalldir = Filename.concat (datadir()) "walletbkps" in
+    if Sys.file_exists bkpwalldir then
+      if Sys.is_directory bkpwalldir then
+	bkpwalldir
+      else
+	datadir() (** in case a nondirectory is named "walletbkps" just put the backup files in the top level directory **)
+    else
+      begin
+	Unix.mkdir bkpwalldir 0b111111000;
+	bkpwalldir
+      end
+  in
+  let bkpwallfn = Filename.concat bkpwalldir (Printf.sprintf "walletbkp%Ld" (Int64.of_float (Unix.time()))) in
   let wallfn = Filename.concat (datadir()) "wallet" in
   Sys.rename wallfn bkpwallfn;
   let s = open_out_bin wallfn in
@@ -1624,7 +1637,6 @@ let validatetx3 oc blkh tm thtr sgtr ltr stau transform =
 		flush oc
 	      end;
 	    validatetx_report()
-	    
       with
       | BadOrMissingSignature ->
 	  Printf.fprintf oc "Invalid or incomplete signatures\n";
