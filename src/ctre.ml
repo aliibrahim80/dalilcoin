@@ -832,7 +832,7 @@ let rec hlist_lookup_asset_gen exp req p hl =
 	  | None -> hlist_lookup_asset_gen exp req p (HConsH(h1,HNil))
 	end
       else
-	None
+	raise (Failure "could not find all assets at address")
   | HCons(a,hr) -> hlist_lookup_asset_gen exp req p hr
   | _ -> None
 
@@ -1527,6 +1527,8 @@ let rec ctree_lookup_asset_gen exp req p tr bl =
 let ctree_lookup_asset exp req k tr bl = ctree_lookup_asset_gen exp req (fun a -> assetid a = k) tr bl
 let ctree_lookup_marker exp req tr bl = ctree_lookup_asset_gen exp req (fun a -> assetpre a = Marker) tr bl
 
+exception NotSupported
+
 let rec ctree_lookup_addr_assets exp req tr bl =
   match tr with
   | CLeaf(br,hl) when br = bl -> nehlist_hlist hl
@@ -1538,7 +1540,7 @@ let rec ctree_lookup_addr_assets exp req tr bl =
 	else
 	  ctree_lookup_addr_assets exp req (DbCTreeElt.dbget h) bl
       else
-	HNil
+	raise NotSupported
   | CLeft(trl) ->
       begin
 	match bl with
@@ -1558,8 +1560,6 @@ let rec ctree_lookup_addr_assets exp req tr bl =
 	| (true::br) -> ctree_lookup_addr_assets exp req trr br
 	| [] -> raise (Failure "Level problem") (*** should never happen ***)
       end
-
-exception NotSupported
 
 let verbose_supportedcheck = ref None
 
@@ -1663,7 +1663,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
       ()
     else
       begin
-	vmsg (fun oc -> Printf.fprintf oc "Rights for object %s are not balanced.\n" (Cryptocurr.addr_daliladdrstr (termaddr_addr alpha)));
+	vmsg (fun oc -> Printf.fprintf oc "Rights for object %s (%s) are not balanced.\n" (hashval_hexstring oid) (Cryptocurr.addr_daliladdrstr (termaddr_addr alpha)));
 	raise NotSupported
       end)
     objids;
@@ -1680,7 +1680,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
       ()
     else
       begin
-	vmsg (fun oc -> Printf.fprintf oc "Rights for proposition %s are not balanced.\n" (Cryptocurr.addr_daliladdrstr (termaddr_addr alpha)));
+	vmsg (fun oc -> Printf.fprintf oc "Rights for proposition %s (%s) are not balanced.\n" (hashval_hexstring pid) (Cryptocurr.addr_daliladdrstr (termaddr_addr alpha)));
 	raise NotSupported
       end)
     propids;
@@ -2427,6 +2427,18 @@ let full_needed outpl =
     (fun (alphapure,alphathy) ->
 	r := addr_bitseq (hashval_term_addr alphapure)::addr_bitseq (hashval_term_addr alphathy)::!r)
     (output_doc_uses_props outpl);
+  List.iter
+    (fun (th,tmh,tph) ->
+      let alphapure = tmh in
+      let alphathy = hashtag (hashopair2 th (hashpair tmh tph)) 32l in
+      r := addr_bitseq (hashval_term_addr alphapure)::addr_bitseq (hashval_term_addr alphathy)::!r)
+    (output_creates_objs outpl);
+  List.iter
+    (fun (th,tmh) ->
+      let alphapure = tmh in
+      let alphathy = hashtag (hashopair2 th tmh) 33l in
+      r := addr_bitseq (hashval_term_addr alphapure)::addr_bitseq (hashval_term_addr alphathy)::!r)
+    (output_creates_props outpl);
   !r
 
 let get_tx_supporting_octree (inpl,outpl) oc =
