@@ -2778,37 +2778,41 @@ let reportpubs oc f lr =
       (fun a bl ->
 	match a with
 	| (aid,bday,obl,TheoryPublication(alpha,_,ts)) ->
-	    Printf.fprintf f "Theory %s %Ld %s %s\n" (hashval_hexstring aid) bday (addr_daliladdrstr (bitseq_addr (true::false::bl))) (addr_daliladdrstr (payaddr_addr alpha));
 	    begin
-	      List.iter
-		(fun thyi ->
-		  match thyi with
-		  | Logic.Thyprim(a) -> Printf.fprintf f "Prim %s\n" (stp_str a)
-		  | Logic.Thyaxiom(m) -> Printf.fprintf f "Axiom %s : %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (trm_str m)
-		  | Logic.Thydef(a,m) -> Printf.fprintf f "Def %s : %s := %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (Mathdata.hashtp a)) (trm_str m))
-		(List.rev ts)
+	      match Mathdata.hashtheory (Mathdata.theoryspec_theory ts) with
+	      | None ->
+		  Printf.fprintf f "Theory %s %Ld %s %s with no content?\n" (hashval_hexstring aid) bday (addr_daliladdrstr (bitseq_addr (true::true::bl))) (addr_daliladdrstr (payaddr_addr alpha));
+	      | Some(thyh) ->
+		  Printf.fprintf f "Theory %s %Ld %s %s %s\n" (hashval_hexstring aid) bday (addr_daliladdrstr (bitseq_addr (true::true::bl))) (addr_daliladdrstr (payaddr_addr alpha)) (hashval_hexstring thyh);
+		  List.iter
+		    (fun thyi ->
+		      match thyi with
+		      | Logic.Thyprim(a) -> Printf.fprintf f "Prim %s\n" (stp_str a)
+		      | Logic.Thyaxiom(m) -> Printf.fprintf f "Axiom %s (%s) : %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (hashtag (hashopair2 (Some(thyh)) (Mathdata.tm_hashroot m)) 33l)) (trm_str m)
+		      | Logic.Thydef(a,m) -> Printf.fprintf f "Def %s (%s) : %s := %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (hashtag (hashopair2 (Some(thyh)) (hashpair (Mathdata.tm_hashroot m) (Mathdata.hashtp a))) 32l)) (hashval_hexstring (Mathdata.hashtp a)) (trm_str m))
+		    (List.rev ts)
 	    end
 	| (aid,bday,obl,SignaPublication(alpha,_,thyh,ss)) ->
-	    Printf.fprintf f "Signature %s %Ld %s %s %s\n" (hashval_hexstring aid) bday (addr_daliladdrstr (bitseq_addr (true::false::bl))) (addr_daliladdrstr (payaddr_addr alpha)) (match thyh with Some(thyh) -> hashval_hexstring thyh | None -> "None");
+	    Printf.fprintf f "Signature %s %Ld %s %s %s\n" (hashval_hexstring aid) bday (addr_daliladdrstr (bitseq_addr (true::true::bl))) (addr_daliladdrstr (payaddr_addr alpha)) (match thyh with Some(thyh) -> hashval_hexstring thyh ^ " " ^ (addr_daliladdrstr (hashval_pub_addr thyh)) | None -> "None");
 	    begin
 	      List.iter
 		(fun si ->
 		  match si with
 		  | Logic.Signasigna(h) -> Printf.fprintf f "Require %s\n" (hashval_hexstring h)
-		  | Logic.Signaparam(h,a) -> Printf.fprintf f "Param %s : %s (%s)\n" (hashval_hexstring h) (stp_str a) (hashval_hexstring (hashtag (hashopair2 thyh (hashpair h (Mathdata.hashtp a))) 32l))
-		  | Logic.Signadef(a,m) -> Printf.fprintf f "Def %s : %s (%s) := %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (stp_str a) (hashval_hexstring (hashtag (hashopair2 thyh (hashpair (Mathdata.tm_hashroot m) (Mathdata.hashtp a))) 32l)) (trm_str m)
+		  | Logic.Signaparam(h,a) -> Printf.fprintf f "Param %s (%s) : %s\n" (hashval_hexstring h) (hashval_hexstring (hashtag (hashopair2 thyh (hashpair h (Mathdata.hashtp a))) 32l)) (stp_str a)
+		  | Logic.Signadef(a,m) -> Printf.fprintf f "Def %s (%s) : %s := %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (hashtag (hashopair2 thyh (hashpair (Mathdata.tm_hashroot m) (Mathdata.hashtp a))) 32l)) (stp_str a) (trm_str m)
 		  | Logic.Signaknown(m) -> Printf.fprintf f "Known %s (%s) : %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (hashtag (hashopair2 thyh (Mathdata.tm_hashroot m)) 33l)) (trm_str m))
 		(List.rev ss)
 	    end
 	| (aid,bday,obl,DocPublication(alpha,_,thyh,d)) ->
-	    Printf.fprintf f "Document %s %Ld %s %s %s\n" (hashval_hexstring aid) bday (addr_daliladdrstr (bitseq_addr (true::false::bl))) (addr_daliladdrstr (payaddr_addr alpha)) (match thyh with Some(thyh) -> hashval_hexstring thyh | None -> "None");
+	    Printf.fprintf f "Document %s %Ld %s %s %s\n" (hashval_hexstring aid) bday (addr_daliladdrstr (bitseq_addr (true::true::bl))) (addr_daliladdrstr (payaddr_addr alpha)) (match thyh with Some(thyh) -> hashval_hexstring thyh ^ " " ^ (addr_daliladdrstr (hashval_pub_addr thyh)) | None -> "None");
 	    begin
 	      List.iter
 		(fun di ->
 		  match di with
 		  | Logic.Docsigna(h) -> Printf.fprintf f "Require %s\n" (hashval_hexstring h)
-		  | Logic.Docparam(h,a) -> Printf.fprintf f "Param %s : %s (%s)\n" (hashval_hexstring h) (stp_str a) (hashval_hexstring (hashtag (hashopair2 thyh (hashpair h (Mathdata.hashtp a))) 32l))
-		  | Logic.Docdef(a,m) -> Printf.fprintf f "Def %s : %s (%s) := %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (stp_str a) (hashval_hexstring (hashtag (hashopair2 thyh (hashpair (Mathdata.tm_hashroot m) (Mathdata.hashtp a))) 32l)) (trm_str m)
+		  | Logic.Docparam(h,a) -> Printf.fprintf f "Param %s (%s) : %s\n" (hashval_hexstring h) (hashval_hexstring (hashtag (hashopair2 thyh (hashpair h (Mathdata.hashtp a))) 32l)) (stp_str a)
+		  | Logic.Docdef(a,m) -> Printf.fprintf f "Def %s (%s) : %s := %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (hashtag (hashopair2 thyh (hashpair (Mathdata.tm_hashroot m) (Mathdata.hashtp a))) 32l)) (stp_str a) (trm_str m)
 		  | Logic.Docknown(m) -> Printf.fprintf f "Known %s (%s) : %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (hashtag (hashopair2 thyh (Mathdata.tm_hashroot m)) 33l)) (trm_str m)
 		  | Logic.Docpfof(m,_) -> Printf.fprintf f "Theorem %s (%s) : %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (hashtag (hashopair2 thyh (Mathdata.tm_hashroot m)) 33l)) (trm_str m)
 		  | Logic.Docconj(m) -> Printf.fprintf f "Conjecture %s (%s) : %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (hashtag (hashopair2 thyh (Mathdata.tm_hashroot m)) 33l)) (trm_str m))
