@@ -323,6 +323,54 @@ let initialize_commands () =
 	(fun (i,h) -> Printf.fprintf oc "%Ld %s\n" i (hashval_hexstring h))
 	!missingdeltas;
       );
+  ac "reportowned" "reportowned [<outputfile> [<ledgerroot>]]" "Give a report of all owned objects and propositions in the ledger tree."
+    (fun oc al ->
+      match al with
+      | [] ->
+	  let lr = get_ledgerroot (get_bestblock_print_warnings oc) in
+	  Commands.reportowned oc oc lr
+      | [fn] ->
+	  let f = open_out fn in
+	  let lr = get_ledgerroot (get_bestblock_print_warnings oc) in
+	  begin
+	    try
+	      Commands.reportowned oc f lr;
+	      close_out f
+	    with exn -> close_out f; raise exn
+	  end
+      | [fn;lr] ->
+	  let f = open_out fn in
+	  begin
+	    try
+	      Commands.reportowned oc f (hexstring_hashval lr);
+	      close_out f
+	    with exn -> close_out f; raise exn
+	  end
+      | _ -> raise BadCommandForm);
+  ac "reportpubs" "reportpubs [<outputfile> [<ledgerroot>]]" "Give a report of all publications in the ledger tree."
+    (fun oc al ->
+      match al with
+      | [] ->
+	  let lr = get_ledgerroot (get_bestblock_print_warnings oc) in
+	  Commands.reportpubs oc oc lr
+      | [fn] ->
+	  let f = open_out fn in
+	  let lr = get_ledgerroot (get_bestblock_print_warnings oc) in
+	  begin
+	    try
+	      Commands.reportpubs oc f lr;
+	      close_out f
+	    with exn -> close_out f; raise exn
+	  end
+      | [fn;lr] ->
+	  let f = open_out fn in
+	  begin
+	    try
+	      Commands.reportpubs oc f (hexstring_hashval lr);
+	      close_out f
+	    with exn -> close_out f; raise exn
+	  end
+      | _ -> raise BadCommandForm);
   ac "setbestblock" "setbestblock <blockid> [<blockheight> <ltcblockid> <ltcburntx>]" "Manually set the current best block. This is mostly useful if -ltcoffline is being used."
     (fun oc al ->
       match al with
@@ -1571,9 +1619,9 @@ let initialize_commands () =
 	    let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
 	    try
 	      let lr = get_ledgerroot best in
-	      print_jsonval oc (JsonObj([("height",JsonNum(Int64.to_string (Int64.sub blkh 1L)));("block",JsonStr(hashval_hexstring h));("ledgerroot",JsonStr(hashval_hexstring lr))]))
+	      print_jsonval oc (JsonObj([("height",JsonNum(Int64.to_string blkh));("block",JsonStr(hashval_hexstring h));("ledgerroot",JsonStr(hashval_hexstring lr))]))
 	    with Not_found ->
-	      print_jsonval oc (JsonObj([("height",JsonNum(Int64.to_string (Int64.sub blkh 1L)));("block",JsonStr(hashval_hexstring h))]))
+	      print_jsonval oc (JsonObj([("height",JsonNum(Int64.to_string blkh));("block",JsonStr(hashval_hexstring h))]))
 	  with Not_found ->
 	    Printf.fprintf oc "Cannot determine height of best block %s\n" (hashval_hexstring h));
   ac "bestblock" "bestblock" "Print the current best block in text format.\nIn case of a tie, only one of the current best blocks is returned.\nSee also: querybestblock"
