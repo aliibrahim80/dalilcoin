@@ -2637,3 +2637,184 @@ let dumpstate fa =
   (try pblockchain sa (get_bestblock_print_warnings sa) 10000 with _ -> ());
   dumpblocktreestate sa;
   close_out sa
+
+let ctre_left c =
+  match c with
+  | CBin(cl,_) -> cl
+  | CLeft(cl) -> cl
+  | CLeaf(false::bl,hl) -> CLeaf(bl,hl)
+  | _ -> raise Not_found
+
+let ctre_right c =
+  match c with
+  | CBin(_,cr) -> cr
+  | CRight(cr) -> cr
+  | CLeaf(true::bl,hl) -> CLeaf(bl,hl)
+  | _ -> raise Not_found
+
+let notfound_warning_wrap oc h d f =
+  try
+    f()
+  with Not_found ->
+    Printf.fprintf oc "WARNING: missing %s %s. Information likely to be incomplete.\n" d (hashval_hexstring h);
+    raise Not_found
+
+let rec report_hlist_a oc (g:asset -> bool list -> unit) hl bl =
+  match hl with
+  | HNil -> ()
+  | HCons(a1,hr) ->
+      g a1 bl;
+      report_hlist_a oc g hr bl
+  | HConsH(h1,hr) ->
+      begin
+	try
+	  let a1 = notfound_warning_wrap oc h1 "asset" (fun () -> get_asset h1) in
+	  g a1 bl;
+	  raise Not_found
+	with Not_found ->
+	  report_hlist_a oc g hr bl
+      end
+  | HHash(h,_) ->
+      try
+	let (h1,ohr) = notfound_warning_wrap oc h "hcons element" (fun () -> get_hcons_element h) in
+	try
+	  let a1 = notfound_warning_wrap oc h1 "asset" (fun () -> get_asset h1) in
+	  g a1 bl;
+	  raise Not_found
+	with Not_found ->
+	  match ohr with
+	  | None -> ()
+	  | Some(k,l) -> report_hlist_a oc g (HHash(k,l)) bl
+      with Not_found -> ()
+
+let report_nehlist_a oc g hl bl =
+  match hl with
+  | NehCons(a1,hr) ->
+      g a1 bl;
+      report_hlist_a oc g hr bl
+  | NehConsH(h1,hr) ->
+      begin
+	try
+	  let a1 = notfound_warning_wrap oc h1 "asset" (fun () -> get_asset h1) in
+	  g a1 bl;
+	  raise Not_found
+	with Not_found ->
+	  report_hlist_a oc g hr bl
+      end
+  | NehHash(h,_) ->
+      try
+	let (h1,ohr) = notfound_warning_wrap oc h "hcons element" (fun () -> get_hcons_element h) in
+	try
+	  let a1 = notfound_warning_wrap oc h1 "asset" (fun () -> get_asset h1) in
+	  g a1 bl;
+	  raise Not_found
+	with Not_found ->
+	  match ohr with
+	  | None -> ()
+	  | Some(k,l) -> report_hlist_a oc g (HHash(k,l)) bl
+      with Not_found -> ()
+
+let rec report_a oc g c bl =
+  match c with
+  | CBin(cl,cr) ->
+      report_a oc g cl (false::bl);
+      report_a oc g cr (true::bl)
+  | CLeft(cl) ->
+      report_a oc g cl (false::bl)
+  | CRight(cr) ->
+      report_a oc g cr (true::bl)
+  | CLeaf(br,hl) ->
+      report_nehlist_a oc g hl ((List.rev bl) @ br)
+  | CHash(h) ->
+      begin
+	try
+	  let c2 = notfound_warning_wrap oc h "ledger element" (fun () -> get_ctree_element h) in
+	  report_a oc g c2 bl
+	with Not_found -> ()
+      end
+
+let reportowned oc f lr =
+  try
+    report_a
+      oc
+      (fun a bl ->
+	match a with
+	| (aid,bday,obl,OwnsObj(oid,alpha,r)) ->
+	    Printf.fprintf f "Obj %s %Ld %s %s %s %s %s %s\n" (hashval_hexstring aid) bday (hashval_hexstring oid) (addr_daliladdrstr (hashval_term_addr oid)) (addr_daliladdrstr (bitseq_addr (true::false::bl))) (addr_daliladdrstr (payaddr_addr alpha)) (match r with Some(rp) -> Printf.sprintf "%Ld" rp | None -> "None") (match obl with Some(beta,lk,_) -> Printf.sprintf "%s %Ld" (addr_daliladdrstr (payaddr_addr beta)) lk | None -> "None")
+	| (aid,bday,obl,OwnsProp(pid,alpha,r)) ->
+	    Printf.fprintf f "Prop %s %Ld %s %s %s %s %s %s\n" (hashval_hexstring aid) bday (hashval_hexstring pid) (addr_daliladdrstr (hashval_term_addr pid)) (addr_daliladdrstr (bitseq_addr (true::false::bl))) (addr_daliladdrstr (payaddr_addr alpha)) (match r with Some(rp) -> Printf.sprintf "%Ld" rp | None -> "None") (match obl with Some(beta,lk,_) -> Printf.sprintf "%s %Ld" (addr_daliladdrstr (payaddr_addr beta)) lk | None -> "None")
+	| (aid,bday,obl,OwnsNegProp) ->
+	    Printf.fprintf f "NegProp %s %Ld %s %s\n" (hashval_hexstring aid) bday (addr_daliladdrstr (bitseq_addr (true::false::bl))) (match obl with Some(beta,lk,_) -> Printf.sprintf "%s %Ld" (addr_daliladdrstr (payaddr_addr beta)) lk | None -> "None")
+	| _ -> ())
+      (ctre_left (ctre_right (get_ctree_element lr))) []
+  with Not_found ->
+    Printf.fprintf oc "There are no owned objects or propositions in the ledger.\n"
+
+let reportpubs oc f lr =
+  let rec stp_str a =
+    match a with
+    | Logic.TpVar(i) -> Printf.sprintf "_%d" i
+    | Logic.Base(i) -> Printf.sprintf "$%d" i
+    | Logic.TpAll(a) -> Printf.sprintf "!%s" (stp_str a)
+    | Logic.TpArr(a,b) -> Printf.sprintf "(%s -> %s)" (stp_str a) (stp_str b)
+    | Logic.Prop -> "o"
+  in
+  let rec trm_str m =
+    match m with
+    | Logic.DB(i) -> Printf.sprintf "?%d" i
+    | Logic.TmH(h) -> hashval_hexstring h
+    | Logic.Prim(i) -> Printf.sprintf "'%d" i
+    | Logic.Ap(m,n) -> Printf.sprintf "(%s %s)" (trm_str m) (trm_str n)
+    | Logic.Lam(a,m) -> Printf.sprintf "(^%s.%s)" (stp_str a) (trm_str m)
+    | Logic.Imp(m,n) -> Printf.sprintf "(%s -> %s)" (trm_str m) (trm_str n)
+    | Logic.All(a,m) -> Printf.sprintf "(!%s.%s)" (stp_str a) (trm_str m)
+    | Logic.TTpAp(m,a) -> Printf.sprintf "(%s %s)" (trm_str m) (stp_str a)
+    | Logic.TTpLam(m) -> Printf.sprintf "(^.%s)" (trm_str m)
+    | Logic.TTpAll(m) -> Printf.sprintf "(!.%s)" (trm_str m)
+  in
+  try
+    report_a
+      oc
+      (fun a bl ->
+	match a with
+	| (aid,bday,obl,TheoryPublication(alpha,_,ts)) ->
+	    Printf.fprintf f "Theory %s %Ld %s %s\n" (hashval_hexstring aid) bday (addr_daliladdrstr (bitseq_addr (true::false::bl))) (addr_daliladdrstr (payaddr_addr alpha));
+	    begin
+	      List.iter
+		(fun thyi ->
+		  match thyi with
+		  | Logic.Thyprim(a) -> Printf.fprintf f "Prim %s\n" (stp_str a)
+		  | Logic.Thyaxiom(m) -> Printf.fprintf f "Axiom %s : %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (trm_str m)
+		  | Logic.Thydef(a,m) -> Printf.fprintf f "Def %s : %s := %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (Mathdata.hashtp a)) (trm_str m))
+		(List.rev ts)
+	    end
+	| (aid,bday,obl,SignaPublication(alpha,_,thyh,ss)) ->
+	    Printf.fprintf f "Signature %s %Ld %s %s %s\n" (hashval_hexstring aid) bday (addr_daliladdrstr (bitseq_addr (true::false::bl))) (addr_daliladdrstr (payaddr_addr alpha)) (match thyh with Some(thyh) -> hashval_hexstring thyh | None -> "None");
+	    begin
+	      List.iter
+		(fun si ->
+		  match si with
+		  | Logic.Signasigna(h) -> Printf.fprintf f "Require %s\n" (hashval_hexstring h)
+		  | Logic.Signaparam(h,a) -> Printf.fprintf f "Param %s : %s (%s)\n" (hashval_hexstring h) (stp_str a) (hashval_hexstring (hashtag (hashopair2 thyh (hashpair h (Mathdata.hashtp a))) 32l))
+		  | Logic.Signadef(a,m) -> Printf.fprintf f "Def %s : %s (%s) := %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (stp_str a) (hashval_hexstring (hashtag (hashopair2 thyh (hashpair (Mathdata.tm_hashroot m) (Mathdata.hashtp a))) 32l)) (trm_str m)
+		  | Logic.Signaknown(m) -> Printf.fprintf f "Known %s (%s) : %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (hashtag (hashopair2 thyh (Mathdata.tm_hashroot m)) 33l)) (trm_str m))
+		(List.rev ss)
+	    end
+	| (aid,bday,obl,DocPublication(alpha,_,thyh,d)) ->
+	    Printf.fprintf f "Document %s %Ld %s %s %s\n" (hashval_hexstring aid) bday (addr_daliladdrstr (bitseq_addr (true::false::bl))) (addr_daliladdrstr (payaddr_addr alpha)) (match thyh with Some(thyh) -> hashval_hexstring thyh | None -> "None");
+	    begin
+	      List.iter
+		(fun di ->
+		  match di with
+		  | Logic.Docsigna(h) -> Printf.fprintf f "Require %s\n" (hashval_hexstring h)
+		  | Logic.Docparam(h,a) -> Printf.fprintf f "Param %s : %s (%s)\n" (hashval_hexstring h) (stp_str a) (hashval_hexstring (hashtag (hashopair2 thyh (hashpair h (Mathdata.hashtp a))) 32l))
+		  | Logic.Docdef(a,m) -> Printf.fprintf f "Def %s : %s (%s) := %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (stp_str a) (hashval_hexstring (hashtag (hashopair2 thyh (hashpair (Mathdata.tm_hashroot m) (Mathdata.hashtp a))) 32l)) (trm_str m)
+		  | Logic.Docknown(m) -> Printf.fprintf f "Known %s (%s) : %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (hashtag (hashopair2 thyh (Mathdata.tm_hashroot m)) 33l)) (trm_str m)
+		  | Logic.Docpfof(m,_) -> Printf.fprintf f "Theorem %s (%s) : %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (hashtag (hashopair2 thyh (Mathdata.tm_hashroot m)) 33l)) (trm_str m)
+		  | Logic.Docconj(m) -> Printf.fprintf f "Conjecture %s (%s) : %s\n" (hashval_hexstring (Mathdata.tm_hashroot m)) (hashval_hexstring (hashtag (hashopair2 thyh (Mathdata.tm_hashroot m)) 33l)) (trm_str m))
+		(List.rev d)
+	    end
+	| _ -> ())
+      (ctre_right (ctre_right (get_ctree_element lr))) []
+  with Not_found ->
+    Printf.fprintf oc "There are no publications in the ledger.\n"

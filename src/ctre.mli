@@ -90,6 +90,7 @@ module DbCTreeEltAt :
 val save_ctree_elements : ctree -> hashval
 val save_ctree : string -> ctree -> unit
 val load_ctree : string -> ctree
+val get_hcons_element : hashval -> hashval * (hashval * int) option
 val get_hlist_element : hashval -> hlist
 val get_nehlist_element : hashval -> nehlist
 val get_ctree_element : hashval -> ctree
