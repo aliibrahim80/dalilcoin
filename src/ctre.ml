@@ -481,7 +481,12 @@ let print_hlist_to_buffer sb blkh hl = print_hlist_to_buffer_gen sb blkh hl (fun
 let rec print_ctree_all_r f blkh c n br =
   for i = 1 to n do Printf.fprintf f " " done;
   match c with
-  | CLeaf(bl,hl) -> Printf.fprintf f "Leaf %s\n" (addr_daliladdrstr (bitseq_addr ((List.rev br) @ bl))); print_hlist f blkh (nehlist_hlist hl)
+  | CLeaf(bl,hl) ->
+      if List.length br + List.length bl = 162 then
+	Printf.fprintf f "Leaf %s\n" (addr_daliladdrstr (bitseq_addr ((List.rev br) @ bl)))
+      else
+	Printf.fprintf f "Leaf\n";
+      print_hlist f blkh (nehlist_hlist hl)
   | CHash(h) -> Printf.fprintf f "H %s\n" (hashval_hexstring h)
   | CLeft(c0) -> Printf.fprintf f "L\n"; print_ctree_all_r f blkh c0 (n+1) (false::br)
   | CRight(c1) -> Printf.fprintf f "R\n"; print_ctree_all_r f blkh c1 (n+1) (true::br)
