@@ -2403,6 +2403,7 @@ let rec full_needed_1 outpl =
   | (_,(o,(RightsProp(h,_))))::outpr -> addr_bitseq (termaddr_addr (hashval_md160 h))::full_needed_1 outpr
   | (alpha,(o,(OwnsObj(_,_,_))))::outpr -> addr_bitseq alpha::full_needed_1 outpr
   | (alpha,(o,(OwnsProp(_,_,_))))::outpr -> addr_bitseq alpha::full_needed_1 outpr
+  | (alpha,(o,OwnsNegProp))::outpr -> addr_bitseq alpha::full_needed_1 outpr
   | (_,(o,TheoryPublication(gamma,nonce,thy)))::outpr ->
       let beta = hashval_pub_addr (hashpair (hashaddr (payaddr_addr gamma)) (hashopair1 nonce (hashtheory (theoryspec_theory thy)))) in
       addr_bitseq beta::full_needed_1 outpr
