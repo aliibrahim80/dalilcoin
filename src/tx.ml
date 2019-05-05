@@ -153,15 +153,17 @@ let rec tx_outputs_valid_addr_cats_oc oc tm outpl =
       else
 	(Printf.fprintf oc "tx invalid since Bounty should be sent to a term address, not %s\n" (Cryptocurr.addr_daliladdrstr alpha); false)
   | (alpha,(_,OwnsObj(h,beta,u)))::outpr ->
-      if hashval_term_addr h = alpha then
+      let alpha2 = hashval_term_addr h in
+      if alpha2 = alpha then
 	tx_outputs_valid_addr_cats_oc oc tm outpr
       else
-	(Printf.fprintf oc "tx invalid since OwnsObj %s should be sent to %s\n" (hashval_hexstring h) (Cryptocurr.addr_daliladdrstr alpha); false)
+	(Printf.fprintf oc "tx invalid since OwnsObj %s should be sent to %s not %s\n" (hashval_hexstring h) (Cryptocurr.addr_daliladdrstr alpha2) (Cryptocurr.addr_daliladdrstr alpha); false)
   | (alpha,(_,OwnsProp(h,beta,u)))::outpr ->
-      if hashval_term_addr h = alpha then
+      let alpha2 = hashval_term_addr h in
+      if alpha2 = alpha then
 	tx_outputs_valid_addr_cats_oc oc tm outpr
       else
-	(Printf.fprintf oc "tx invalid since OwnsProp %s should be sent to %s\n" (hashval_hexstring h) (Cryptocurr.addr_daliladdrstr alpha); false)
+	(Printf.fprintf oc "tx invalid since OwnsProp %s should be sent to %s not %s\n" (hashval_hexstring h) (Cryptocurr.addr_daliladdrstr alpha2) (Cryptocurr.addr_daliladdrstr alpha); false)
   | (alpha,(_,OwnsNegProp))::outpr ->
       if termaddr_p alpha then 
 	tx_outputs_valid_addr_cats_oc oc tm outpr
