@@ -1600,13 +1600,23 @@ let initialize_commands () =
 	| JsonParseFail(i,msg) ->
 	    Printf.fprintf oc "Problem parsing json object for tm at position %d %s\n" i msg
       end);
-  ac "decodetx" "decode <raw tx in hex>" "Decode a dalilcoin tx."
+  ac "decodetx" "decodetx <raw tx in hex>" "Decode a dalilcoin tx."
     (fun oc al ->
       match al with
       | [a] ->
 	  let s = hexstring_string a in
 	  let (stx,_) = sei_stx seis (s,String.length s,None,0,0) in
 	  print_jsonval oc (json_stx stx);
+	  Printf.fprintf oc "\n"
+      | _ -> raise BadCommandForm);
+  ac "decodetxfile" "decodetxfile <file with binary tx>" "Decode a dalilcoin tx from a file."
+    (fun oc al ->
+      match al with
+      | [s1] ->
+	  let c1 = open_in_bin s1 in
+	  let (stau,_) = Tx.sei_stx seic (c1,None) in
+	  close_in c1;
+	  print_jsonval oc (json_stx stau);
 	  Printf.fprintf oc "\n"
       | _ -> raise BadCommandForm);
   ac "querybestblock" "querybestblock" "Print the current best block in json format.\nIn case of a tie, only one of the current best blocks is returned.\nThis command is intended to support explorers.\nSee also: bestblock"
