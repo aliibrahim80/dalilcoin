@@ -9,6 +9,8 @@ val datadir_from_command_line : unit -> unit
 val process_config_file : unit -> unit
 val process_config_args : unit -> unit
 
+val recent_ltc_blocks : string option ref
+
 val createsnapshot : bool ref
 val importsnapshot : bool ref
 val snapshot_dir : string option ref

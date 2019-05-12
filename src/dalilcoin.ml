@@ -146,6 +146,20 @@ let ltc_init sout =
   try
     log_string (Printf.sprintf "syncing with ltc\n");
     ltc_old_sync(); (*** in case the node is far behind, start by syncing up with some historic ltc blocks first ***)
+    begin (** if recentltcblocks file was given, then process the ones listed in the file **)
+      match !recent_ltc_blocks with
+      | None -> ()
+      | Some(f) ->
+	  try
+	    let s = open_in f in
+	    try
+	      while true do
+		let l = input_line s in
+		ltc_process_block l
+	      done
+	    with _ -> close_in s
+	  with _ -> ()
+    end;
     let lbh = ltc_getbestblockhash () in
     log_string (Printf.sprintf "ltc bestblock %s\n" lbh);
     ltc_process_block lbh;

@@ -217,6 +217,8 @@ exception CheckLedger of int;;
 exception BuildExtraIndex of int;;
 exception NetLogReport of int;;
 
+let recent_ltc_blocks = ref None;;
+
 let createsnapshot = ref false;;
 let importsnapshot = ref false;;
 let snapshot_dir = ref None;;
@@ -235,7 +237,10 @@ let process_config_args () =
   try
     for i = 1 to a-1 do
       let arg = Sys.argv.(i) in
-      if arg = "-createsnapshot" then
+      let vl = String.length arg in
+      if vl > 17 && String.sub arg 0 17 = "-recentltcblocks=" then
+	recent_ltc_blocks := Some(String.sub arg 17 (vl - 17))
+      else if arg = "-createsnapshot" then
 	raise (CreateSnapshot(i))
       else if arg = "-importsnapshot" then
 	raise (ImportSnapshot(i))
