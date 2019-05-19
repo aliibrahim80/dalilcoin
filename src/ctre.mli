@@ -102,6 +102,8 @@ val strip_bitseq_false : (bool list * 'a) list -> (bool list * 'a) list
 val strip_bitseq_true0 : bool list list -> bool list list
 val strip_bitseq_false0 : bool list list -> bool list list
 
+val ctree_lookup_addr_assets : bool -> bool -> ctree -> bool list -> hlist
+
 val ctree_lookup_input_assets : bool -> bool -> addr_assetid list -> ctree -> (addr -> hashval -> unit) -> (addr * asset) list
 val ctree_supports_tx : bool -> bool -> ttree option -> stree option -> int64 -> tx -> ctree -> int64
 val ctree_supports_tx_2 : bool -> bool -> ttree option -> stree option -> int64 -> tx -> (addr * asset) list -> asset list -> ctree -> int64
@@ -129,6 +131,7 @@ val sei_nehlist : (int -> 'a -> int * 'a) -> 'a -> nehlist * 'a
 val seo_ctree : (int -> int -> 'a -> 'a) -> ctree -> 'a -> 'a
 val sei_ctree : (int -> 'a -> int * 'a) -> 'a -> ctree * 'a
 
+val iter_hlist_gen : int64 -> hlist -> (asset -> unit) -> unit
 val print_hlist_gen : out_channel -> int64 -> hlist -> (asset -> unit) -> unit
 val print_hlist : out_channel -> int64 -> hlist -> unit
 val print_hlist_to_buffer_gen : Buffer.t -> int64 -> hlist -> (asset -> unit) -> unit

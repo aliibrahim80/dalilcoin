@@ -166,6 +166,13 @@ let rec print_ctree_r oc c n =
 
 let print_ctree oc c = print_ctree_r oc c 0
 
+let rec iter_hlist_gen blkh hl g =
+  match hl with
+  | HHash(h,l) -> ()
+  | HNil -> ()
+  | HCons(a,hr) -> g a; iter_hlist_gen blkh hr g
+  | HConsH(ah,hr) -> iter_hlist_gen blkh hr g
+
 let rec print_hlist_gen f blkh hl g =
   match hl with
   | HHash(h,l) -> Printf.fprintf f "...%s[%d]...\n" (hashval_hexstring h) l
