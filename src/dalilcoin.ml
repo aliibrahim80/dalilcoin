@@ -26,6 +26,7 @@ open Blocktree;;
 open Ltcrpc;;
 open Setconfig;;
 open Staking;;
+open Inputdraft;;
 
 exception BadCommandForm;;
 
@@ -317,7 +318,6 @@ let parse_json_privkeys kl =
 	kla
   | _ -> raise BadCommandForm;;
 	
-	
 let commandh : (string,(string * string * (out_channel -> string list -> unit))) Hashtbl.t = Hashtbl.create 100;;
 let sortedcommands : string list ref = ref [];;
 
@@ -325,7 +325,312 @@ let ac c h longhelp f =
   sortedcommands := List.merge compare [c] !sortedcommands;
   Hashtbl.add commandh c (h,longhelp,(fun oc al -> try f oc al with BadCommandForm -> Printf.fprintf oc "%s\n" h));;
 
+let find_spendable_utxo oc lr blkh mv =
+  let b = ref None in
+  List.iter
+    (fun (alpha,a,v) ->
+      if v >= mv then
+	match !b with
+	| None -> b := Some(alpha,a,v)
+	| Some(_,_,u) -> if v < u then b := Some(alpha,a,v))
+    (Commands.get_spendable_assets_in_ledger oc lr blkh);
+  match !b with
+  | None -> raise Not_found
+  | Some(alpha,a,v) -> (alpha,a,v);;
+
+let rec find_marker_in_hlist hl =
+  match hl with
+  | HNil -> raise Not_found
+  | HCons((aid,bday,obl,Marker),_) -> (aid,bday,obl)
+  | HCons(_,hr) -> find_marker_in_hlist hr
+  | HConsH(h,hr) ->
+      let a = get_asset h in
+      find_marker_in_hlist (HCons(a,hr))
+  | HHash(h,_) ->
+      find_marker_in_hlist (get_hlist_element h)
+
+let find_marker_at_address tr beta =
+  let hl = ctree_lookup_addr_assets true true tr (addr_bitseq beta) in
+  find_marker_in_hlist hl
+
 let initialize_commands () =
+  ac "addnonce" "addnonce <file>" "Add a nonce to a theory specification file, a signature specification file or a document"
+    (fun oc al ->
+      match al with
+      | [f] ->
+	  begin
+	    let ch = open_in f in
+	    try
+	      while true do
+		let l = input_token ch in
+		if l = "Nonce" then raise Exit
+	      done
+	    with
+	    | Exit -> close_in ch; Printf.fprintf oc "A nonce was already declared.\nNo change was made.\n"
+	    | End_of_file ->
+		close_in ch;
+		let ch = open_out_gen [Open_append] 0o660 f in
+		let h = big_int_md256 (strong_rand_256()) in
+		let nonce = hashval_hexstring h in
+		Printf.fprintf ch "\nNonce %s\n" nonce;
+		close_out ch
+	    | e -> close_in ch; raise e
+	  end
+      | _ -> raise BadCommandForm);
+  ac "addpublisher" "addpublisher <file> <payaddr>" "Add a publisher address to a theory specification file, a signature specification file or a document."
+    (fun oc al ->
+      match al with
+      | [f;gammas] ->
+	  begin
+	    let gamma = Cryptocurr.daliladdrstr_addr gammas in
+	    if not (payaddr_p gamma) then raise (Failure (Printf.sprintf "Publisher address %s is not a pay address." gammas));
+	    let ch = open_in f in
+	    try
+	      while true do
+		let l = input_token ch in
+		if l = "Publisher" then raise Exit
+	      done
+	    with
+	    | Exit -> close_in ch; Printf.fprintf oc "A publisher was already declared.\nNo change was made.\n"
+	    | End_of_file ->
+		close_in ch;
+		let ch = open_out_gen [Open_append] 0o660 f in
+		Printf.fprintf ch "\nPublisher %s\n" gammas;
+		close_out ch
+	    | e -> close_in ch; raise e
+	  end
+      | _ -> raise BadCommandForm);
+  ac "readdraft" "readdraft <file>" "Read a theory specification file, signature specification file or document file and give information."
+    (fun oc al ->
+      match al with
+      | [f] ->
+	  let ch = open_in f in
+	  let l = input_token ch in
+	  if l = "Theory" then
+	    let (thyspec,nonce,gamma,_,_) = input_theoryspec ch in
+	    begin
+	      match Checking.check_theoryspec thyspec with
+	      | None -> raise (Failure "Theory spec does not check.\n")
+	      | Some(thy,sg) ->
+		  match hashtheory thy with
+		  | None ->
+		      Printf.fprintf oc "Theory is empty. It is correct but an empty theory is not allowed to be published.\n"
+		  | Some(thyh) ->
+		      let b = theoryspec_burncost thyspec in
+		      Printf.fprintf oc "Theory is correct and has id %s and address %s.\n%s fraenks must be burned to publish the theory.\n" (hashval_hexstring thyh) (Cryptocurr.addr_daliladdrstr (hashval_pub_addr thyh)) (fraenks_of_cants b);
+		      match nonce with
+		      | None -> Printf.fprintf oc "No nonce is given. Call addnonce to add one automatically.\n"
+		      | Some(h) ->
+			  Printf.fprintf oc "Nonce: %s\n" (hashval_hexstring h);
+			  match gamma with
+			  | None -> Printf.fprintf oc "No publisher address. Call addpublisheraddress to add one.\n"
+			  | Some(gamma) ->
+			      if payaddr_p gamma then
+				let beta = hashval_pub_addr (hashpair (hashaddr gamma) (hashpair h thyh)) in
+				Printf.fprintf oc "Publisher address: %s\n" (Cryptocurr.addr_daliladdrstr gamma);
+				Printf.fprintf oc "Marker Address: %s\n" (Cryptocurr.addr_daliladdrstr beta)
+			      else
+				raise (Failure (Printf.sprintf "Publisher address %s is not a pay address." (Cryptocurr.addr_daliladdrstr gamma)))
+	    end
+	  else if l = "Signature" then
+	    let thyid = input_token ch in
+	    let th = if thyid = "Empty" then None else Some(hexstring_hashval thyid) in
+	    let (signaspec,nonce,gamma,_,_) = input_signaspec ch in
+	    begin
+	      Printf.printf "inachevé" (* inachevé *)
+(**
+	      match Checking.check_signaspec ? ? ? ? signaspec with
+	      | None -> 
+**)
+	    end
+	  else if l = "Document" then
+	    let thyid = input_token ch in
+	    let th = if thyid = "Empty" then None else Some(hexstring_hashval thyid) in
+	    let (doc,nonce,gamma,_,_,_,_,_,_,_,_) = input_doc ch in
+	    begin
+	      Printf.printf "inachevé" (* inachevé *)
+(**
+	      match Checking.check_doc ? ? ? ? doc with
+	      | None -> 
+**)
+	    end
+	  else
+	    begin
+	      close_in ch;
+	      raise (Failure (Printf.sprintf "Draft file has incorrect header: %s" l))
+	    end
+      | _ -> raise BadCommandForm);
+  ac "commitdraft" "commitdraft <draftfile> <newtxfile>" "Form a transaction to publish a commitment for a draft file."
+    (fun oc al ->
+      match al with
+      | [f;g] ->
+	  let ch = open_in f in
+	  let l = input_token ch in
+	  if l = "Theory" then
+	    let (thyspec,nonce,gamma,_,_) = input_theoryspec ch in
+	    begin
+	      match Checking.check_theoryspec thyspec with
+	      | None -> raise (Failure "Theory spec does not check.\n")
+	      | Some(thy,sg) ->
+		  match hashtheory thy with
+		  | None ->
+		      Printf.fprintf oc "Theory is empty. It is correct but an empty theory is not allowed to be published.\n"
+		  | Some(thyh) ->
+		      match get_bestblock_print_warnings oc with
+		      | None -> Printf.fprintf oc "No blocks yet\n"
+		      | Some(h,lbk,ltx) ->
+			  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+			  let (_,_,lr,tr,_) = Hashtbl.find validheadervals (lbk,ltx) in
+			  try
+			    let tht = lookup_thytree tr in
+			    let _ = ottree_lookup tht (Some(thyh)) in
+			    Printf.fprintf oc "Theory %s has already been published.\n" (hashval_hexstring thyh)
+			  with Not_found ->
+			    match nonce with
+			    | None -> Printf.fprintf oc "No nonce is given. Call addnonce to add one automatically.\n"
+			    | Some(h) ->
+				match gamma with
+				| None -> Printf.fprintf oc "No publisher address. Call addpublisheraddress to add one.\n"
+				| Some(gamma) ->
+				    if payaddr_p gamma then
+				      let beta = hashval_pub_addr (hashpair (hashaddr gamma) (hashpair h thyh)) in
+				      begin
+					try
+					  let (aid,bday,obl) = find_marker_at_address (CHash(lr)) beta in
+					  if Int64.add bday 3L <= blkh then (** this means 4 confirmations **)
+					    Printf.fprintf oc "A commitment marker for this draft has already been published and matured.\nThe draft can be published with the publishdraft command.\n"
+					  else
+					    Printf.fprintf oc "A commitment marker for this draft has already been published and will mature after %Ld more blocks.\nAfter that the draft can be published with the publishdraft command.\n" (Int64.sub (Int64.add bday 3L) blkh )
+					with Not_found ->
+					  try
+					    let (alpha,(aid,_,_,_),v) = find_spendable_utxo oc lr blkh !Config.defaulttxfee in
+					    let txinl = [(alpha,aid)] in
+					    let txoutl =
+					      if v >= Int64.mul 2L !Config.defaulttxfee then
+						[(alpha,(None,Currency(Int64.sub v !Config.defaulttxfee)));(beta,(None,Marker))]
+					      else
+						[(beta,(None,Marker))]
+					    in
+					    let stau = ((txinl,txoutl),([],[])) in
+					    let c2 = open_out_bin g in
+					    begin
+					      try
+						Commands.signtxc oc lr stau c2 None;
+						close_out c2;
+						Printf.fprintf oc "The commitment transaction (to publish the marker) was created.\nTo inspect it:\n> decodetxfile %s\nTo validate it:\n> validatetxfile %s\nTo send it:\n> sendtxfile %s\n" g g g
+					      with e ->
+						close_out c2;
+						raise e
+					    end
+					  with Not_found ->
+					    Printf.fprintf oc "Cannot find a spendable utxo to use to publish the marker.\n"
+				      end
+				else
+				  raise (Failure (Printf.sprintf "Publisher address %s is not a pay address." (Cryptocurr.addr_daliladdrstr gamma)))
+	    end
+	  else
+	    begin
+	      close_in ch;
+	      raise (Failure (Printf.sprintf "Draft file has incorrect header: %s" l))
+	    end
+      | _ -> raise BadCommandForm);
+  ac "publishdraft" "publishdraft <draftfile> <newtxfile>" "Form a transaction to publish a committed draft file."
+    (fun oc al ->
+      match al with
+      | [f;g] ->
+	  let ch = open_in f in
+	  let l = input_token ch in
+	  if l = "Theory" then
+	    let (thyspec,nonce,gamma,propownsh,proprightsh) = input_theoryspec ch in
+	    begin
+	      match Checking.check_theoryspec thyspec with
+	      | None -> raise (Failure "Theory spec does not check.\n")
+	      | Some(thy,sg) ->
+		  match hashtheory thy with
+		  | None ->
+		      Printf.fprintf oc "Theory is empty. It is correct but an empty theory is not allowed to be published.\n"
+		  | Some(thyh) ->
+		      match get_bestblock_print_warnings oc with
+		      | None -> Printf.fprintf oc "No blocks yet\n"
+		      | Some(h,lbk,ltx) ->
+			  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+			  let (_,_,lr,tr,_) = Hashtbl.find validheadervals (lbk,ltx) in
+			  try
+			    let tht = lookup_thytree tr in
+			    let _ = ottree_lookup tht (Some(thyh)) in
+			    Printf.fprintf oc "Theory %s has already been published.\n" (hashval_hexstring thyh)
+			  with Not_found ->
+			    match nonce with
+			    | None -> Printf.fprintf oc "No nonce is given. Call addnonce to add one automatically.\n"
+			    | Some(h) ->
+				match gamma with
+				| None -> Printf.fprintf oc "No publisher address. Call addpublisheraddress to add one.\n"
+				| Some(gamma) ->
+				    if payaddr_p gamma then
+				      let gammap = let (i,x0,x1,x2,x3,x4) = gamma in (i = 1,x0,x1,x2,x3,x4) in
+				      let beta = hashval_pub_addr (hashpair (hashaddr gamma) (hashpair h thyh)) in
+				      begin
+					try
+					  let (markerid,bday,obl) = find_marker_at_address (CHash(lr)) beta in
+					  if Int64.add bday 3L <= blkh then
+					    begin
+					      let b = theoryspec_burncost thyspec in
+					      try
+						let (alpha,(aid,_,_,_),v) = find_spendable_utxo oc lr blkh (Int64.add b !Config.defaulttxfee) in
+						let txinl = [(alpha,aid);(beta,markerid)] in
+						let change = Int64.sub v (Int64.add b !Config.defaulttxfee) in
+						let delta = hashval_pub_addr thyh in
+						let txoutl = 
+						  if change >= !Config.defaulttxfee then
+						    [(alpha,(None,Currency(change)));(delta,(None,TheoryPublication(gammap,h,thyspec)))]
+						  else
+						    [(delta,(None,TheoryPublication(gammap,h,thyspec)))]
+						in
+						let txoutlr = ref txoutl in
+						let (_,kl) = thy in
+						List.iter
+						  (fun h ->
+						    let gamma1p =
+						      try
+							Hashtbl.find propownsh h
+						      with Not_found -> gammap
+						    in
+						    let (gamma2p,rp) =
+						      try
+							Hashtbl.find proprightsh h
+						      with Not_found -> (gamma1p,Some(0L))
+						    in
+						    let h2 = hashtag (hashopair2 (Some(thyh)) h) 33l in
+						    txoutlr := (hashval_term_addr h2,(Some(gamma1p,0L,false),OwnsProp(h2,gamma2p,rp)))::!txoutlr)
+						  kl;
+						let stau = ((txinl,!txoutlr),([],[])) in
+						let c2 = open_out_bin g in
+						begin
+						  try
+						    Commands.signtxc oc lr stau c2 None;
+						    close_out c2;
+						    Printf.fprintf oc "The transaction to publish the theory was created.\nTo inspect it:\n> decodetxfile %s\nTo validate it:\n> validatetxfile %s\nTo send it:\n> sendtxfile %s\n" g g g
+						  with e ->
+						    close_out c2;
+						    raise e
+						end
+					      with Not_found ->
+						Printf.fprintf oc "Cannot find a spendable utxo to use to publish the marker.\n"
+					    end
+					  else
+					    Printf.fprintf oc "The commitment will mature after %Ld more blocks.\nThe draft can only be published after the commitment matures.\n" (Int64.sub (Int64.add bday 3L) blkh)
+					with Not_found ->
+					  Printf.fprintf oc "No commitment marker for this draft found.\nUse commitdraft to create and publish a commitment marker.\n"
+				      end
+				    else
+				      raise (Failure (Printf.sprintf "Publisher address %s is not a pay address." (Cryptocurr.addr_daliladdrstr gamma)))
+	    end
+	  else
+	    begin
+	      close_in ch;
+	      raise (Failure (Printf.sprintf "Draft file has incorrect header: %s" l))
+	    end
+      | _ -> raise BadCommandForm);
   ac "missing" "missing" "Report current list of missing headers/deltas"
     (fun oc al ->
       Printf.fprintf oc "%d missing headers\n" (List.length !missingheaders);
