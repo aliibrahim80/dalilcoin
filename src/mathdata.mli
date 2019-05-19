@@ -146,6 +146,8 @@ val import_signatures : hashval option -> stree -> hashval list -> gsign -> hash
 val print_trm : int -> stp list -> gsign -> trm -> stp list -> unit
 val print_tp : int -> stp -> int -> unit
 
+val invert_neg_prop : trm -> trm
+
 val json_theoryspec : theoryspec -> jsonval
 val json_signaspec : hashval option -> signaspec -> jsonval
 val json_doc : hashval option -> doc -> jsonval
