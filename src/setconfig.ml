@@ -51,7 +51,8 @@ let int64configvars = [
 ("reward_lock_absolute",fun x -> Config.reward_lock_absolute := Some(x))
 ];;
 let cantsoffraenksconfigvars = [
-("minrelayfee",fun x -> Config.minrelayfee := x)
+("minrelayfee",fun x -> Config.minrelayfee := x);
+("defaulttxfee",fun x -> Config.defaulttxfee := x)
 ];;
 let stringoptionconfigvars = [
 ("ip",fun x -> Config.ip := x);

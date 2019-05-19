@@ -42,6 +42,7 @@ val seed : string ref
 val randomseed : string option ref
 val minconnstostake : int ref
 val minrelayfee : int64 ref
+val defaulttxfee : int64 ref
 val extraindex : bool ref
 val offlinestakerewardsdest : bool ref
 val offlinestakerewardslock : string option ref
