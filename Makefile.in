@@ -190,7 +190,7 @@ bin/commands.cmx: src/commands.ml bin/commands.cmi bin/config.cmx bin/ser.cmx bi
 	$(OCAMLOPT) $(OCAMLOPTARGS) -I bin -I +threads -o bin/commands.cmx -c src/commands.ml
 
 bin/inputdraft.cmx: src/inputdraft.ml bin/inputdraft.cmi bin/hash.cmx bin/logic.cmx bin/cryptocurr.cmx
-	$(OCAMLOPT) $(OCAMLOPTARGS) -I bin -I +threads -o bin/inputdraft.cmx -c src/inputdraft.ml
+	$(OCAMLOPT) $(OCAMLOPTARGS) -I bin -o bin/inputdraft.cmx -c src/inputdraft.ml
 
 bin/staking.cmx: src/staking.ml bin/staking.cmi bin/config.cmx bin/ser.cmx bin/hash.cmx bin/signat.cmx bin/net.cmx bin/ctre.cmx bin/secp256k1.cmx bin/cryptocurr.cmx bin/block.cmx bin/blocktree.cmx bin/json.cmx
 	$(OCAMLOPT) $(OCAMLOPTARGS) -I bin -I +threads -o bin/staking.cmx -c src/staking.ml
@@ -286,7 +286,7 @@ bin/commands.cmo: src/commands.ml bin/commands.cmi bin/config.cmo bin/ser.cmo bi
 	$(OCAMLC) -I bin -I +threads -o bin/commands.cmo -c src/commands.ml
 
 bin/inputdraft.cmo: src/inputdraft.ml bin/inputdraft.cmi bin/hash.cmo bin/logic.cmo bin/cryptocurr.cmo
-	$(OCAMLOPT) $(OCAMLOPTARGS) -I bin -I +threads -o bin/inputdraft.cmo -c src/inputdraft.ml
+	$(OCAMLC) -I bin -o bin/inputdraft.cmo -c src/inputdraft.ml
 
 bin/staking.cmo: src/staking.ml bin/staking.cmi bin/config.cmo bin/ser.cmo bin/hash.cmo bin/signat.cmo bin/net.cmo bin/ctre.cmo bin/secp256k1.cmo bin/cryptocurr.cmo bin/block.cmo bin/blocktree.cmo bin/json.cmo
 	$(OCAMLC) -I bin -I +threads -o bin/staking.cmo -c src/staking.ml
