@@ -28,6 +28,7 @@ val walletwatchaddrs_offlinekey : addr list ref
 val walletwatchaddrs_offlinekey_fresh : addr list ref
 val stakingassets : (p2pkhaddr * hashval * int64 * obligation * int64) list ref
 
+val get_spendable_assets_in_ledger : out_channel -> hashval -> int64 -> (addr * asset * int64) list
 val get_cants_balances_in_ledger : out_channel -> hashval -> int64 -> int64 * int64 * int64 * int64 * int64 * int64 * int64 * int64
 
 val load_txpool : unit -> unit
