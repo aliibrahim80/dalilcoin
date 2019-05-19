@@ -9,6 +9,8 @@ open Mathdata
 
 exception RedexMax
 
+val beta_eta_delta_norm : trm -> gsign -> trm option
+
 val check_theoryspec : theoryspec -> (theory * gsign) option
 
 val check_signaspec :
