@@ -419,9 +419,9 @@ let initialize_dlc_from_ltc sout lblkh =
 			  begin
 			    try
 			      let bd = DbBlockDelta.dbget dnxt in
-			      process_block sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt ((bhd,bhs),bd) None None None None 1L !genesisstakemod !genesistarget lmedtm burned
+			      process_block sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt ((bhd,bhs),bd) None None None None 1L !genesisstakemod !genesistarget lmedtm burned;
 			    with Not_found ->
-			      process_header sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt (bhd,bhs) 1L !genesisstakemod !genesistarget lmedtm burned
+			      process_header sout (Hashtbl.mem recentheaders dnxt) false false (lbh,ltx) dnxt (bhd,bhs) 1L !genesisstakemod !genesistarget lmedtm burned;
 			  end
 			else
 			  begin
@@ -1035,10 +1035,10 @@ Hashtbl.add msgtype_handler STx
 			let (_,tmstmp,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
 			if tx_valid tmstmp tau then
 			  let unsupportederror alpha k = log_string (Printf.sprintf "Could not find asset %s at address %s in ledger %s; throwing out tx %s\n" (hashval_hexstring k) (Cryptocurr.addr_daliladdrstr alpha) (hashval_hexstring lr) (hashval_hexstring h)) in
-			  let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
+			  let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true true false tauin (CHash(lr)) unsupportederror) in
 			  if tx_signatures_valid nblkh tmstmp al stau then (*** accept it if it will be valid in the next block ***)
 			    begin
-			      let nfee = ctree_supports_tx true false (lookup_thytree tr) (lookup_sigtree sr) nblkh tau (CHash(lr)) in
+			      let nfee = ctree_supports_tx true true false (lookup_thytree tr) (lookup_sigtree sr) nblkh tau (CHash(lr)) in
 			      let fee = Int64.sub 0L nfee in
 			      if fee >= !Config.minrelayfee then
 				begin
