@@ -43,7 +43,12 @@ type ctree =
 val ctree_hashroot : ctree -> hashval
 val octree_hashroot : ctree option -> hashval option
 
-val ctree_lookup_asset : bool -> bool -> hashval -> ctree -> bool list -> asset option
+val ctree_lookup_asset : bool -> bool -> bool -> hashval -> ctree -> bool list -> asset option
+val hlist_filter_assets_gen : bool -> bool -> (asset -> bool) -> hlist -> asset list
+val hlist_lookup_asset_gen : bool -> bool -> bool -> (asset -> bool) -> hlist -> asset option
+val hlist_lookup_obj_owner : bool -> bool -> bool -> hashval -> hlist -> (payaddr * int64 option) option
+val hlist_lookup_prop_owner : bool -> bool -> bool -> hashval -> hlist -> (payaddr * int64 option) option
+val hlist_lookup_neg_prop_owner : bool -> bool -> bool -> hlist -> bool
 
 exception NotSupported
 exception InsufficientInformation
@@ -104,9 +109,9 @@ val strip_bitseq_false0 : bool list list -> bool list list
 
 val ctree_lookup_addr_assets : bool -> bool -> ctree -> bool list -> hlist
 
-val ctree_lookup_input_assets : bool -> bool -> addr_assetid list -> ctree -> (addr -> hashval -> unit) -> (addr * asset) list
-val ctree_supports_tx : bool -> bool -> ttree option -> stree option -> int64 -> tx -> ctree -> int64
-val ctree_supports_tx_2 : bool -> bool -> ttree option -> stree option -> int64 -> tx -> (addr * asset) list -> asset list -> ctree -> int64
+val ctree_lookup_input_assets : bool -> bool -> bool -> addr_assetid list -> ctree -> (addr -> hashval -> unit) -> (addr * asset) list
+val ctree_supports_tx : bool -> bool -> bool -> ttree option -> stree option -> int64 -> tx -> ctree -> int64
+val ctree_supports_tx_2 : bool -> bool -> bool -> ttree option -> stree option -> int64 -> tx -> (addr * asset) list -> asset list -> ctree -> int64
 
 exception MaxAssetsAtAddress
 

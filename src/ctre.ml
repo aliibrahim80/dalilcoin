@@ -826,63 +826,87 @@ let save_nehlist_elements hl alpha =
   raises Not_found if exp was true but a hash was not in the database;
   raises GettingRemoteData if exp and req were true, a hash was not in the database and it is being requested from peers
  **)
-let rec hlist_lookup_asset_gen exp req p hl =
+let rec hlist_filter_assets_gen exp req p hl =
   match hl with
-  | HCons(a,hr) when p a -> Some(a)
+  | HCons(a,hr) when p a -> a::hlist_filter_assets_gen exp req p hr
+  | HCons(a,hr) -> hlist_filter_assets_gen exp req p hr
   | HConsH(h,hr) ->
       if exp then
 	let a = if req then get_asset h else DbAsset.dbget h in
-	hlist_lookup_asset_gen exp req p (HCons(a,hr))
+	hlist_filter_assets_gen exp req p (HCons(a,hr))
       else
-	hlist_lookup_asset_gen exp req p hr (* Skip this one and search for another asset satisfying p. Note: This means that if the asset with id h satisfies p, we will miss it. This is even the case when p a means assetid a = h *)
+	raise (Failure (Printf.sprintf "Missing asset %s" (hashval_hexstring h)))
   | HHash(h,l) ->
       if exp then
 	begin
 	  let (h1,h2) = if req then get_hcons_element h else DbHConsElt.dbget h in
 	  match h2 with
-	  | Some(h2,l2) -> hlist_lookup_asset_gen exp req p (HConsH(h1,HHash(h2,l2)))
-	  | None -> hlist_lookup_asset_gen exp req p (HConsH(h1,HNil))
+	  | Some(h2,l2) -> hlist_filter_assets_gen exp req p (HConsH(h1,HHash(h2,l2)))
+	  | None -> hlist_filter_assets_gen exp req p (HConsH(h1,HNil))
 	end
       else
 	raise (Failure "could not find all assets at address")
-  | HCons(a,hr) -> hlist_lookup_asset_gen exp req p hr
+  | _ -> []
+
+let rec hlist_lookup_asset_gen strct exp req p hl =
+  match hl with
+  | HCons(a,hr) when p a -> Some(a)
+  | HConsH(h,hr) ->
+      if exp then
+	let a = if req then get_asset h else DbAsset.dbget h in
+	hlist_lookup_asset_gen strct exp req p (HCons(a,hr))
+      else if strct then
+	raise (Failure (Printf.sprintf "Missing asset %s" (hashval_hexstring h))) (* raise exception if we cannot load the asset so it does not appear no such asset is there *)
+      else
+	hlist_lookup_asset_gen strct exp req p hr (* Skip this one and search for another asset satisfying p. Note: This means that if the asset with id h satisfies p, we will miss it. This is even the case when p a means assetid a = h *)
+  | HHash(h,l) ->
+      if exp then
+	begin
+	  let (h1,h2) = if req then get_hcons_element h else DbHConsElt.dbget h in
+	  match h2 with
+	  | Some(h2,l2) -> hlist_lookup_asset_gen strct exp req p (HConsH(h1,HHash(h2,l2)))
+	  | None -> hlist_lookup_asset_gen strct exp req p (HConsH(h1,HNil))
+	end
+      else
+	raise (Failure "could not find all assets at address")
+  | HCons(a,hr) -> hlist_lookup_asset_gen strct exp req p hr
   | _ -> None
 
-let nehlist_lookup_asset_gen exp req p hl = hlist_lookup_asset_gen exp req p (nehlist_hlist hl)
+let nehlist_lookup_asset_gen strct exp req p hl = hlist_lookup_asset_gen strct exp req p (nehlist_hlist hl)
 
-let hlist_lookup_asset exp req k hl = hlist_lookup_asset_gen exp req (fun a -> assetid a = k) hl
-let nehlist_lookup_asset exp req k hl = nehlist_lookup_asset_gen exp req (fun a -> assetid a = k) hl
+let hlist_lookup_asset exp req k hl = hlist_lookup_asset_gen true exp req (fun a -> assetid a = k) hl
+let nehlist_lookup_asset exp req k hl = nehlist_lookup_asset_gen true exp req (fun a -> assetid a = k) hl
 
-let hlist_lookup_marker exp req hl = hlist_lookup_asset_gen exp req (fun a -> assetpre a = Marker) hl
-let nehlist_lookup_marker exp req hl = nehlist_lookup_asset_gen exp req (fun a -> assetpre a = Marker) hl
+let hlist_lookup_marker exp req hl = hlist_lookup_asset_gen true exp req (fun a -> assetpre a = Marker) hl
+let nehlist_lookup_marker exp req hl = nehlist_lookup_asset_gen true exp req (fun a -> assetpre a = Marker) hl
 
-let hlist_lookup_obj_owner exp req oid hl =
-  match hlist_lookup_asset_gen exp req (fun a -> match a with (_,_,_,OwnsObj(oid2,_,_)) when oid = oid2 -> true | _ -> false) hl with
+let hlist_lookup_obj_owner strct exp req oid hl =
+  match hlist_lookup_asset_gen strct exp req (fun a -> match a with (_,_,_,OwnsObj(oid2,_,_)) when oid = oid2 -> true | _ -> false) hl with
   | Some(_,_,_,OwnsObj(_,beta,r)) -> Some(beta,r)
   | _ -> None
 
-let nehlist_lookup_obj_owner exp req oid hl =
-  match nehlist_lookup_asset_gen exp req (fun a -> match a with (_,_,_,OwnsObj(oid2,_,_)) when oid = oid2 -> true | _ -> false) hl with
+let nehlist_lookup_obj_owner strct exp req oid hl =
+  match nehlist_lookup_asset_gen strct exp req (fun a -> match a with (_,_,_,OwnsObj(oid2,_,_)) when oid = oid2 -> true | _ -> false) hl with
   | Some(_,_,_,OwnsObj(_,beta,r)) -> Some(beta,r)
   | _ -> None
 
-let rec hlist_lookup_prop_owner exp req pid hl =
-  match hlist_lookup_asset_gen exp req (fun a -> match a with (_,_,_,OwnsProp(pid2,_,_)) when pid = pid2 -> true | _ -> false) hl with
+let rec hlist_lookup_prop_owner strct exp req pid hl =
+  match hlist_lookup_asset_gen strct exp req (fun a -> match a with (_,_,_,OwnsProp(pid2,_,_)) when pid = pid2 -> true | _ -> false) hl with
   | Some(_,_,_,OwnsProp(_,beta,r)) -> Some(beta,r)
   | _ -> None
 
-let nehlist_lookup_prop_owner exp req pid hl =
-  match nehlist_lookup_asset_gen exp req (fun a -> match a with (_,_,_,OwnsProp(pid2,_,_)) when pid = pid2 -> true | _ -> false) hl with
+let nehlist_lookup_prop_owner strct exp req pid hl =
+  match nehlist_lookup_asset_gen strct exp req (fun a -> match a with (_,_,_,OwnsProp(pid2,_,_)) when pid = pid2 -> true | _ -> false) hl with
   | Some(_,_,_,OwnsProp(_,beta,r)) -> Some(beta,r)
   | _ -> None
 
-let hlist_lookup_neg_prop_owner exp req hl =
-  match hlist_lookup_asset_gen exp req (fun a -> assetpre a = OwnsNegProp) hl with
+let hlist_lookup_neg_prop_owner strct exp req hl =
+  match hlist_lookup_asset_gen strct exp req (fun a -> assetpre a = OwnsNegProp) hl with
   | Some(_) -> true
   | None -> false
 
-let nehlist_lookup_neg_prop_owner exp req hl =
-  match nehlist_lookup_asset_gen exp req (fun a -> assetpre a = OwnsNegProp) hl with
+let nehlist_lookup_neg_prop_owner strct exp req hl =
+  match nehlist_lookup_asset_gen strct exp req (fun a -> assetpre a = OwnsNegProp) hl with
   | Some(_) -> true
   | None -> false
 
@@ -1502,42 +1526,42 @@ let rec ctree_supports_asset exp req a tr bl =
 	| [] -> raise (Failure "Level problem") (*** should never happen ***)
       end
 
-let rec ctree_lookup_asset_gen exp req p tr bl =
+let rec ctree_lookup_asset_gen strct exp req p tr bl =
   match tr with
   | CLeaf(br,hl) when br = bl ->
-      nehlist_lookup_asset_gen exp req p hl
+      nehlist_lookup_asset_gen strct exp req p hl
   | CLeaf(_,_) ->
       None
   | CHash(h) ->
       if exp then
 	if req then
-	  ctree_lookup_asset_gen exp req p (get_ctree_element h) bl
+	  ctree_lookup_asset_gen strct exp req p (get_ctree_element h) bl
 	else
-	  ctree_lookup_asset_gen exp req p (DbCTreeElt.dbget h) bl
+	  ctree_lookup_asset_gen strct exp req p (DbCTreeElt.dbget h) bl
       else
 	None
   | CLeft(trl) ->
       begin
 	match bl with
-	| (false::br) -> ctree_lookup_asset_gen exp req p trl br
+	| (false::br) -> ctree_lookup_asset_gen strct exp req p trl br
 	| _ -> None
       end
   | CRight(trr) ->
       begin
 	match bl with
-	| (true::br) -> ctree_lookup_asset_gen exp req p trr br
+	| (true::br) -> ctree_lookup_asset_gen strct exp req p trr br
 	| _ -> None
       end
   | CBin(trl,trr) ->
       begin
 	match bl with
-	| (false::br) -> ctree_lookup_asset_gen exp req p trl br
-	| (true::br) -> ctree_lookup_asset_gen exp req p trr br
+	| (false::br) -> ctree_lookup_asset_gen strct exp req p trl br
+	| (true::br) -> ctree_lookup_asset_gen strct exp req p trr br
 	| [] -> raise (Failure "Level problem") (*** should never happen ***)
       end
 
-let ctree_lookup_asset exp req k tr bl = ctree_lookup_asset_gen exp req (fun a -> assetid a = k) tr bl
-let ctree_lookup_marker exp req tr bl = ctree_lookup_asset_gen exp req (fun a -> assetpre a = Marker) tr bl
+let ctree_lookup_asset strct exp req k tr bl = ctree_lookup_asset_gen strct exp req (fun a -> assetid a = k) tr bl
+let ctree_lookup_marker strct exp req tr bl = ctree_lookup_asset_gen strct exp req (fun a -> assetpre a = Marker) tr bl
 
 exception NotSupported
 
@@ -1582,12 +1606,12 @@ let vmsg f =
 
 (*** exp is a boolean indicating whether expanding hash abbrevs should be tried ***)
 (*** req is a boolean indicating whether or not missing data should be requested of peers ***)
-let rec ctree_lookup_input_assets exp req inpl tr nsf =
+let rec ctree_lookup_input_assets strct exp req inpl tr nsf =
   match inpl with
   | [] -> []
   | (alpha,k)::inpr ->
-      match ctree_lookup_asset exp req k tr (addr_bitseq alpha) with
-      | Some(a) -> (alpha,a)::ctree_lookup_input_assets exp req inpr tr nsf
+      match ctree_lookup_asset strct exp req k tr (addr_bitseq alpha) with
+      | Some(a) -> (alpha,a)::ctree_lookup_input_assets strct exp req inpr tr nsf
       | None ->
 	  nsf alpha k;
 	  raise NotSupported
@@ -1605,7 +1629,7 @@ let rec ctree_supports_output_addrs exp req outpl tr =
 
 (*** return the fee (negative) or reward (positive) if supports tx, otherwise raise NotSupported ***)
 (*** this does not request remote data and does not allow local expansions of hash abbrevs ***)
-let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
+let ctree_supports_tx_2 strct exp req tht sigt blkh tx aal al tr =
   let (inpl,outpl) = tx in
   (*** Each output address must be supported. ***)
   ctree_supports_output_addrs exp req outpl tr;
@@ -1625,11 +1649,11 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
   (*** If an object or prop is included in a signaspec, then it must be royalty-free to use. ***)
   List.iter (fun (alphapure,alphathy) ->
     let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq (termaddr_addr (hashval_md160 alphapure))) in
-    match hlist_lookup_obj_owner exp req alphapure hl with
+    match hlist_lookup_obj_owner strct exp req alphapure hl with
     | Some(_,Some(r)) when r = 0L ->
 	begin
 	  let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq (termaddr_addr (hashval_md160 alphathy))) in
-	  match hlist_lookup_obj_owner exp req alphathy hl with
+	  match hlist_lookup_obj_owner strct exp req alphathy hl with
 	  | Some(_,Some(r)) when r = 0L -> ()
 	  | _ -> raise NotSupported
 	end
@@ -1638,11 +1662,11 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
     susesobjs;
   List.iter (fun (alphapure,alphathy) ->
     let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq (termaddr_addr (hashval_md160 alphapure))) in
-    match hlist_lookup_prop_owner exp req alphapure hl with
+    match hlist_lookup_prop_owner strct exp req alphapure hl with
     | Some(_,Some(r)) when r = 0L ->
 	begin
 	  let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq (termaddr_addr (hashval_md160 alphathy))) in
-	  match hlist_lookup_prop_owner exp req alphathy hl with
+	  match hlist_lookup_prop_owner strct exp req alphathy hl with
 	  | Some(_,Some(r)) when r = 0L -> ()
 	  | _ -> raise NotSupported
 	end
@@ -1666,7 +1690,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
     let alpha = hashval_md160 oid in
     let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq (termaddr_addr alpha)) in
     if hlist_full_approx exp req hl &&
-      ctree_rights_balanced tr (hlist_lookup_obj_owner exp req oid hl)
+      ctree_rights_balanced tr (hlist_lookup_obj_owner strct exp req oid hl)
 	(Int64.of_int (count_rights_used usesobjs oid))
 	(rights_out_obj outpl oid)
 	(count_obj_rights al oid)
@@ -1683,7 +1707,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
     let alpha = hashval_md160 pid in
     let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq (termaddr_addr alpha)) in
     if hlist_full_approx exp req hl &&
-      ctree_rights_balanced tr (hlist_lookup_prop_owner exp req pid hl)
+      ctree_rights_balanced tr (hlist_lookup_prop_owner strct exp req pid hl)
 	(Int64.of_int (count_rights_used usesprops pid))
 	(rights_out_prop outpl pid)
 	(count_prop_rights al pid)
@@ -1756,7 +1780,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
 		let oid = hashtag (hashopair2 th (hashpair h (hashtp a))) 32l in
 		let alpha = hashval_term_addr oid in
 		let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq alpha) in
-		match hlist_lookup_obj_owner exp req oid hl with
+		match hlist_lookup_obj_owner strct exp req oid hl with
 		| Some(beta,r) -> true
 		| None -> false
 	      in
@@ -1764,7 +1788,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
 		let pid = hashtag (hashopair2 th k) 33l in
 		let alpha = hashval_term_addr pid in
 		let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq alpha) in
-		match hlist_lookup_prop_owner exp req pid hl with (*** A proposition has been proven in a theory iff it has an owner. ***)
+		match hlist_lookup_prop_owner strct exp req pid hl with (*** A proposition has been proven in a theory iff it has an owner. ***)
 		| Some(beta,r) -> true
 		| None -> false
 	      in
@@ -1810,7 +1834,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
 		let oid = hashtag (hashopair2 th (hashpair h (hashtp a))) 32l in
 		let alpha = hashval_term_addr oid in
 		let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq alpha) in
-		match hlist_lookup_obj_owner exp req oid hl with
+		match hlist_lookup_obj_owner strct exp req oid hl with
 		| Some(beta,r) -> true
 		| None -> false
 	      in
@@ -1818,7 +1842,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
 		let pid = hashtag (hashopair2 th k) 33l in
 		let alpha = hashval_term_addr pid in
 		let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq alpha) in
-		match hlist_lookup_prop_owner exp req pid hl with (*** A proposition has been proven in a theory iff it has an owner. ***)
+		match hlist_lookup_prop_owner strct exp req pid hl with (*** A proposition has been proven in a theory iff it has an owner. ***)
 		| Some(beta,r) -> true
 		| None -> false
 	      in
@@ -1963,7 +1987,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
 		let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq alpha) in
 		begin
 		  ownobjclaims := oid::!ownobjclaims;
-		  match hlist_lookup_obj_owner exp req oid hl with
+		  match hlist_lookup_obj_owner strct exp req oid hl with
 		  | Some(beta2,r2) ->
 		      vmsg (fun oc -> Printf.fprintf oc "Object %s already has owner %s.\n" (hashval_hexstring oid) (Cryptocurr.addr_daliladdrstr (payaddr_addr beta2)));
 		      raise NotSupported (*** already owned ***)
@@ -1999,7 +2023,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
 		let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq alpha) in
 		begin
 		  ownpropclaims := pid::!ownpropclaims;
-		  match hlist_lookup_prop_owner exp req pid hl with
+		  match hlist_lookup_prop_owner strct exp req pid hl with
 		  | Some(beta2,r2) ->
 		      vmsg (fun oc -> Printf.fprintf oc "Proposition %s already has owner %s.\n" (hashval_hexstring pid) (Cryptocurr.addr_daliladdrstr (payaddr_addr beta2)));
 		      raise NotSupported (*** already owned ***)
@@ -2023,7 +2047,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
 		let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq alpha) in
 		begin
 		  ownnegpropclaims := alpha::!ownnegpropclaims;
-		  if hlist_lookup_neg_prop_owner exp req hl then
+		  if hlist_lookup_neg_prop_owner strct exp req hl then
 		    begin
 		      vmsg (fun oc -> Printf.fprintf oc "NegProp at %s already has owner.\n" (Cryptocurr.addr_daliladdrstr alpha));
 		      raise NotSupported (*** already owned ***)
@@ -2046,7 +2070,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
       let ensureowned oid =
 	let alpha = hashval_term_addr oid in
 	let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq alpha) in
-	match hlist_lookup_obj_owner exp req oid hl with
+	match hlist_lookup_obj_owner strct exp req oid hl with
 	| Some(beta2,r2) -> () (*** already owned ***)
 	| None -> (*** Since alpha was listed in full_needed we know alpha really isn't owned here ***)
 	    (*** ensure that it will be owned after the tx ***)
@@ -2068,7 +2092,7 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
       let ensureowned pid =
 	let alpha = hashval_term_addr pid in
 	let hl = ctree_lookup_addr_assets exp req tr (addr_bitseq alpha) in
-	match hlist_lookup_prop_owner exp req pid hl with
+	match hlist_lookup_prop_owner strct exp req pid hl with
 	| Some(beta2,r2) -> () (*** already owned ***)
 	| None -> (*** Since alpha was listed in full_needed we know alpha really isn't owned here ***)
 	    (*** ensure that it will be owned after the tx ***)
@@ -2125,11 +2149,11 @@ let ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr =
   (*** finally, return the number of currency units created or destroyed ***)
   Int64.sub (out_cost outpl) (asset_value_sum blkh al)
 
-let ctree_supports_tx exp req tht sigt blkh tx tr =
+let ctree_supports_tx strct exp req tht sigt blkh tx tr =
   let (inpl,outpl) = tx in
-  let aal = ctree_lookup_input_assets exp req inpl tr (fun _ _ -> ()) in
+  let aal = ctree_lookup_input_assets strct exp req inpl tr (fun _ _ -> ()) in
   let al = List.map (fun (_,a) -> a) aal in
-  ctree_supports_tx_2 exp req tht sigt blkh tx aal al tr
+  ctree_supports_tx_2 strct exp req tht sigt blkh tx aal al tr
 
 let rec hlist_lub hl1 hl2 =
   match hl1 with
