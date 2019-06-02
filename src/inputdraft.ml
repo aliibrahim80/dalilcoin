@@ -4,6 +4,7 @@
 
 open Hash
 open Logic
+open Mathdata
 open Cryptocurr
 
 let whitespace_p c = c = ' ' || c = '\t' || c = '\r' || c = '\n';;
@@ -40,6 +41,20 @@ let input_token ch =
     ""
   with Exit ->
     Buffer.contents tokb;;
+
+let input_token_rev_list ch =
+  let rec input_token_rev_list_r acc =
+    let tok = input_token ch in
+    if tok = "]" then
+      acc
+    else
+      input_token_rev_list_r (tok::acc)
+  in
+  let stok = input_token ch in
+  if stok = "[" then
+    input_token_rev_list_r []
+  else
+    raise (Failure (Printf.sprintf "expected [ but found %s" stok))
 
 let pos x l =
   let rec posr x l i =
@@ -104,6 +119,13 @@ let rec input_trm bash trmh ch tvl vl =
     let x = input_token ch in
     let m2 = input_trm bash trmh ch (x::tvl) vl in
     Logic.TTpAll(m2)
+  else if l = "Prim" then
+    let x = input_token ch in
+    let i = int_of_string x in
+    if i >= 0 then
+      Logic.Prim(i)
+    else
+      raise (Failure "negative primitive?")
   else
     try
       let (_,m) = Hashtbl.find trmh l in
@@ -286,12 +308,62 @@ let input_theoryspec ch =
   | End_of_file -> close_in ch; (!thyspec,!nonce,!gamma,propownsh,proprightsh)
   | e -> close_in ch; raise e;;
 
-let input_signaspec ch =
+let ostree_lookup_fail sgt h =
+  try
+    ostree_lookup sgt h
+  with Not_found ->
+    raise (Failure (Printf.sprintf "Could not find signature %s\n" (match h with Some(h) -> hashval_hexstring h | None -> "Empty")))
+
+let assoc_signa sgt sdone paramh trmh proph sg tmnl knnl =
+  let tmnlr = ref tmnl in
+  let knnlr = ref knnl in
+  let rec assoc_signa_r sg =
+    let (isl,(tml,knl)) = sg in
+    List.iter
+      (fun h ->
+	if not (Hashtbl.mem sdone h) then
+	  begin
+	    Hashtbl.add sdone h ();
+	    let (_,sg2) = ostree_lookup_fail sgt (Some(h)) in
+	    assoc_signa_r sg2
+	  end)
+      (List.rev isl);
+    List.iter
+      (fun ((h,a),_) ->
+	match !tmnlr with
+	| nm::nr ->
+	    Hashtbl.add trmh nm (a,Logic.TmH(h));
+	    Hashtbl.add paramh nm (a,h);
+	    tmnlr := nr
+	| [] -> raise (Failure "insufficient obj names given with import"))
+      (List.rev tml);
+    List.iter
+      (fun (h,p) ->
+	match !knnlr with
+	| nm::nr ->
+	    Hashtbl.add proph nm h;
+	    knnlr := nr
+	| [] -> raise (Failure "insufficient prop names given with import"))
+      (List.rev knl);
+  in
+  assoc_signa_r sg;
+  begin
+    match (!tmnlr,!knnlr) with
+    | (nm1::_,nm2::_) -> raise (Failure (Printf.sprintf "too many names given starting at obj name %s and prop name %s" nm1 nm2))
+    | (nm1::_,[]) -> raise (Failure (Printf.sprintf "too many obj names given starting at %s" nm1))
+    | ([],nm2::_) -> raise (Failure (Printf.sprintf "too many prop names given starting at %s" nm2))
+    | _ -> ()
+  end
+
+let input_signaspec ch th sgt =
   let basec = ref 0 in
   let baseh : (string,int) Hashtbl.t = Hashtbl.create 10 in
+  let sdone : (hashval,unit) Hashtbl.t = Hashtbl.create 100 in
   let paramh : (string,Logic.stp * hashval) Hashtbl.t = Hashtbl.create 100 in
+  let objhrev : (hashval,string) Hashtbl.t = Hashtbl.create 100 in
   let trmh : (string,Logic.stp * Logic.trm) Hashtbl.t = Hashtbl.create 100 in
   let proph : (string,hashval) Hashtbl.t = Hashtbl.create 100 in
+  let prophrev : (hashval,string) Hashtbl.t = Hashtbl.create 100 in
   let signaspec = ref [] in
   let nonce = ref None in
   let gamma = ref None in
@@ -322,6 +394,12 @@ let input_signaspec ch =
 	pr l
 	  (fun () ->
 	    let h = hexstring_hashval (input_token ch) in
+	    let (th2,sg) = ostree_lookup_fail sgt (Some(h)) in
+	    if not (th = th2) then
+	      raise (Failure (Printf.sprintf "signature %s is for a different theory: %s" (hashval_hexstring h) (match th2 with None -> "Empty" | Some(k) -> hashval_hexstring k)));
+	    let rtokl1 = input_token_rev_list ch in
+	    let rtokl2 = input_token_rev_list ch in
+	    assoc_signa sgt sdone paramh trmh proph sg (List.rev rtokl1) (List.rev rtokl2);
 	    signaspec := Logic.Signasigna(h)::!signaspec)
       else if l = "Base" then
 	pr l
@@ -329,6 +407,15 @@ let input_signaspec ch =
 	    let nm = input_token ch in
 	    Hashtbl.add baseh nm !basec;
 	    incr basec)
+      else if l = "Let" then (** not part of the signature, but just to ease writing terms **)
+	pr l
+	  (fun () ->
+	    let nm = input_token ch in
+	    if not (input_token ch = ":") then raise (Failure "bad format for type of Let");
+	    let a = input_stp baseh ch [] in
+	    if not (input_token ch = ":=") then raise (Failure "bad format for term of Let");
+	    let m = input_trm baseh trmh ch [] [] in
+	    Hashtbl.add trmh nm (a,m))
       else if l = "Param" then
 	pr l
 	  (fun () ->
@@ -339,6 +426,7 @@ let input_signaspec ch =
 	    let a = input_stp baseh ch [] in
 	    Hashtbl.add trmh nm (a,Logic.TmH(h));
 	    Hashtbl.add paramh nm (a,h);
+	    Hashtbl.add objhrev h nm;
 	    signaspec := Logic.Signaparam(h,a)::!signaspec)
       else if l = "Def" then
 	pr l
@@ -350,7 +438,9 @@ let input_signaspec ch =
 	    let m = input_trm baseh trmh ch [] [] in
 	    match Checking.beta_eta_delta_norm m ([],[]) with
 	    | Some(m) ->
-		Hashtbl.add trmh nm (a,Logic.TmH(Mathdata.tm_hashroot m));
+		let h = Mathdata.tm_hashroot m in
+		Hashtbl.add trmh nm (a,Logic.TmH(h));
+		Hashtbl.add objhrev h nm;
 		signaspec := Logic.Signadef(a,m)::!signaspec
 	    | None -> raise (Failure (Printf.sprintf "trouble normalizing Def %s" nm)))
       else if l = "Known" then
@@ -361,31 +451,35 @@ let input_signaspec ch =
 	    let m = input_trm baseh trmh ch [] [] in
 	    match Checking.beta_eta_delta_norm m ([],[]) with
 	    | Some(m) ->
-		Hashtbl.add proph nm (Mathdata.tm_hashroot m);
+		let h = Mathdata.tm_hashroot m in
+		Hashtbl.add proph nm h;
+		Hashtbl.add prophrev h nm;
 		signaspec := Logic.Signaknown(m)::!signaspec
 	    | None -> raise (Failure (Printf.sprintf "trouble normalizing Axiom %s" nm)))
       else
 	raise (Failure (Printf.sprintf "Unknown signature spec item %s" l))
     done;
-    (!signaspec,!nonce,!gamma,paramh,proph)
+    (!signaspec,!nonce,!gamma,paramh,objhrev,proph,prophrev)
   with
-  | End_of_file -> close_in ch; (!signaspec,!nonce,!gamma,paramh,proph)
+  | End_of_file -> close_in ch; (!signaspec,!nonce,!gamma,paramh,objhrev,proph,prophrev)
   | e -> close_in ch; raise e;;
 
-let input_doc ch =
+let input_doc ch th sgt =
   let basec = ref 0 in
   let baseh : (string,int) Hashtbl.t = Hashtbl.create 10 in
+  let sdone : (hashval,unit) Hashtbl.t = Hashtbl.create 100 in
   let paramh : (string,Logic.stp * hashval) Hashtbl.t = Hashtbl.create 100 in
+  let objhrev : (hashval,string) Hashtbl.t = Hashtbl.create 100 in
   let defh : (string,hashval) Hashtbl.t = Hashtbl.create 100 in
   let trmh : (string,Logic.stp * Logic.trm) Hashtbl.t = Hashtbl.create 100 in
   let proph : (string,hashval) Hashtbl.t = Hashtbl.create 100 in
+  let prophrev : (hashval,string) Hashtbl.t = Hashtbl.create 100 in
   let conjh : (string,hashval) Hashtbl.t = Hashtbl.create 100 in
   let thmh : (string,hashval) Hashtbl.t = Hashtbl.create 100 in
   let objownsh : (hashval,payaddr) Hashtbl.t = Hashtbl.create 100 in
   let objrightsh : (hashval,payaddr * (int64 option)) Hashtbl.t = Hashtbl.create 100 in
   let propownsh : (hashval,payaddr) Hashtbl.t = Hashtbl.create 100 in
   let proprightsh : (hashval,payaddr * (int64 option)) Hashtbl.t = Hashtbl.create 100 in
-  let negpropownsh : (hashval,payaddr) Hashtbl.t = Hashtbl.create 100 in
   let bountyh : (hashval,int64 * (payaddr * int64) option) Hashtbl.t = Hashtbl.create 100 in
   let doc = ref [] in
   let nonce = ref None in
@@ -393,7 +487,8 @@ let input_doc ch =
   let pr l f =
     try
       f()
-    with End_of_file ->
+    with
+    | End_of_file ->
       raise (Failure (Printf.sprintf "Incomplete %s" l))
   in
   try
@@ -417,6 +512,12 @@ let input_doc ch =
 	pr l
 	  (fun () ->
 	    let h = hexstring_hashval (input_token ch) in
+	    let (th2,sg) = ostree_lookup_fail sgt (Some(h)) in
+	    if not (th = th2) then
+	      raise (Failure (Printf.sprintf "signature %s is for a different theory: %s" (hashval_hexstring h) (match th2 with None -> "Empty" | Some(k) -> hashval_hexstring k)));
+	    let rtokl1 = input_token_rev_list ch in
+	    let rtokl2 = input_token_rev_list ch in
+	    assoc_signa sgt sdone paramh trmh proph sg (List.rev rtokl1) (List.rev rtokl2);
 	    doc := Logic.Docsigna(h)::!doc)
       else if l = "NewOwner" then
 	pr l
@@ -435,7 +536,8 @@ let input_doc ch =
 		    let h = Hashtbl.find defh nm in
 		    Hashtbl.add objownsh h gammap
 		  with Not_found ->
-		    raise (Failure (Printf.sprintf "Unknown definition or theorem %s to assign ownership to" nm))
+		    if not (Hashtbl.mem trmh nm) then
+		      raise (Failure (Printf.sprintf "Unknown definition or theorem %s to assign ownership to" nm))
 	      end
 	    else
 	      raise (Failure (Printf.sprintf "%s cannot be an owner since it is not a pay address" gammas)))
@@ -466,7 +568,8 @@ let input_doc ch =
 		      let h = Hashtbl.find defh nm in
 		      Hashtbl.add objrightsh h (gammap,price)
 		    with Not_found ->
-		      raise (Failure (Printf.sprintf "Unknown definition or theorem %s to give rights for" nm))
+		      if not (Hashtbl.mem trmh nm) then
+			raise (Failure (Printf.sprintf "Unknown definition or theorem %s to give rights for" nm))
 		end
 	      end
 	    else
@@ -500,6 +603,15 @@ let input_doc ch =
 	    let nm = input_token ch in
 	    Hashtbl.add baseh nm !basec;
 	    incr basec)
+      else if l = "Let" then (** not part of the document, but just to ease writing terms **)
+	pr l
+	  (fun () ->
+	    let nm = input_token ch in
+	    if not (input_token ch = ":") then raise (Failure "bad format for type of Let");
+	    let a = input_stp baseh ch [] in
+	    if not (input_token ch = ":=") then raise (Failure "bad format for term of Let");
+	    let m = input_trm baseh trmh ch [] [] in
+	    Hashtbl.add trmh nm (a,m))
       else if l = "Param" then
 	pr l
 	  (fun () ->
@@ -510,6 +622,7 @@ let input_doc ch =
 	    let a = input_stp baseh ch [] in
 	    Hashtbl.add trmh nm (a,Logic.TmH(h));
 	    Hashtbl.add paramh nm (a,h);
+	    Hashtbl.add objhrev h nm;
 	    doc := Logic.Docparam(h,a)::!doc)
       else if l = "Def" then
 	pr l
@@ -524,6 +637,7 @@ let input_doc ch =
 		let h = Mathdata.tm_hashroot m in
 		Hashtbl.add trmh nm (a,Logic.TmH(h));
 		Hashtbl.add defh nm h; (* definition; if this is "new" then an owner and rights will be given *)
+		Hashtbl.add objhrev h nm;
 		doc := Logic.Docdef(a,m)::!doc
 	    | None -> raise (Failure (Printf.sprintf "trouble normalizing Def %s" nm)))
       else if l = "Known" then
@@ -534,7 +648,9 @@ let input_doc ch =
 	    let m = input_trm baseh trmh ch [] [] in
 	    match Checking.beta_eta_delta_norm m ([],[]) with
 	    | Some(m) ->
-		Hashtbl.add proph nm (Mathdata.tm_hashroot m);
+		let h = Mathdata.tm_hashroot m in
+		Hashtbl.add proph nm h;
+		Hashtbl.add prophrev h nm;
 		doc := Logic.Docknown(m)::!doc
 	    | None -> raise (Failure (Printf.sprintf "trouble normalizing Axiom %s" nm)))
       else if l = "Conj" then
@@ -545,28 +661,32 @@ let input_doc ch =
 	    let m = input_trm baseh trmh ch [] [] in
 	    match Checking.beta_eta_delta_norm m ([],[]) with
 	    | Some(m) ->
-		Hashtbl.add conjh nm (Mathdata.tm_hashroot m); (* conjecture: a bounty can be declared *)
+		let h = Mathdata.tm_hashroot m in
+		Hashtbl.add conjh nm h; (* conjecture: a bounty can be declared *)
+		Hashtbl.add prophrev h nm;
 		doc := Logic.Docconj(m)::!doc
 	    | None -> raise (Failure (Printf.sprintf "trouble normalizing Axiom %s" nm)))
-      else if l = "PfOf" then
+      else if l = "Thm" then
 	pr l
 	  (fun () ->
 	    let nm = input_token ch in
-	    if not (input_token ch = ":") then raise (Failure "bad format for prop of PfOf");
+	    if not (input_token ch = ":") then raise (Failure "bad format for prop of Thm");
 	    let m = input_trm baseh trmh ch [] [] in
-	    if not (input_token ch = ":=") then raise (Failure "bad format for proof of PfOf");
+	    if not (input_token ch = ":=") then raise (Failure "bad format for proof of Thm");
 	    let d = input_pf baseh trmh proph ch [] [] [] in
 	    match Checking.beta_eta_delta_norm m ([],[]) with
 	    | Some(m) ->
-		Hashtbl.add proph nm (Mathdata.tm_hashroot m);
-		Hashtbl.add thmh nm (Mathdata.tm_hashroot m); (* theorem: if this is a newly proven proposition, then an owner and rights will be declared *)
+		let h = Mathdata.tm_hashroot m in
+		Hashtbl.add proph nm h;
+		Hashtbl.add prophrev h nm;
+		Hashtbl.add thmh nm h; (* theorem: if this is a newly proven proposition, then an owner and rights will be declared *)
 		doc := Logic.Docpfof(m,d)::!doc
 	    | None -> raise (Failure (Printf.sprintf "trouble normalizing Axiom %s" nm)))
       else
 	raise (Failure (Printf.sprintf "Unknown document item %s" l))
     done;
-    (!doc,!nonce,!gamma,paramh,proph,conjh,objownsh,objrightsh,propownsh,proprightsh,bountyh)
+    (!doc,!nonce,!gamma,paramh,objhrev,proph,prophrev,conjh,objownsh,objrightsh,propownsh,proprightsh,bountyh)
   with
-  | End_of_file -> close_in ch; (!doc,!nonce,!gamma,paramh,proph,conjh,objownsh,objrightsh,propownsh,proprightsh,bountyh)
+  | End_of_file -> close_in ch; (!doc,!nonce,!gamma,paramh,objhrev,proph,prophrev,conjh,objownsh,objrightsh,propownsh,proprightsh,bountyh)
   | e -> close_in ch; raise e;;
 
