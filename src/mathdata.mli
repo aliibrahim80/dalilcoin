@@ -152,6 +152,7 @@ val json_theoryspec : theoryspec -> jsonval
 val json_signaspec : hashval option -> signaspec -> jsonval
 val json_doc : hashval option -> doc -> jsonval
 val json_stp : stp -> jsonval
+val json_trm : trm -> jsonval
 
 val stp_from_json : jsonval -> stp
 val trm_from_json : jsonval -> trm
