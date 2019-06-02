@@ -332,6 +332,8 @@ let valid_blockheader_allbutsignat blkh csm tinfo bhd (aid,bday,obl,u) lmedtm bu
     vbcv false (fun c -> Printf.fprintf c "Block header has timestamp %Ld after median litecoin time %Ld\n" bhd.timestamp lmedtm)
   else if not (bhd.stakeassetid = aid) then
     vbcv false (fun c -> Printf.fprintf c "Block header asset id mismatch. Found %s. Expected %s.\n" (hashval_hexstring bhd.stakeassetid) (hashval_hexstring aid))
+  else if blkh >= 730L && bday = 0L then (** additional constraint to avoid potential bugs when staking with airdrop assets whose value has halved at least once **)
+    vbcv false (fun c -> Printf.fprintf c "Airdrop assets cannot be used for staking after height 730.\n")
   else
     match u with
     | Currency(v) ->
@@ -379,7 +381,7 @@ exception HeaderStakedAssetNotMin
 
 let blockheader_stakeasset bhd =
   let bl = addr_bitseq (p2pkhaddr_addr bhd.stakeaddr) in
-  match ctree_lookup_asset false false bhd.stakeassetid bhd.prevledger bl with
+  match ctree_lookup_asset false false false bhd.stakeassetid bhd.prevledger bl with (** do not be strict here precisely because we *want* to skip abstracted assets **)
   | Some(a) ->
       let (aid,_,_,_) = a in
       vbc (fun c -> Printf.fprintf c "found staked asset %s\n" (hashval_hexstring aid));
@@ -495,7 +497,7 @@ let valid_block_a tht sigt blkh csm tinfo b ((aid,bday,obl,u) as a) stkaddr lmed
       end)
   then
     let tr = ctree_of_block b in (*** let tr be the ctree of the block, used often below ***)
-    if ((try let z = ctree_supports_tx false false tht sigt blkh (coinstake b) tr in (*** the ctree must support the tx without the need to expand hashes using the database or requesting from peers ***)
+    if ((try let z = ctree_supports_tx false false false tht sigt blkh (coinstake b) tr in (*** the ctree must support the tx without the need to expand hashes using the database or requesting from peers ***)
     z >= rewfn blkh
     with NotSupported -> false)
 	  &&
@@ -529,14 +531,14 @@ let valid_block_a tht sigt blkh csm tinfo b ((aid,bday,obl,u) as a) stkaddr lmed
 			with Not_found -> true
 		      end
 		    in
-		    let aal = ctree_lookup_input_assets false false inpl tr (fun _ _ -> ()) in
+		    let aal = ctree_lookup_input_assets false false false inpl tr (fun _ _ -> ()) in
 		    let al = List.map (fun (_,a) -> a) aal in
 		    norew
 		      && sgvb
 		      && not (List.mem stakein inpl)
 		      && tx_signatures_valid blkh bhd.timestamp al stau
 		      && tx_valid bhd.timestamp tau
-		      && ctree_supports_tx_2 false false tht sigt blkh tau aal al tr <= 0L
+		      && ctree_supports_tx_2 false false false tht sigt blkh tau aal al tr <= 0L
 	      )
 	      true
 	      bd.blockdelta_stxl
@@ -635,7 +637,7 @@ let valid_block_a tht sigt blkh csm tinfo b ((aid,bday,obl,u) as a) stkaddr lmed
 	(*** The total inputs and outputs match up with the declared fee. ***)
 	let tau = tx_of_block b in (*** let tau be the combined tx of the block ***)
 	let (inpl,outpl) = tau in
-	let aal = ctree_lookup_input_assets false false inpl tr (fun _ _ -> ()) in
+	let aal = ctree_lookup_input_assets false false false inpl tr (fun _ _ -> ()) in
 	let al = List.map (fun (_,a) -> a) aal in
 	(*** Originally I added totalfees to the out_cost, but this was wrong since the totalfees are in the stake output which is already counted in out_cost. I don't really need totalfees to be explicit. ***)
 	if out_cost outpl = Int64.add (asset_value_sum blkh al) (rewfn blkh) then

@@ -61,7 +61,7 @@ let rec hlist_stakingassets blkh alpha hl n =
     | HCons((aid,bday,obl,Currency(v)),hr) ->
 	let ca = coinage blkh bday obl v in
 (*	log_string (Printf.sprintf "Checking asset %s %Ld %Ld %s %Ld %s\n" (hashval_hexstring aid) blkh bday (obligation_string obl) v (string_of_big_int ca)); *)
-	if gt_big_int ca zero_big_int && not (Hashtbl.mem unconfirmed_spent_assets aid) then
+	if gt_big_int ca zero_big_int && not (Hashtbl.mem unconfirmed_spent_assets aid) && (blkh < 730L || bday > 0L) then
 	  begin
 	    log_string (Printf.sprintf "Staking asset: %s\n" (hashval_hexstring aid));
 	    Mutex.lock stakingassetsmutex;
@@ -312,10 +312,10 @@ let stakingthread () =
 			      if tx_valid tm (tauin,tauout) then
 				try
 				  let unsupportederror alpha h = log_string (Printf.sprintf "Could not find asset %s at address %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha)) in
-				  let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin !dync unsupportederror) in
+				  let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true true false tauin !dync unsupportederror) in
 				  if tx_signatures_valid blkh tm al ((tauin,tauout),sg) then
 				    begin
-				      let nfee = ctree_supports_tx true false !dyntht !dynsigt blkh (tauin,tauout) !dync in
+				      let nfee = ctree_supports_tx true true false !dyntht !dynsigt blkh (tauin,tauout) !dync in
 				      if nfee > 0L then (*** note: nfee is negative of the fee, not the fee itself ***)
 					begin
 (*				  log_string (Printf.sprintf "tx %s has negative fees %Ld; removing from pool\n" (hashval_hexstring h) nfee); *)
