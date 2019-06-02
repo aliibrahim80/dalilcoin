@@ -187,54 +187,58 @@ let save_wallet () =
   in
   let bkpwallfn = Filename.concat bkpwalldir (Printf.sprintf "walletbkp%Ld" (Int64.of_float (Unix.time()))) in
   let wallfn = Filename.concat (datadir()) "wallet" in
-  Sys.rename wallfn bkpwallfn;
+  if Sys.file_exists wallfn then Sys.rename wallfn bkpwallfn;
   let s = open_out_bin wallfn in
-  List.iter
-    (fun (k,b,_,_,_,_) ->
-      output_byte s 0;
-      seocf (seo_prod seo_big_int_256 seo_bool seoc (k,b) (s,None)))
-    !walletkeys_staking;
-  List.iter
-    (fun (k,b,_,_,_,_) ->
-      output_byte s 4;
-      seocf (seo_prod seo_big_int_256 seo_bool seoc (k,b) (s,None)))
-    !walletkeys_nonstaking;
-  List.iter
-    (fun (k,b,_,_,_,_) ->
-      output_byte s 5;
-      seocf (seo_prod seo_big_int_256 seo_bool seoc (k,b) (s,None)))
-    !walletkeys_staking_fresh;
-  List.iter
-    (fun (k,b,_,_,_,_) ->
-      output_byte s 6;
-      seocf (seo_prod seo_big_int_256 seo_bool seoc (k,b) (s,None)))
-    !walletkeys_nonstaking_fresh;
-  List.iter
-    (fun (_,_,scr) ->
-      output_byte s 1;
-      seocf (seo_list seo_int8 seoc scr (s,None)))
-    !walletp2shs;
-  List.iter
-    (fun endors ->
-      output_byte s 2;
-      seocf (seo_prod6 seo_payaddr seo_payaddr (seo_prod seo_big_int_256 seo_big_int_256) seo_varintb seo_bool seo_signat seoc endors (s,None)))
-    !walletendorsements;
-  List.iter
-    (fun watchaddr ->
-      output_byte s 3;
-      seocf (seo_addr seoc watchaddr (s,None)))
-    !walletwatchaddrs;
-  List.iter
-    (fun watchaddr ->
-      output_byte s 7;
-      seocf (seo_addr seoc watchaddr (s,None)))
-    !walletwatchaddrs_offlinekey;
-  List.iter
-    (fun watchaddr ->
-      output_byte s 8;
-      seocf (seo_addr seoc watchaddr (s,None)))
-    !walletwatchaddrs_offlinekey_fresh;
-  close_out s
+  try
+    List.iter
+      (fun (k,b,_,_,_,_) ->
+	output_byte s 0;
+	seocf (seo_prod seo_big_int_256 seo_bool seoc (k,b) (s,None)))
+      !walletkeys_staking;
+    List.iter
+      (fun (k,b,_,_,_,_) ->
+	output_byte s 4;
+	seocf (seo_prod seo_big_int_256 seo_bool seoc (k,b) (s,None)))
+      !walletkeys_nonstaking;
+    List.iter
+      (fun (k,b,_,_,_,_) ->
+	output_byte s 5;
+	seocf (seo_prod seo_big_int_256 seo_bool seoc (k,b) (s,None)))
+      !walletkeys_staking_fresh;
+    List.iter
+      (fun (k,b,_,_,_,_) ->
+	output_byte s 6;
+	seocf (seo_prod seo_big_int_256 seo_bool seoc (k,b) (s,None)))
+      !walletkeys_nonstaking_fresh;
+    List.iter
+      (fun (_,_,scr) ->
+	output_byte s 1;
+	seocf (seo_list seo_int8 seoc scr (s,None)))
+      !walletp2shs;
+    List.iter
+      (fun endors ->
+	output_byte s 2;
+	seocf (seo_prod6 seo_payaddr seo_payaddr (seo_prod seo_big_int_256 seo_big_int_256) seo_varintb seo_bool seo_signat seoc endors (s,None)))
+      !walletendorsements;
+    List.iter
+      (fun watchaddr ->
+	output_byte s 3;
+	seocf (seo_addr seoc watchaddr (s,None)))
+      !walletwatchaddrs;
+    List.iter
+      (fun watchaddr ->
+	output_byte s 7;
+	seocf (seo_addr seoc watchaddr (s,None)))
+      !walletwatchaddrs_offlinekey;
+    List.iter
+      (fun watchaddr ->
+	output_byte s 8;
+	seocf (seo_addr seoc watchaddr (s,None)))
+      !walletwatchaddrs_offlinekey_fresh;
+    close_out s
+  with e ->
+    Utils.log_string (Printf.sprintf "exception during save_wallet: %s\n" (Printexc.to_string e));
+    close_out s
 
 let append_wallet f =
   let wallfn = Filename.concat (datadir()) "wallet" in
@@ -910,11 +914,12 @@ let get_spendable_assets_in_ledger oc ledgerroot blkhght =
       let spendable = ref [] in
       let sumcurr2 alpha a =
 	match a with
-	| (_,_,Some(_,lh,_),Currency(_)) when lh > blkhght -> ()
+	| (_,_,Some(_,lh,_),_) when lh > blkhght -> ()
 	| (_,_,_,Currency(_)) ->
 	    let v = match asset_value blkhght a with None -> 0L | Some(v) -> v in
 	    spendable := (alpha,a,v)::!spendable
-	| _ -> ()
+	| (_,_,_,_) ->
+	    spendable := (alpha,a,0L)::!spendable
       in
       List.iter
 	(fun (alpha,z,x) ->
@@ -1254,7 +1259,7 @@ let createsplitlocktx oc ledgerroot blkhght alpha beta gamma aid i lkh fee =
   if i <= 0 then raise (Failure ("Cannot split into " ^ (string_of_int i) ^ " assets"));
   let alpha2 = payaddr_addr alpha in
   let ctr = Ctre.CHash(ledgerroot) in
-  match ctree_lookup_asset true false aid ctr (addr_bitseq alpha2) with
+  match ctree_lookup_asset false true false aid ctr (addr_bitseq alpha2) with
   | None -> Printf.fprintf oc "Could not find asset %s at %s in ledger %s\n" (hashval_hexstring aid) (addr_daliladdrstr alpha2) (hashval_hexstring ledgerroot); flush stdout
   | Some((_,bday,obl,Currency(_)) as a) ->
       let v = match asset_value blkhght a with None -> 0L | Some(v) -> v in
@@ -1572,7 +1577,7 @@ let rec signtx_outs kl taue outpl sl rl rsl co =
 let signtx2 oc lr stau kl =
   let ((tauin,tauout) as tau,(tausgin,tausgout)) = stau in
   let unsupportederror alpha h = Printf.printf "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
-  let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
+  let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true true false tauin (CHash(lr)) unsupportederror) in
   let rec get_propowns tauin al =
     match tauin,al with
     | ((alpha,aid1)::tauinr),((aid2,_,_,OwnsProp(_,_,_))::ar) when aid1 = aid2 -> alpha::get_propowns tauinr ar
@@ -1627,7 +1632,7 @@ let savetxtopool blkh tm lr staustr =
   let (((tauin,tauout) as tau,tausg),_) = sei_stx seis (s,String.length s,None,0,0) in
   if tx_valid tm tau then
     let unsupportederror alpha h = Printf.printf "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
-    let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
+    let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true true false tauin (CHash(lr)) unsupportederror) in
     if tx_signatures_valid blkh tm al (tau,tausg) then
       let txid = hashstx (tau,tausg) in
       savetxtopool_real txid (tau,tausg)
@@ -1659,7 +1664,7 @@ let validatetx3 oc blkh tm thtr sgtr ltr stau transform =
 	begin
 	  try
 	    verbose_supportedcheck := Some(oc);
-	    let nfee = ctree_supports_tx true false thtr sgtr blkh tau ltr in
+	    let nfee = ctree_supports_tx true true false thtr sgtr blkh tau ltr in
 	    verbose_supportedcheck := None;
 	    let fee = Int64.sub 0L nfee in
 	    if fee < 0L then
@@ -1683,7 +1688,7 @@ let validatetx3 oc blkh tm thtr sgtr ltr stau transform =
 	      None
 	end
       in
-      let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin ltr unsupportederror) in
+      let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true true false tauin ltr unsupportederror) in
       try
 	let (mbh,mtm) = tx_signatures_valid_asof_blkh al (tau,tausg) in
 	match (mbh,mtm) with
@@ -1764,14 +1769,14 @@ let sendtx2 oc blkh tm tr sr lr stau =
   if tx_valid tm tau then
     begin
       let unsupportederror alpha h = Printf.fprintf oc "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
-      let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true false tauin (CHash(lr)) unsupportederror) in
+      let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true true false tauin (CHash(lr)) unsupportederror) in
       try
 	let (mbh,mtm) = tx_signatures_valid_asof_blkh al (tau,tausg) in
 	let sendtxreal () =
 	  let stxh = hashstx stau in
 	  begin
 	    try
-	      let nfee = ctree_supports_tx true false (lookup_thytree tr) (lookup_sigtree sr) blkh tau (CHash(lr)) in
+	      let nfee = ctree_supports_tx true true false (lookup_thytree tr) (lookup_sigtree sr) blkh tau (CHash(lr)) in
 	      let fee = Int64.sub 0L nfee in
 	      if fee >= !Config.minrelayfee then
 		begin
