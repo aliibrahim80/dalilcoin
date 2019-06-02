@@ -325,18 +325,22 @@ let ac c h longhelp f =
   sortedcommands := List.merge compare [c] !sortedcommands;
   Hashtbl.add commandh c (h,longhelp,(fun oc al -> try f oc al with BadCommandForm -> Printf.fprintf oc "%s\n" h));;
 
+let unconfirmedspentutxo : (hashval * hashval,unit) Hashtbl.t = Hashtbl.create 100;;
+
 let find_spendable_utxo oc lr blkh mv =
   let b = ref None in
   List.iter
     (fun (alpha,a,v) ->
-      if v >= mv && (match a with (_,_,_,Currency(_)) -> true | _ -> false) then
+      if v >= mv && (match a with (aid,_,_,Currency(_)) when not (Hashtbl.mem unconfirmedspentutxo (lr,aid)) -> true | _ -> false) then
 	match !b with
 	| None -> b := Some(alpha,a,v)
 	| Some(_,_,u) -> if v < u then b := Some(alpha,a,v))
     (Commands.get_spendable_assets_in_ledger oc lr blkh);
   match !b with
   | None -> raise Not_found
-  | Some(alpha,a,v) -> (alpha,a,v);;
+  | Some(alpha,a,v) ->
+      Hashtbl.add unconfirmedspentutxo (lr,assetid a) ();
+      (alpha,a,v);;
 
 let rec find_marker_in_hlist hl =
   match hl with
@@ -472,7 +476,9 @@ let initialize_commands () =
 	      | None -> raise (Failure "Signature does not check.\n")
 	      | Some((tml,knl),imported) ->
 		  let id = hashopair2 th (hashsigna (signaspec_signa signaspec)) in
+		  let b = signaspec_burncost signaspec in
 		  Printf.fprintf oc "Signature is correct and has id %s and address %s.\n" (hashval_hexstring id) (addr_daliladdrstr (hashval_pub_addr id));
+		  Printf.fprintf oc "%s fraenks must be burned to publish signature.\n" (Cryptocurr.fraenks_of_cants b);
 		  Printf.fprintf oc "Signature imports %d signatures:\n" (List.length imported);
 		  List.iter (fun h -> Printf.fprintf oc " %s\n" (hashval_hexstring h)) imported;
 		  let oname h =
@@ -1118,9 +1124,6 @@ let initialize_commands () =
 		      Printf.fprintf oc "Document is correct and has id %s and address %s.\n" (hashval_hexstring id) (addr_daliladdrstr (hashval_pub_addr id));
 		      let usesobjs = doc_uses_objs dl in
 		      let usesprops = doc_uses_props dl in
-		      let createsobjs = doc_creates_objs dl in
-		      let createsprops = doc_creates_props dl in
-		      let createsnegpropsaddrs2 = List.map (fun h -> hashval_term_addr (hashtag (hashopair2 th h) 33l)) (doc_creates_neg_props dl) in
 		      Printf.fprintf oc "Document uses %d objects:\n" (List.length usesobjs);
 		      List.iter
 			(fun (oidpure,k) ->
@@ -1441,7 +1444,8 @@ let initialize_commands () =
 				  let (markerid,bday,obl) = find_marker_at_address (CHash(lr)) beta in
 				  if Int64.add bday 3L <= blkh then
 				    begin
-				      let tospend = ref !Config.defaulttxfee in
+				      let b = signaspec_burncost signaspec in
+				      let tospend = ref (Int64.add b !Config.defaulttxfee) in
 				      let txinlr = ref [(beta,markerid)] in
 				      let txoutlr = ref [(delta,(None,SignaPublication(gammap,nonce,th,signaspec)))] in
 				      let (alpha,(aid,_,_,_),v) = find_spendable_utxo oc lr blkh !tospend in
@@ -1561,7 +1565,6 @@ let initialize_commands () =
 				      (fun (oidpure,k) ->
 					let oidthy = hashtag (hashopair2 th (hashpair oidpure k)) 32l in
 					let alphapure = hashval_term_addr oidpure in
-					let alphathy = hashval_term_addr oidthy in
 					let (beta,r) = Hashtbl.find remgvtpth oidthy in
 					begin
 					  match r with
@@ -1618,7 +1621,6 @@ let initialize_commands () =
 				      (fun pidpure ->
 					let pidthy = hashtag (hashopair2 th pidpure) 33l in
 					let alphapure = hashval_term_addr pidpure in
-					let alphathy = hashval_term_addr pidthy in
 					let (beta,r) = Hashtbl.find remgvknth pidthy in
 					begin
 					  match r with
