@@ -566,7 +566,9 @@ let ltc_gettransactioninfo h =
 					    for i = 1 to ((String.length extradata) - 1) do
 					      if extradata.[i] = '.' then
 						begin
-						  ignore (tryconnectpeer (Printf.sprintf "%s.onion:20808" (Buffer.contents onionaddr)));
+						  let peer = Printf.sprintf "%s.onion:20808" (Buffer.contents onionaddr) in
+						  ignore (tryconnectpeer peer);
+						  ignore (addknownpeer (Int64.of_float (Unix.time())) peer);
 						  raise Exit
 						end
 					      else if extradata.[i] = ':' then
@@ -574,7 +576,9 @@ let ltc_gettransactioninfo h =
 						  if i+2 < String.length extradata then
 						    begin
 						      let port = (Char.code extradata.[i+1]) * 256 + (Char.code extradata.[i+2]) in
-						      ignore (tryconnectpeer (Printf.sprintf "%s.onion:%d" (Buffer.contents onionaddr) port));
+						      let peer = Printf.sprintf "%s.onion:%d" (Buffer.contents onionaddr) port in
+						      ignore (tryconnectpeer peer);
+						      ignore (addknownpeer (Int64.of_float (Unix.time())) peer);
 						    end
 						  else
 						    raise Exit
@@ -593,7 +597,9 @@ let ltc_gettransactioninfo h =
 					  let ip1 = Char.code extradata.[2] in
 					  let ip2 = Char.code extradata.[3] in
 					  let ip3 = Char.code extradata.[4] in
-					  ignore (tryconnectpeer (Printf.sprintf "%d.%d.%d.%d:20805" ip0 ip1 ip2 ip3))
+					  let peer = Printf.sprintf "%d.%d.%d.%d:20805" ip0 ip1 ip2 ip3 in
+					  ignore (tryconnectpeer peer);
+					  ignore (addknownpeer (Int64.of_float (Unix.time())) peer);
 					end
 				    end
 				  else if extradata.[0] = 'i' then
@@ -605,7 +611,9 @@ let ltc_gettransactioninfo h =
 					  let ip2 = Char.code extradata.[3] in
 					  let ip3 = Char.code extradata.[4] in
 					  let port = (Char.code extradata.[5]) * 256 + Char.code extradata.[6] in
-					  ignore (tryconnectpeer (Printf.sprintf "%d.%d.%d.%d:%d" ip0 ip1 ip2 ip3 port))
+					  let peer = Printf.sprintf "%d.%d.%d.%d:%d" ip0 ip1 ip2 ip3 port in
+					  ignore (tryconnectpeer peer);
+					  ignore (addknownpeer (Int64.of_float (Unix.time())) peer);
 					end
 				    end
 			      end;
