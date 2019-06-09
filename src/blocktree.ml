@@ -381,6 +381,19 @@ let rec process_block sout validate forw dbp (lbh,ltxh) h ((bhd,bhs),bd) thtr th
     end
 
 let initialize_dlc_from_ltc sout lblkh =
+  List.iter
+    (fun h ->
+      let h = hexstring_hashval h in
+      Hashtbl.add blockinvalidated h ();
+      DbInvalidatedBlocks.dbput h true)
+    !Config.invalidatedblocks;
+  List.iter
+    (fun h ->
+      let h = hexstring_hashval h in
+      Hashtbl.add blockinvalidated h ();
+      DbInvalidatedBlocks.dbdelete h;
+      DbBlacklist.dbdelete h)
+    !Config.validatedblocks;
   let liveblocks : (hashval,unit) Hashtbl.t = Hashtbl.create 1000 in
   let liveblocks2 : (hashval * hashval,unit) Hashtbl.t = Hashtbl.create 1000 in
   let ltx_lblk : (hashval,hashval) Hashtbl.t = Hashtbl.create 1000 in
@@ -1179,7 +1192,7 @@ let reprocessblock oc h =
 	  | None -> (*** genesis ***)
 	      (!genesisstakemod,!genesistarget,None,None)
 	  | Some(plbk,pltx) ->
-	let (_,_,_,_,csm,_) = Hashtbl.find outlinevals (plbk,pltx) in
+	      let (_,_,_,_,csm,_) = Hashtbl.find outlinevals (plbk,pltx) in
 	      let (tar,_,_,thtr,sgtr) = Hashtbl.find validheadervals (plbk,pltx) in
 	      (csm,tar,thtr,sgtr)
 	in
@@ -1205,8 +1218,8 @@ let reprocessblock oc h =
 		  Printf.fprintf oc "Invalid block %s\n" (hashval_hexstring h);
 		  recursively_invalidate_blocks_2 lbk ltx;
 		  flush oc
-	    with _ ->
-	      Printf.fprintf oc "Invalid block %s\n" (hashval_hexstring h);
+	    with e ->
+	      Printf.fprintf oc "Invalid block %s: %s\n" (hashval_hexstring h) (Printexc.to_string e);
 	      recursively_invalidate_blocks_2 lbk ltx;
 	      flush oc
 	  with Not_found ->
