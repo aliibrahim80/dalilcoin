@@ -314,7 +314,7 @@ let ostree_lookup_fail sgt h =
   with Not_found ->
     raise (Failure (Printf.sprintf "Could not find signature %s\n" (match h with Some(h) -> hashval_hexstring h | None -> "Empty")))
 
-let assoc_signa sgt sdone paramh trmh proph sg tmnl knnl =
+let assoc_signa objhrev prophrev sgt sdone paramh trmh proph sg tmnl knnl =
   let tmnlr = ref tmnl in
   let knnlr = ref knnl in
   let rec assoc_signa_r sg =
@@ -334,6 +334,7 @@ let assoc_signa sgt sdone paramh trmh proph sg tmnl knnl =
 	| nm::nr ->
 	    Hashtbl.add trmh nm (a,Logic.TmH(h));
 	    Hashtbl.add paramh nm (a,h);
+	    Hashtbl.add objhrev h nm;
 	    tmnlr := nr
 	| [] -> raise (Failure "insufficient obj names given with import"))
       (List.rev tml);
@@ -342,6 +343,7 @@ let assoc_signa sgt sdone paramh trmh proph sg tmnl knnl =
 	match !knnlr with
 	| nm::nr ->
 	    Hashtbl.add proph nm h;
+	    Hashtbl.add prophrev h nm;
 	    knnlr := nr
 	| [] -> raise (Failure "insufficient prop names given with import"))
       (List.rev knl);
@@ -399,7 +401,7 @@ let input_signaspec ch th sgt =
 	      raise (Failure (Printf.sprintf "signature %s is for a different theory: %s" (hashval_hexstring h) (match th2 with None -> "Empty" | Some(k) -> hashval_hexstring k)));
 	    let rtokl1 = input_token_rev_list ch in
 	    let rtokl2 = input_token_rev_list ch in
-	    assoc_signa sgt sdone paramh trmh proph sg (List.rev rtokl1) (List.rev rtokl2);
+	    assoc_signa objhrev prophrev sgt sdone paramh trmh proph sg (List.rev rtokl1) (List.rev rtokl2);
 	    signaspec := Logic.Signasigna(h)::!signaspec)
       else if l = "Base" then
 	pr l
@@ -517,7 +519,7 @@ let input_doc ch th sgt =
 	      raise (Failure (Printf.sprintf "signature %s is for a different theory: %s" (hashval_hexstring h) (match th2 with None -> "Empty" | Some(k) -> hashval_hexstring k)));
 	    let rtokl1 = input_token_rev_list ch in
 	    let rtokl2 = input_token_rev_list ch in
-	    assoc_signa sgt sdone paramh trmh proph sg (List.rev rtokl1) (List.rev rtokl2);
+	    assoc_signa objhrev prophrev sgt sdone paramh trmh proph sg (List.rev rtokl1) (List.rev rtokl2);
 	    doc := Logic.Docsigna(h)::!doc)
       else if l = "NewOwner" then
 	pr l
