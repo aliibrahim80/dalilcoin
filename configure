@@ -91,7 +91,6 @@ if [ $GENESISTIME ]; then
 else
     echo let genesistimestamp = ref 1523203501L >> src/config.ml
 fi
-echo let may2019hardforktime = ref 1556712000L >> src/config.ml
 echo let maxburn = ref 0L >> src/config.ml
 echo let maxburnrate = ref 0L >> src/config.ml
 echo let ltctxfee = ref 1000L >> src/config.ml

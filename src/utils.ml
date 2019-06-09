@@ -111,3 +111,5 @@ let rand_int64 () =
   if not !random_initialized then initialize_random_seed();
   Int64.logor (Int64.shift_left (Random.int64 4294967296L) 32) (Random.int64 4294967296L)
 
+let may2019hardforktime = ref 1556712000L
+let july2019hardforktime = ref 1562673600L

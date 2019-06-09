@@ -745,7 +745,7 @@ let check_p2sh obday (tosign:big_int) (beta:md160) s =
 	let (gsgs,stk3) = num_data_from_stack stk2 in
 	if checkmultisig tosign gsgs pubkeys then eval_script_r tosign br stk3 altstk else raise Invalid
     | (171::br) -> eval_script_r tosign br stk altstk (** treat OP_CODESEPARATOR as a no op **)
-    | (177::br) when utm >= !Config.may2019hardforktime  -> (** OP_CLTV (previously OP_NOP2) -- absolute lock time (there is no nlocktime component)  **)
+    | (177::br) when utm >= !Utils.may2019hardforktime  -> (** OP_CLTV (previously OP_NOP2) -- absolute lock time (there is no nlocktime component)  **)
 	begin
 	  match stk with
 	  | [] -> raise (Failure("no input for OP_CLTV"))
@@ -773,7 +773,7 @@ let check_p2sh obday (tosign:big_int) (beta:md160) s =
 		  eval_script_r tosign br stk altstk
 		end
 	end
-    | (178::br) when utm >= !Config.may2019hardforktime -> (** OP_CSV (previously OP_NOP2) -- relative lock time (there is no sequence number component)
+    | (178::br) when utm >= !Utils.may2019hardforktime -> (** OP_CSV (previously OP_NOP2) -- relative lock time (there is no sequence number component)
 							       only for relative block height since the asset records its birthday as block height only **)
 	begin
 	  match stk with
