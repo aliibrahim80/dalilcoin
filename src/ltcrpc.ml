@@ -461,7 +461,12 @@ let ltc_signrawtransaction txs =
 	end
       else
 	let userpass = !Config.ltcrpcuser ^ ":" ^ !Config.ltcrpcpass in
-	let call = "'{\"jsonrpc\": \"1.0\", \"id\":\"srtx\", \"method\": \"signrawtransaction\", \"params\": [\"" ^ txs ^ "\"] }'" in
+	let call =
+	  if !Config.ltcversion >= 17 then
+	    "'{\"jsonrpc\": \"1.0\", \"id\":\"srtx\", \"method\": \"signrawtransactionwithwallet\", \"params\": [\"" ^ txs ^ "\"] }'"
+	  else
+	    "'{\"jsonrpc\": \"1.0\", \"id\":\"srtx\", \"method\": \"signrawtransaction\", \"params\": [\"" ^ txs ^ "\"] }'"
+	in
 	let url = ltcrpc_url() in
 	let fullcall = !Config.curl ^ " --user " ^ userpass ^ " --data-binary " ^ call ^ " -H 'content-type: text/plain;' " ^ url in
 	let (inc,outc,errc) = Unix.open_process_full fullcall [| |] in
@@ -872,3 +877,4 @@ let ltc_old_sync () =
   List.iter
     ltc_process_block
     (if !Config.testnet then ltc_testnet_oldblocks else ltc_oldblocks)
+
