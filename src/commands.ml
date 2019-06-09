@@ -2837,6 +2837,19 @@ let reportowned oc f lr =
   with Not_found ->
     Printf.fprintf oc "There are no owned objects or propositions in the ledger.\n"
 
+let reportbounties oc f lr =
+  try
+    report_a
+      oc
+      (fun a bl ->
+	match a with
+	| (aid,bday,obl,Bounty(v)) ->
+	    Printf.fprintf f "%s fraenks bounty at %s (id %s)\n" (fraenks_of_cants v) (addr_daliladdrstr (bitseq_addr (true::false::bl))) (hashval_hexstring aid)
+	| _ -> ())
+      (ctre_left (ctre_right (get_ctree_element lr))) []
+  with Not_found ->
+    Printf.fprintf oc "There are no owned objects or propositions in the ledger.\n"
+
 let reportpubs oc f lr =
   let rec stp_str a =
     match a with

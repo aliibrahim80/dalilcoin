@@ -86,4 +86,5 @@ val pblockchain : out_channel -> (hashval * hashval * hashval) option -> int -> 
 val dumpstate : string -> unit
 
 val reportowned : out_channel -> out_channel -> hashval -> unit
+val reportbounties : out_channel -> out_channel -> hashval -> unit
 val reportpubs : out_channel -> out_channel -> hashval -> unit
