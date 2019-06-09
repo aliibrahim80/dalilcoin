@@ -6,6 +6,8 @@
 val datadir : string ref
 val offline : bool ref
 val ltcoffline : bool ref
+val ltcversion : int ref
+val ltcsubversion : int ref
 val daemon : bool ref
 val testnet : bool ref
 val staking : bool ref
@@ -51,3 +53,5 @@ val stakewithrewards : bool ref
 val reward_lock_relative : int64 option ref
 val reward_lock_absolute : int64 option ref
 val may2019hardforktime : int64 ref
+val invalidatedblocks : string list ref
+val validatedblocks : string list ref

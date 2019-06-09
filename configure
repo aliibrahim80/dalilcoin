@@ -53,6 +53,8 @@ echo let staking = ref false >> src/config.ml
 echo let daemon = ref false >> src/config.ml
 echo let offline = ref false >> src/config.ml
 echo let ltcoffline = ref false >> src/config.ml
+echo let ltcversion = ref 17 >> src/config.ml
+echo let ltcsubversion = ref 1 >> src/config.ml
 echo let ip = ref None >> src/config.ml
 echo let ipv6 = ref false >> src/config.ml
 echo let port = ref 20805 >> src/config.ml
@@ -82,6 +84,8 @@ echo let generatenewrewardaddresses = ref true >> src/config.ml
 echo let stakewithrewards = ref false >> src/config.ml
 echo let reward_lock_relative = ref None >> src/config.ml
 echo let reward_lock_absolute = ref None >> src/config.ml
+echo let invalidatedblocks = ref [] >> src/config.ml
+echo let validatedblocks = ref [] >> src/config.ml
 if [ $GENESISTIME ]; then
     echo let genesistimestamp = ref ${GENESISTIME}L >> src/config.ml
 else
