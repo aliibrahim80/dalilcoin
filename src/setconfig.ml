@@ -37,6 +37,8 @@ let intconfigvars = [
 ("rpcport",fun x -> Config.rpcport := x);
 ("ltcrpcport",fun x -> Config.ltcrpcport := x);
 ("ltcnotifyport",fun x -> Config.ltcnotifyport := x);
+("ltcversion",fun x -> Config.ltcversion := x);
+("ltcsubversion",fun x -> Config.ltcsubversion := x);
 ("maxconns",fun x -> Config.maxconns := x);
 ("burnifleq",fun x -> Config.burnifleq := x);
 ("minconnstostake",fun x -> Config.minconnstostake := x)
@@ -65,7 +67,9 @@ let intoptionconfigvars = [
 ("socks",fun x -> Config.socks := x)
 ];;
 let stringlistconfigvars = [
-("ltcaddress",fun x -> Config.ltcaddresses := x::!Config.ltcaddresses)
+("ltcaddress",fun x -> Config.ltcaddresses := x::!Config.ltcaddresses);
+("invalidateblock",fun x -> Config.invalidatedblocks := x::!Config.invalidatedblocks);
+("validateblock",fun x -> Config.validatedblocks := x::!Config.validatedblocks)
 ];;
 
 exception Done
