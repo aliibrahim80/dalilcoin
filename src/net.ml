@@ -511,7 +511,7 @@ let rec_msg blkh c =
       with Not_found -> raise IllformedMsg
     in
     let (msl,_) = sei_int32 seic (c,None) in
-    if msl > Int32.of_int (maxblockdeltasize blkh) then raise IllformedMsg;
+    if msl > Int32.add 8192l (Int32.of_int (maxblockdeltasize blkh)) then raise IllformedMsg;
     let msl = Int32.to_int msl in
     let (mh,_) = sei_hashval seic (c,None) in
     let sb = Buffer.create msl in
@@ -757,6 +757,12 @@ let connlistener (s,sin,sout,gcs) =
 	  raise Exit
       | ProtocolViolation(x) -> (*** close connection ***)
 	  log_string (Printf.sprintf "Protocol violation by connection %s: %s\nClosing connection\n" (peeraddr !gcs) x);
+	  shutdown_close s;
+	  close_in sin;
+	  close_out sout;
+	  raise Exit
+      | IllformedMsg -> (*** close connection ***)
+	  log_string (Printf.sprintf "Ill formed message by connection %s\nClosing connection\n" (peeraddr !gcs));
 	  shutdown_close s;
 	  close_in sin;
 	  close_out sout;
