@@ -56,7 +56,7 @@ let lock datadir =
   let lf = Filename.concat datadir "lock" in
   let c = open_out lf in
   close_out c;
-  exitfn := (fun n -> Commands.save_txpool(); saveknownpeers(); Sys.remove lf; exit n);;
+  exitfn := (fun n -> Commands.save_txpool(); Sys.remove lf; exit n);;
 
 let sinceltctime f =
   let snc = Int64.sub (ltc_medtime()) f in
@@ -137,8 +137,8 @@ let initnetwork sout =
     with _ -> ()
   end;
   netseeker ();
-  (*** empty placeholder for now ***)
-  ();;
+  let efn = !exitfn in
+  exitfn := (fun n -> saveknownpeers(); efn n);;
 
 let ltc_listener_th : Thread.t option ref = ref None;;
 
@@ -1874,6 +1874,54 @@ let initialize_commands () =
 	      close_out f
 	    with exn -> close_out f; raise exn
 	  end
+      | _ -> raise BadCommandForm);
+  ac "collectbounties" "collectbounties <outputaddress> <txfileout> [<ledgerroot>]" "Create a tx (stored in a file) paying all collectable bounties (if there are any) to the output address."
+    (fun oc al ->
+      let collb gammas fn lr =
+	  let gamma = Cryptocurr.daliladdrstr_addr gammas in
+	  if not (payaddr_p gamma) then raise (Failure (Printf.sprintf "Address %s is not a pay address." gammas));
+	  let cbl = Commands.collectable_bounties oc lr in
+	  if cbl = [] then
+	    Printf.fprintf oc "No bounties can be collected.\n"
+	  else
+	    let txinl = ref [] in
+	    let txoutl = ref [] in
+	    let vtot = ref 0L in
+	    List.iter
+	      (fun (alpha,a1,a2) ->
+		match (a1,a2) with
+		| ((aid1,_,_,Bounty(v)),(aid2,_,obl2,pre2)) ->
+		    vtot := Int64.add !vtot v;
+		    txinl := (alpha,aid1)::!txinl;
+		    if not (List.exists (fun (_,aid2b) -> aid2b = aid2) !txinl) then
+		      begin
+			txinl := (alpha,aid2)::!txinl;
+			txoutl := (alpha,(obl2,pre2))::!txoutl
+		      end
+		| _ -> ())
+	      cbl;
+	    if !vtot < !Config.defaulttxfee then
+	      Printf.fprintf oc "Total bounties are less than the default tx fee, so refusing to make the tx.\n"
+	    else
+	      begin
+		let totminusfee = Int64.sub !vtot !Config.defaulttxfee in
+		txoutl := (gamma,(None,Currency(totminusfee)))::!txoutl;
+		let stau = ((!txinl,!txoutl),([],[])) in
+		let c2 = open_out_bin fn in
+		begin
+		  try
+		    Commands.signtxc oc lr stau c2 None;
+		    close_out c2;
+		    Printf.fprintf oc "Transaction created to claim %s fraenks from bounties.\nTo validate it:\n> validatetxfile %s\nTo send it:\n> sendtxfile %s\n" (Cryptocurr.fraenks_of_cants totminusfee) fn fn
+		  with e ->
+		    close_out c2;
+		    raise e
+		end
+	      end
+      in
+      match al with
+      | [gammas;fn] -> let lr = get_ledgerroot (get_bestblock_print_warnings oc) in collb gammas fn lr
+      | [gammas;fn;lr] -> collb gammas fn (hexstring_hashval lr)
       | _ -> raise BadCommandForm);
   ac "reportpubs" "reportpubs [<outputfile> [<ledgerroot>]]" "Give a report of all publications in the ledger tree."
     (fun oc al ->
