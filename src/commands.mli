@@ -88,3 +88,5 @@ val dumpstate : string -> unit
 val reportowned : out_channel -> out_channel -> hashval -> unit
 val reportbounties : out_channel -> out_channel -> hashval -> unit
 val reportpubs : out_channel -> out_channel -> hashval -> unit
+
+val collectable_bounties : out_channel -> hashval -> (addr * asset * asset) list

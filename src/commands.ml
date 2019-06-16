@@ -2835,20 +2835,86 @@ let reportowned oc f lr =
 	| _ -> ())
       (ctre_left (ctre_right (get_ctree_element lr))) []
   with Not_found ->
-    Printf.fprintf oc "There are no owned objects or propositions in the ledger.\n"
+    Printf.fprintf oc "There appeat to be no owned objects or propositions in the ledger.\n"
 
 let reportbounties oc f lr =
   try
+    let ownedproph : (addr,asset) Hashtbl.t = Hashtbl.create 1000 in
+    let ownednegproph : (addr,asset) Hashtbl.t = Hashtbl.create 1000 in
+    let bountyh : (addr,asset) Hashtbl.t = Hashtbl.create 1000 in
     report_a
       oc
       (fun a bl ->
 	match a with
 	| (aid,bday,obl,Bounty(v)) ->
-	    Printf.fprintf f "%s fraenks bounty at %s (id %s)\n" (fraenks_of_cants v) (addr_daliladdrstr (bitseq_addr (true::false::bl))) (hashval_hexstring aid)
+	    let alpha = bitseq_addr (true::false::bl) in
+	    Hashtbl.add bountyh alpha a
+	| (aid,bday,obl,OwnsProp(pid,beta,r)) ->
+	    let alpha = bitseq_addr (true::false::bl) in
+	    Hashtbl.add ownedproph alpha a
+	| (aid,bday,obl,OwnsNegProp) ->
+	    let alpha = bitseq_addr (true::false::bl) in
+	    Hashtbl.add ownednegproph alpha a
 	| _ -> ())
-      (ctre_left (ctre_right (get_ctree_element lr))) []
+      (ctre_left (ctre_right (get_ctree_element lr))) [];
+    Hashtbl.iter
+      (fun alpha a ->
+	match a with
+	| (aid,bday,obl,Bounty(v)) ->
+	    begin
+	      Printf.fprintf f "%s fraenks bounty at %s (id %s)" (fraenks_of_cants v) (addr_daliladdrstr alpha) (hashval_hexstring aid);
+	      try
+		let a2 = Hashtbl.find ownedproph alpha in
+		match a2 with
+		| (_,_,Some(gamma,_,_),_) ->
+		    Printf.fprintf f " ** Prop owned by %s and bounty can be claimed.\n" (addr_daliladdrstr (payaddr_addr gamma))
+		| _ -> Printf.fprintf f "\n"
+	      with Not_found ->
+		try
+		  let a2 = Hashtbl.find ownednegproph alpha in
+		  match a2 with
+		  | (_,_,Some(gamma,_,_),_) ->
+		      Printf.fprintf f " ** Neg prop owned by %s and bounty can be claimed.\n" (addr_daliladdrstr (payaddr_addr gamma))
+		  | _ -> Printf.fprintf f "\n"
+		with Not_found -> Printf.fprintf f "\n"
+	    end
+	| _ -> ())
+      bountyh
   with Not_found ->
-    Printf.fprintf oc "There are no owned objects or propositions in the ledger.\n"
+    Printf.fprintf oc "There appear to be no bounties in the ledger.\n"
+
+let collectable_bounties oc lr =
+  try
+    let ownedproph : (addr,asset) Hashtbl.t = Hashtbl.create 1000 in
+    let ownednegproph : (addr,asset) Hashtbl.t = Hashtbl.create 1000 in
+    let bountyh : (addr,asset) Hashtbl.t = Hashtbl.create 1000 in
+    report_a
+      oc
+      (fun a bl ->
+	match a with
+	| (aid,bday,obl,Bounty(v)) ->
+	    let alpha = bitseq_addr (true::false::bl) in
+	    Hashtbl.add bountyh alpha a
+	| (aid,bday,Some(beta,_,_),OwnsProp(_,_,_)) when privkey_in_wallet_p (payaddr_addr beta) ->
+	    let alpha = bitseq_addr (true::false::bl) in
+	    Hashtbl.add ownedproph alpha a
+	| (aid,bday,Some(beta,_,_),OwnsNegProp) when privkey_in_wallet_p (payaddr_addr beta) ->
+	    let alpha = bitseq_addr (true::false::bl) in
+	    Hashtbl.add ownednegproph alpha a
+	| _ -> ())
+      (ctre_left (ctre_right (get_ctree_element lr))) [];
+    let cbl = ref [] in
+    Hashtbl.iter
+      (fun alpha a ->
+	try
+	  let a2 = Hashtbl.find ownedproph alpha in cbl := (alpha,a,a2)::!cbl
+	with Not_found ->
+	  try
+	    let a2 = Hashtbl.find ownednegproph alpha in cbl := (alpha,a,a2)::!cbl
+	  with Not_found -> ())
+      bountyh;
+    !cbl
+  with Not_found -> []
 
 let reportpubs oc f lr =
   let rec stp_str a =
