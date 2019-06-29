@@ -379,6 +379,54 @@ let initialize_commands () =
   ac "version" "version" "Print client description and version number"
     (fun oc _ ->
       Printf.fprintf oc "%s %s\n" Version.clientdescr Version.clientversion);
+  ac "getaddressinfo" "getaddressinfo <address>" "Print information about address"
+    (fun oc al ->
+      match al with
+      | [a] ->
+	  let alpha = daliladdrstr_addr a in
+	  let (p,x4,x3,x2,x1,x0) = alpha in
+	  let jol = ref [] in
+	  begin
+	    if p = 0 then
+	      begin
+		jol := ("address",JsonStr("p2pkh"))::!jol;
+		try
+		  let s kl = List.find (fun (_,_,_,_,h,_) -> h = (x4,x3,x2,x1,x0)) kl in
+		  let (_,b,(x,y),_,_,_) = s (!Commands.walletkeys_staking @ !Commands.walletkeys_nonstaking @ !Commands.walletkeys_staking_fresh @ !Commands.walletkeys_nonstaking_fresh) in
+		  if b then
+		    if evenp y then
+		      jol := ("pubkey",JsonStr(Printf.sprintf "02%s" (md256_hexstring (big_int_md256 x))))::!jol
+		    else
+		      jol := ("pubkey",JsonStr(Printf.sprintf "03%s" (md256_hexstring (big_int_md256 x))))::!jol
+		  else
+		    jol := ("pubkey",JsonStr(Printf.sprintf "04%s%s" (md256_hexstring (big_int_md256 x)) (md256_hexstring (big_int_md256 y))))::!jol
+		with Not_found -> ()
+	      end
+	    else if p = 1 then
+	      begin
+		jol := ("address",JsonStr("p2sh"))::!jol;
+		let (_,_,bl) = List.find (fun (beta,_,_) -> (x4,x3,x2,x1,x0) = beta) !Commands.walletp2shs in
+		let bu = Buffer.create 10 in
+		List.iter (fun b -> Buffer.add_char bu (Char.chr b)) bl;
+		jol := ("script",JsonStr(string_hexstring (Buffer.contents bu)))::!jol
+	      end
+	    else if p = 2 then
+	      begin
+		jol := ("address",JsonStr("term"))::!jol;
+	      end
+	    else if p = 3 then
+	      begin
+		jol := ("address",JsonStr("pub"))::!jol;
+	      end
+	    else
+	      raise (Failure "apparently not an address");
+	  end;
+	  if not (!jol = []) then
+	    begin
+	      print_jsonval oc (JsonObj(List.rev !jol));
+	      Printf.fprintf oc "\n";
+	    end
+      | _ -> raise BadCommandForm);
   ac "addnonce" "addnonce <file>" "Add a nonce to a theory specification file, a signature specification file or a document"
     (fun oc al ->
       match al with
