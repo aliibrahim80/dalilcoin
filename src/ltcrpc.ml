@@ -237,6 +237,10 @@ let ltc_getblock h =
   with _ ->
     raise Not_found
 
+type ltcutxo =
+  | LtcP2shSegwit of (string * int * string * string * string * int64)
+  | LtcBech32 of (string * int * string * string * int64)
+
 let ltc_listunspent () =
   try
     let l =
@@ -277,12 +281,23 @@ let ltc_listunspent () =
 		    | JsonObj(bl) ->
 			begin
 			  try
-			    let txh = json_assoc_string "txid" bl in
-			    let vout = json_assoc_int "vout" bl in
-			    let rs = json_assoc_string "redeemScript" bl in
-			    let spk = json_assoc_string "scriptPubKey" bl in
-			    let amt = json_assoc_litoshis "amount" bl in
-			    utxol := (txh,vout,rs,spk,amt)::!utxol
+			    let ltcaddr = json_assoc_string "address" bl in
+			    if ltcaddr = "" then raise Not_found;
+			    if ltcaddr.[0] = 'M' then (*** p2sh segwit ***)
+			      let txh = json_assoc_string "txid" bl in
+			      let vout = json_assoc_int "vout" bl in
+			      let rs = json_assoc_string "redeemScript" bl in
+			      let spk = json_assoc_string "scriptPubKey" bl in
+			      let amt = json_assoc_litoshis "amount" bl in
+			      utxol := LtcP2shSegwit(txh,vout,ltcaddr,rs,spk,amt)::!utxol
+			    else if ltcaddr.[0] = 'l' then (*** bech32 ***)
+			      let txh = json_assoc_string "txid" bl in
+			      let vout = json_assoc_int "vout" bl in
+			      let spk = json_assoc_string "scriptPubKey" bl in
+			      let amt = json_assoc_litoshis "amount" bl in
+			      utxol := LtcBech32(txh,vout,ltcaddr,spk,amt)::!utxol
+			    else
+			      raise Not_found
 			  with Not_found ->
 			    ()
 			end
@@ -349,106 +364,129 @@ let ltc_createburntx h1 h2 toburn =
   with Not_found ->
     try
       (Utils.log_string (Printf.sprintf "Searching for an unspent litecoin tx with at least %Ld litoshis.\n" toburn_plus_fee));
-      let (txid,vout,rs,spk,amt) = List.find (fun (txid,vout,_,_,amt) -> amt >= toburn_plus_fee) utxol in (*** only consider single spends ***)
-      let txs1b = Buffer.create 100 in
-      let txs2b = Buffer.create 100 in
-      let txs3b = Buffer.create 100 in
-      Buffer.add_string txs1b "\001"; (*** assume one input ***)
-      let txidrh = hashval_rev (hexstring_hashval txid) in
-      ignore (seo_hashval seosb txidrh (txs1b,None));
-      List.iter (fun z -> Buffer.add_char txs1b (Char.chr z)) (blnum32 (Int32.of_int vout));
-      let txs1 = Buffer.contents txs1b in
-      Buffer.add_char txs1b '\023';
-      Buffer.add_char txs1b '\022';
-      Buffer.add_string txs1b (hexstring_string rs);
-      Buffer.add_string txs2b "\255\255\255\255\002";
-      List.iter (fun z -> Buffer.add_char txs2b (Char.chr z)) (blnum64 toburn);
-      let extradata =
-	begin
-	  match !Config.onion with
-	  | Some(onionaddr) ->
-	      begin
-		try
-		  let dot = String.index onionaddr '.' in
-		  if !Config.onionremoteport = 20808 then
-		    Printf.sprintf "o%s." (String.sub onionaddr 0 dot)
-		  else
-		    Printf.sprintf "o%s:%s" (String.sub onionaddr 0 dot) (hexstring_string (Printf.sprintf "%04x" !Config.onionremoteport))
-		with Not_found -> ""
-	      end
-	  | None ->
-	      match !Config.ip with
-	      | Some(ip) ->
-		  begin
-		    let (ip0,ip1,ip2,ip3) = extract_ipv4 ip in
-		    if !Config.port = 20805 then
-		      begin
-			Printf.sprintf "I%s" (hexstring_string (Printf.sprintf "%02x%02x%02x%02x" ip0 ip1 ip2 ip3))
-		      end
+      let u = (*** only consider single spends ***)
+	List.find
+	  (fun u ->
+	    match u with
+	    | LtcP2shSegwit(txid,vout,_,_,_,amt) -> amt >= toburn_plus_fee
+	    | LtcBech32(txid,vout,_,_,amt) -> amt >= toburn_plus_fee)
+	  utxol
+      in
+      let createburntx txid vout spk amt redeemfn =
+	let txs1b = Buffer.create 100 in
+	let txs2b = Buffer.create 100 in
+	let txs3b = Buffer.create 100 in
+	Buffer.add_string txs1b "\001"; (*** assume one input ***)
+	let txidrh = hashval_rev (hexstring_hashval txid) in
+	ignore (seo_hashval seosb txidrh (txs1b,None));
+	List.iter (fun z -> Buffer.add_char txs1b (Char.chr z)) (blnum32 (Int32.of_int vout));
+	let txs1 = Buffer.contents txs1b in
+	redeemfn txs1b;
+	Buffer.add_string txs2b "\255\255\255\255\002";
+	List.iter (fun z -> Buffer.add_char txs2b (Char.chr z)) (blnum64 toburn);
+	let extradata =
+	  begin
+	    match !Config.onion with
+	    | Some(onionaddr) ->
+		begin
+		  try
+		    let dot = String.index onionaddr '.' in
+		    if !Config.onionremoteport = 20808 then
+		      Printf.sprintf "o%s." (String.sub onionaddr 0 dot)
 		    else
-		      begin
-			Printf.sprintf "i%s" (hexstring_string (Printf.sprintf "%02x%02x%02x%02x%04x" ip0 ip1 ip2 ip3 !Config.port))
-		      end
-		  end
-	      | None -> ""
-	end
+		      Printf.sprintf "o%s:%s" (String.sub onionaddr 0 dot) (hexstring_string (Printf.sprintf "%04x" !Config.onionremoteport))
+		  with Not_found -> ""
+		end
+	    | None ->
+		match !Config.ip with
+		| Some(ip) ->
+		    begin
+		      let (ip0,ip1,ip2,ip3) = extract_ipv4 ip in
+		      if !Config.port = 20805 then
+			begin
+			  Printf.sprintf "I%s" (hexstring_string (Printf.sprintf "%02x%02x%02x%02x" ip0 ip1 ip2 ip3))
+			end
+		      else
+			begin
+			  Printf.sprintf "i%s" (hexstring_string (Printf.sprintf "%02x%02x%02x%02x%04x" ip0 ip1 ip2 ip3 !Config.port))
+			end
+		    end
+		| None -> ""
+	  end
+	in
+	let extradata = (*** before the May 2019 hard fork, do not burn enough to require pushing more than 75 bytes in the burn tx (and wait an extra day before burning more than 75 bytes even after the hard fork time, out of abundance of caution) ***)
+	  if 67 + String.length extradata >= 76 && Int64.of_float (Unix.time()) < Int64.add 86400L !Utils.may2019hardforktime then
+	    ""
+	  else if 67 + String.length extradata >= 65536 then
+	    ""
+	  else
+	    extradata
+	in
+	let datalen = 67 + String.length extradata in
+	if datalen > 252 then raise (Failure "too much data to burn");
+	if datalen < 76 then
+	  begin
+	    Buffer.add_char txs2b (Char.chr (datalen+2));
+	    Buffer.add_char txs2b (Char.chr 0x6a); (*** OP_RETURN ***)
+	    Buffer.add_char txs2b (Char.chr datalen); (*** PUSH datalen ***)
+	  end
+	else if datalen > 65535 then
+	  raise (Failure "too much data to burn")
+	else if datalen > 255 then
+	  begin
+	    Buffer.add_char txs2b (Char.chr (datalen+3));
+	    Buffer.add_char txs2b (Char.chr 0x6a); (*** OP_RETURN ***)
+	    Buffer.add_char txs2b (Char.chr 77); (*** PUSH datalen ***)
+	    Buffer.add_char txs2b (Char.chr (datalen mod 256));
+	    Buffer.add_char txs2b (Char.chr (datalen / 256));
+	  end
+	else 
+	  begin
+	    Buffer.add_char txs2b (Char.chr (datalen+3));
+	    Buffer.add_char txs2b (Char.chr 0x6a); (*** OP_RETURN ***)
+	    Buffer.add_char txs2b (Char.chr 76); (*** PUSH datalen ***)
+	    Buffer.add_char txs2b (Char.chr datalen);
+	  end;
+	ignore (seo_hashval seosb h1 (txs2b,None));
+	ignore (seo_hashval seosb h2 (txs2b,None));
+	for i = 0 to (String.length extradata) - 1 do
+	  Buffer.add_char txs2b extradata.[i]
+	done;
+	List.iter (fun z -> Buffer.add_char txs3b (Char.chr z)) (blnum64 (Int64.sub amt toburn_plus_fee));
+	let spks = hexstring_string spk in
+	Buffer.add_char txs3b (Char.chr (String.length spks));
+	Buffer.add_string txs3b spks;
+	Buffer.add_string txs3b "\000\000\000\000"; (*** locktime ***)
+	let txs2 = Buffer.contents txs2b in
+	let txs3 = Buffer.contents txs3b in
+	let (i,rtxid,txs) = finddatx ("\002\000\000\000" ^ (Buffer.contents txs1b) ^ txs2) txs3 in
+	let txsb = Buffer.create 100 in
+	Buffer.add_string txsb "\002\000\000\000";
+	Buffer.add_string txsb txs1;
+	Buffer.add_string txsb "\000";
+	Buffer.add_string txsb txs2;
+	Buffer.add_string txsb (le_num24 i);
+	Buffer.add_string txsb txs3;
+	let s = Buffer.contents txsb in
+	Hashtbl.add burntx h2 s;
+	s
       in
-      let extradata = (*** before the May 2019 hard fork, do not burn enough to require pushing more than 75 bytes in the burn tx (and wait an extra day before burning more than 75 bytes even after the hard fork time, out of abundance of caution) ***)
-	if 67 + String.length extradata >= 76 && Int64.of_float (Unix.time()) < Int64.add 86400L !Utils.may2019hardforktime then
-	  ""
-	else if 67 + String.length extradata >= 65536 then
-	  ""
-	else
-	  extradata
-      in
-      let datalen = 67 + String.length extradata in
-      if datalen > 252 then raise (Failure "too much data to burn");
-      if datalen < 76 then
-	begin
-	  Buffer.add_char txs2b (Char.chr (datalen+2));
-	  Buffer.add_char txs2b (Char.chr 0x6a); (*** OP_RETURN ***)
-	  Buffer.add_char txs2b (Char.chr datalen); (*** PUSH datalen ***)
-	end
-      else if datalen > 65535 then
-	raise (Failure "too much data to burn")
-      else if datalen > 255 then
-	begin
-	  Buffer.add_char txs2b (Char.chr (datalen+3));
-	  Buffer.add_char txs2b (Char.chr 0x6a); (*** OP_RETURN ***)
-	  Buffer.add_char txs2b (Char.chr 77); (*** PUSH datalen ***)
-	  Buffer.add_char txs2b (Char.chr (datalen mod 256));
-	  Buffer.add_char txs2b (Char.chr (datalen / 256));
-	end
-      else 
-	begin
-	  Buffer.add_char txs2b (Char.chr (datalen+3));
-	  Buffer.add_char txs2b (Char.chr 0x6a); (*** OP_RETURN ***)
-	  Buffer.add_char txs2b (Char.chr 76); (*** PUSH datalen ***)
-	  Buffer.add_char txs2b (Char.chr datalen);
-	end;
-      ignore (seo_hashval seosb h1 (txs2b,None));
-      ignore (seo_hashval seosb h2 (txs2b,None));
-      for i = 0 to (String.length extradata) - 1 do
-	Buffer.add_char txs2b extradata.[i]
-      done;
-      List.iter (fun z -> Buffer.add_char txs3b (Char.chr z)) (blnum64 (Int64.sub amt toburn_plus_fee));
-      let spks = hexstring_string spk in
-      Buffer.add_char txs3b (Char.chr (String.length spks));
-      Buffer.add_string txs3b spks;
-      Buffer.add_string txs3b "\000\000\000\000"; (*** locktime ***)
-      let txs2 = Buffer.contents txs2b in
-      let txs3 = Buffer.contents txs3b in
-      let (i,rtxid,txs) = finddatx ("\002\000\000\000" ^ (Buffer.contents txs1b) ^ txs2) txs3 in
-      let txsb = Buffer.create 100 in
-      Buffer.add_string txsb "\002\000\000\000";
-      Buffer.add_string txsb txs1;
-      Buffer.add_string txsb "\000";
-      Buffer.add_string txsb txs2;
-      Buffer.add_string txsb (le_num24 i);
-      Buffer.add_string txsb txs3;
-      let s = Buffer.contents txsb in
-      Hashtbl.add burntx h2 s;
-      s
+      match u with
+      | LtcP2shSegwit(txid,vout,_,rs,spk,amt) ->
+	  let rs2 = hexstring_string rs in
+	  let rsl = String.length rs2 in
+	  if rsl < 1 || rsl > 75 then raise Not_found;
+	  createburntx
+	    txid vout spk amt
+	    (fun txs1b ->
+	      Buffer.add_char txs1b (Char.chr (1 + rsl));
+	      Buffer.add_char txs1b (Char.chr rsl);
+	      Buffer.add_string txs1b rs2)
+      | LtcBech32(txid,vout,ltcaddr,spk,amt) ->
+	  createburntx
+	    txid vout spk amt
+	    (fun txs1b ->
+	      Buffer.add_char txs1b '\000')
     with Not_found -> raise InsufficientLtcFunds
 
 let ltc_signrawtransaction txs =

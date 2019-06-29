@@ -2251,7 +2251,14 @@ let initialize_commands () =
 	  try
 	    let utxol = Ltcrpc.ltc_listunspent () in
 	    Printf.fprintf oc "%d ltc utxos\n" (List.length utxol);
-	    List.iter (fun (txid,vout,_,_,amt) -> Printf.fprintf oc "%s:%d %Ld\n" txid vout amt) utxol
+	    List.iter
+	      (fun u ->
+		match u with
+		| LtcP2shSegwit(txid,vout,ltcaddr,_,_,amt) ->
+		    Printf.fprintf oc "%s:%d %Ld (%s [p2sh-segwit])\n" txid vout amt ltcaddr
+		| LtcBech32(txid,vout,ltcaddr,_,amt) ->
+		    Printf.fprintf oc "%s:%d %Ld (%s [bech32])\n" txid vout amt ltcaddr)
+	      utxol
 	  with Not_found ->
 	    Printf.fprintf oc "could not get unspent ltc list\n"
 	end
