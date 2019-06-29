@@ -13,6 +13,7 @@ open Hash
 val base58 : big_int -> string
 val frombase58 : string -> big_int
 val dalilwif : big_int -> bool -> string
+val ltcwif : big_int -> bool -> string
 val privkey_from_wif : string -> big_int * bool
 val privkey_from_btcwif : string -> big_int * bool
 val pubkey_hashval : big_int * big_int -> bool -> hashval

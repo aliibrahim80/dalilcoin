@@ -114,6 +114,22 @@ let dalilwif k compr =
   let (sh20,_,_,_,_,_,_,_) = sha256dstr (Buffer.contents s) in
   base58 (or_big_int (shift_left_big_int (or_big_int k (shift_left_big_int (big_int_of_int pre) 256)) 32) (int32_big_int_bits sh20 0))
 
+let ltcwif k compr =
+  let pre = if !Config.testnet then 0xef else 0xb0 in
+  let k1 = 
+    if compr then
+      or_big_int unit_big_int (shift_left_big_int (or_big_int (shift_left_big_int (big_int_of_int pre) 256) k) 8)
+    else
+      or_big_int (shift_left_big_int (big_int_of_int pre) 256) k
+  in
+  let s = Buffer.create 34 in
+  Buffer.add_char s (Char.chr pre);
+  let c = seo_md256 seosb (big_int_md256 k) (s,None) in
+  seosbf c;
+  if compr then Buffer.add_char s (Char.chr 1);
+  let (sh20,_,_,_,_,_,_,_) = sha256dstr (Buffer.contents s) in
+  base58 (or_big_int (shift_left_big_int k1 32) (int32_big_int_bits sh20 0))
+
 (* w : Dalilcoin wif base58 string *)
 (* return private key, big_int and a bool indicating if it's for the compressed pubkey *)
 (* Note: This doesn't check the checksum. *)
