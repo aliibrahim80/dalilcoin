@@ -562,6 +562,7 @@ let initialize_dlc_from_ltc sout lblkh =
   missingdeltas := List.filter (fun (_,h) -> Hashtbl.mem liveblocks h) !missingdeltas
 
 let collect_inv m cnt tosend txinv =
+  if DbCTreeElt.dbexists !genesisledgerroot then (tosend := (int_of_msgtype CTreeElement,!genesisledgerroot)::!tosend; incr cnt);
   let (lastchangekey,ctips0l) = ltcdacstatus_dbget !ltc_bestblock in
   let inclh : (hashval,unit) Hashtbl.t = Hashtbl.create 5000 in
   let collect_inv_rec_blocks tosend =
@@ -576,8 +577,9 @@ let collect_inv m cnt tosend txinv =
 		  let (bhd,_) = DbBlockHeader.dbget bh in
 		  Hashtbl.add inclh bh ();
 		  tosend := (int_of_msgtype Headers,bh)::!tosend;
-		  if DbCTreeElt.dbexists bhd.newledgerroot then tosend := (int_of_msgtype CTreeElement,bhd.newledgerroot)::!tosend;
-		  if DbBlockDelta.dbexists bh then (tosend := (int_of_msgtype Blockdelta,bh)::!tosend);
+		  incr cnt;
+		  if DbCTreeElt.dbexists bhd.newledgerroot then (tosend := (int_of_msgtype CTreeElement,bhd.newledgerroot)::!tosend; incr cnt);
+		  if DbBlockDelta.dbexists bh then (tosend := (int_of_msgtype Blockdelta,bh)::!tosend; incr cnt);
 		with Not_found -> ()
 	      end)
 	  ctips)
