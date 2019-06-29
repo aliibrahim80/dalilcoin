@@ -2696,6 +2696,24 @@ let pblockchain s n m =
   | Some(_,lbk,ltx) -> pblockchain_r s lbk ltx m
   | None -> ()
 
+let rec reprocess_blockchain_r s lbk ltx m =
+  try
+    let (dbh,lmedtm,burned,par,csm,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+    if blkh > m then
+      begin
+	match par with
+	| Some(lbk,ltx) -> reprocess_blockchain_r s lbk ltx m
+	| None -> ()
+      end;
+    reprocessblock s dbh
+  with Not_found ->
+    Printf.fprintf s "apparent block burned with ltc tx %s in block %s, but missing outline info\n" (hashval_hexstring ltx) (hashval_hexstring lbk)
+
+let reprocess_blockchain s n m =
+  match n with
+  | Some(_,lbk,ltx) -> reprocess_blockchain_r s lbk ltx (Int64.of_int m)
+  | None -> ()
+
 let dumpstate fa =
   let sa = open_out fa in
   Printf.fprintf sa "=========\nNetwork connections: %d\n" (List.length !netconns);

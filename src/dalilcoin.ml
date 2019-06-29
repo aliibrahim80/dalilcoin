@@ -3293,8 +3293,18 @@ let initialize_commands () =
 	      Printf.fprintf oc "Cannot determine information about best block %s at height %Ld\n" (hashval_hexstring h) blkh
 	  with Not_found ->
 	    Printf.fprintf oc "Cannot find block height for best block %s\n" (hashval_hexstring h));
-  ac "blockchain" "blockchain" "Print the blockchain up to the most recent 1000 blocks."
-    (fun oc al -> Commands.pblockchain oc (get_bestblock_print_warnings oc) 1000);
+  ac "blockchain" "blockchain [<n>]" "Print the blockchain up to the most recent <n> blocks, with a default of 1000 blocks."
+    (fun oc al ->
+      match al with
+      | [] -> Commands.pblockchain oc (get_bestblock_print_warnings oc) 1000
+      | [n] -> let n = int_of_string n in Commands.pblockchain oc (get_bestblock_print_warnings oc) n
+      | _ -> raise BadCommandForm);
+  ac "reprocessblockchain" "reprocessblockchain [<n>]" "reprocess the block chain from the block at height n up to the current block, where by default n=1 (the genesis block)"
+    (fun oc al ->
+      match al with
+      | [] -> Commands.reprocess_blockchain oc (get_bestblock_print_warnings oc) 1
+      | [n] -> let n = int_of_string n in Commands.reprocess_blockchain oc (get_bestblock_print_warnings oc) n
+      | _ -> raise BadCommandForm);
   ac "reprocessblock" "reprocessblock <blockhash>" "Manually reprocess a given block.\nThis is useful if either -ltcoffline is set or if part of the current ledger seems to be missing from the local node.\nIf the current node has the full ledger from before the block,\nthen processing the block should ensure the node has the resulting full ledger."
     (fun oc al ->
       match al with
