@@ -42,7 +42,12 @@ module DbLtcBlock :
 val ltc_getbestblockhash : unit -> string
 val ltc_getblock : string -> string * int64 * int64 * string list
 val ltc_gettransactioninfo : string -> int64 * hashval * hashval * string option * int option
-val ltc_listunspent : unit -> (string * int * string * string * int64) list
+
+type ltcutxo =
+  | LtcP2shSegwit of (string * int * string * string * string * int64)
+  | LtcBech32 of (string * int * string * string * int64)
+
+val ltc_listunspent : unit -> ltcutxo list
 
 exception InsufficientLtcFunds
 val ltc_createburntx : hashval -> hashval -> int64 -> string
