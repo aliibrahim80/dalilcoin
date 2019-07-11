@@ -480,7 +480,8 @@ let initialize_commands () =
 	  let ch = open_in f in
 	  let l = input_token ch in
 	  if l = "Theory" then
-	    let (thyspec,nonce,gamma,_,_) = input_theoryspec ch in
+	    let (thyspec,nonce,gamma,_,prophrev,propownsh,proprightsh) = input_theoryspec ch in
+	    let (lr,tr,sr) = get_3roots (get_bestblock_print_warnings oc) in
 	    begin
 	      let p = let s = Buffer.create 100 in seosbf (seo_theoryspec seosb thyspec (s,None)); String.length (Buffer.contents s) in
 	      if p > 450000 then Printf.fprintf oc "Warning: Theory is too big: %d bytes. It probably will not fit in a block.\n" p;
@@ -498,12 +499,101 @@ let initialize_commands () =
 		      | Some(h) ->
 			  Printf.fprintf oc "Nonce: %s\n" (hashval_hexstring h);
 			  match gamma with
-			  | None -> Printf.fprintf oc "No publisher address. Call addpublisheraddress to add one.\n"
+			  | None -> Printf.fprintf oc "No publisher address. Call addpublisher to add one.\n"
 			  | Some(gamma) ->
 			      if payaddr_p gamma then
 				let beta = hashval_pub_addr (hashpair (hashaddr gamma) (hashpair h thyh)) in
 				Printf.fprintf oc "Publisher address: %s\n" (Cryptocurr.addr_daliladdrstr gamma);
-				Printf.fprintf oc "Marker Address: %s\n" (Cryptocurr.addr_daliladdrstr beta)
+				Printf.fprintf oc "Marker Address: %s\n" (Cryptocurr.addr_daliladdrstr beta);
+				let (_,kl) = thy in
+				let pname h =
+				  try
+				    Hashtbl.find prophrev h
+				  with Not_found -> ""
+				in
+				List.iter
+				  (fun pidpure ->
+				    let pidthy = hashtag (hashopair2 (Some(thyh)) pidpure) 33l in
+				    let alphapure = hashval_term_addr pidpure in
+				    let alphathy = hashval_term_addr pidthy in
+				    let nm = pname pidpure in
+				    begin
+				      let hl = ctree_lookup_addr_assets true true (CHash(lr)) (addr_bitseq alphapure) in
+				      match hlist_lookup_prop_owner true true true pidpure hl with
+				      | None ->
+					  begin
+					    let delta1str = try Printf.sprintf "address %s" (Cryptocurr.addr_daliladdrstr (payaddr_addr (Hashtbl.find propownsh pidpure))) with Not_found -> "publisher address" in
+					    let rstr =
+					      try
+						let (delta2,r) = Hashtbl.find proprightsh pidpure in
+						match r with
+						| None -> "no rights available (unusable)"
+						| Some(0L) -> "free to use"
+						| Some(x) -> Printf.sprintf "right for each use costs %Ld cants (%s fraenks) payable to %s" x (Cryptocurr.fraenks_of_cants x) (Cryptocurr.addr_daliladdrstr (payaddr_addr delta2))
+					      with Not_found -> "free to use"
+					    in
+					    Printf.fprintf oc "Pure proposition '%s' has no owner.\nYou will be declared as the owner when the document is published with the following details:\nNew ownership: %s.\n (This can be changed prior to publication with NewOwner <defname> <payaddress>.)\nRights policy: %s\n (This can be changed prior to publication with NewRights <defname> <payaddress> [Free|None|<fraenks>].)\n" nm delta1str rstr
+					  end;
+					  let bl = hlist_filter_assets_gen true true (fun a -> match a with (_,_,_,Bounty(_)) -> true | _ -> false) hl in
+					  if not (bl = []) then
+					    begin
+					      Printf.fprintf oc "There are bounties at %s you can claim by becoming the owner of the pure prop:\n" (Cryptocurr.addr_daliladdrstr alphapure);
+					      List.iter
+						(fun (bid,_,_,b) ->
+						  match b with
+						  | Bounty(v) -> Printf.fprintf oc "Bounty %s fraenks (asset id %s)\n" (fraenks_of_cants v) (hashval_hexstring bid)
+						  | _ -> raise (Failure "impossible"))
+						bl
+					    end
+				      | Some(beta,r) ->
+					  Printf.fprintf oc "Pure proposition '%s' is owned by %s: %s\n" nm (addr_daliladdrstr (payaddr_addr beta))
+					    (match r with
+					    | None -> "No right to use without defining; must leave as theorem in the document"
+					    | Some(r) ->
+						if r = 0L then
+						  "free to use; consider changing to Known without proof"
+						else
+						  (Printf.sprintf "Declaring the proposition as Known without proving it would cost %Ld cants; consider this" r))
+				    end;
+				    let hl = ctree_lookup_addr_assets true true (CHash(lr)) (addr_bitseq alphathy) in
+				    begin
+				      match hlist_lookup_prop_owner true true true pidthy hl with
+				      | None ->
+					  begin
+					    let delta1str = try Printf.sprintf "address %s" (Cryptocurr.addr_daliladdrstr (payaddr_addr (Hashtbl.find propownsh pidpure))) with Not_found -> "publisher address" in
+					    let rstr =
+					      try
+						let (delta2,r) = Hashtbl.find proprightsh pidpure in
+						match r with
+						| None -> "no rights available (unusable)"
+						| Some(0L) -> "free to use"
+						| Some(x) -> Printf.sprintf "right for each use costs %Ld cants (%s fraenks) payable to %s" x (Cryptocurr.fraenks_of_cants x) (Cryptocurr.addr_daliladdrstr (payaddr_addr delta2))
+					      with Not_found -> "free to use"
+					    in
+					    Printf.fprintf oc "Proposition '%s' in theory has no owner.\nYou will be declared as the owner when the document is published with the following details:\nNew ownership: %s.\n (This can be changed prior to publication with NewOwner <defname> <payaddress>.)\nRights policy: %s\n (This can be changed prior to publication with NewRights <defname> <payaddress> [Free|None|<fraenks>].)\n" nm delta1str rstr
+					  end;
+					  let bl = hlist_filter_assets_gen true true (fun a -> match a with (_,_,_,Bounty(_)) -> true | _ -> false) hl in
+					  if not (bl = []) then
+					    begin
+					      Printf.fprintf oc "There are bounties at %s you can claim by becoming the owner of the theory prop:\n" (Cryptocurr.addr_daliladdrstr alphathy);
+					      List.iter
+						(fun (bid,_,_,b) ->
+						  match b with
+						  | Bounty(v) -> Printf.fprintf oc "Bounty %s fraenks (asset id %s)\n" (fraenks_of_cants v) (hashval_hexstring bid)
+						  | _ -> raise (Failure "impossible"))
+						bl
+					    end
+				      | Some(beta,r) ->
+					  Printf.fprintf oc "Proposition '%s' in theory is owned by %s: %s\n" nm (addr_daliladdrstr (payaddr_addr beta))
+					    (match r with
+					    | None -> "No right to use without defining; must leave as definition in the document"
+					    | Some(r) ->
+						if r = 0L then
+						  "free to use; consider changing Thm to Known"
+						else
+						  (Printf.sprintf "Declaring the proposition as Known without proving it would cost %Ld cants; consider this" r))
+				    end)
+				  kl;
 			      else
 				raise (Failure (Printf.sprintf "Publisher address %s is not a pay address." (Cryptocurr.addr_daliladdrstr gamma)))
 	    end
@@ -978,7 +1068,7 @@ let initialize_commands () =
 		Printf.fprintf oc "Cannot find a spendable utxo to use to publish the marker.\n"
 	  in
 	  if l = "Theory" then
-	    let (thyspec,nonce,gamma,_,_) = input_theoryspec ch in
+	    let (thyspec,nonce,gamma,_,_,_,_) = input_theoryspec ch in
 	    begin
 	      match Checking.check_theoryspec thyspec with
 	      | None -> raise (Failure "Theory spec does not check.\n")
@@ -1001,7 +1091,7 @@ let initialize_commands () =
 			    | None -> Printf.fprintf oc "No nonce is given. Call addnonce to add one automatically.\n"
 			    | Some(nonce) ->
 				match gamma with
-				| None -> Printf.fprintf oc "No publisher address. Call addpublisheraddress to add one.\n"
+				| None -> Printf.fprintf oc "No publisher address. Call addpublisher to add one.\n"
 				| Some(gamma) ->
 				    if payaddr_p gamma then
 				      let beta = hashval_pub_addr (hashpair (hashaddr gamma) (hashpair nonce thyh)) in
@@ -1143,7 +1233,7 @@ let initialize_commands () =
 		    | None -> Printf.fprintf oc "No nonce is given. Call addnonce to add one automatically.\n"
 		    | Some(nonce) ->
 			match gamma with
-			| None -> Printf.fprintf oc "No publisher address. Call addpublisheraddress to add one.\n"
+			| None -> Printf.fprintf oc "No publisher address. Call addpublisher to add one.\n"
 			| Some(gamma) ->
 			    if payaddr_p gamma then
 			      let signaspech = hashsigna (signaspec_signa signaspec) in
@@ -1274,7 +1364,7 @@ let initialize_commands () =
 			| None -> Printf.fprintf oc "No nonce is given. Call addnonce to add one automatically.\n"
 			| Some(nonce) ->
 			    match gamma with
-			    | None -> Printf.fprintf oc "No publisher address. Call addpublisheraddress to add one.\n"
+			    | None -> Printf.fprintf oc "No publisher address. Call addpublisher to add one.\n"
 			    | Some(gamma) ->
 				if payaddr_p gamma then
 				  let beta = hashval_pub_addr (hashpair (hashaddr gamma) (hashpair nonce (hashopair2 th doch))) in
@@ -1295,7 +1385,7 @@ let initialize_commands () =
 	  let ch = open_in f in
 	  let l = input_token ch in
 	  if l = "Theory" then
-	    let (thyspec,nonce,gamma,propownsh,proprightsh) = input_theoryspec ch in
+	    let (thyspec,nonce,gamma,_,_,propownsh,proprightsh) = input_theoryspec ch in
 	    begin
 	      match Checking.check_theoryspec thyspec with
 	      | None -> raise (Failure "Theory spec does not check.\n")
@@ -1318,7 +1408,7 @@ let initialize_commands () =
 			    | None -> Printf.fprintf oc "No nonce is given. Call addnonce to add one automatically.\n"
 			    | Some(h) ->
 				match gamma with
-				| None -> Printf.fprintf oc "No publisher address. Call addpublisheraddress to add one.\n"
+				| None -> Printf.fprintf oc "No publisher address. Call addpublisher to add one.\n"
 				| Some(gamma) ->
 				    if payaddr_p gamma then
 				      let gammap = let (i,x0,x1,x2,x3,x4) = gamma in (i = 1,x0,x1,x2,x3,x4) in
@@ -1356,7 +1446,7 @@ let initialize_commands () =
 							with Not_found -> (gamma1p,Some(0L))
 						      in
 						      let h2 = hashtag (hashopair2 (Some(thyh)) h) 33l in
-						      txoutlr := (hashval_term_addr h2,(Some(gamma1p,0L,false),OwnsProp(h2,gamma2p,rp)))::!txoutlr)
+						      txoutlr := (hashval_term_addr h,(Some(gamma1p,0L,false),OwnsProp(h,gamma2p,rp)))::(hashval_term_addr h2,(Some(gamma1p,0L,false),OwnsProp(h2,gamma2p,rp)))::!txoutlr)
 						    kl;
 						  let stau = ((txinl,!txoutlr),([],[])) in
 						  let c2 = open_out_bin g in
@@ -1520,7 +1610,7 @@ let initialize_commands () =
 		    | None -> Printf.fprintf oc "No nonce is given. Call addnonce to add one automatically.\n"
 		    | Some(nonce) ->
 			match gamma with
-			| None -> Printf.fprintf oc "No publisher address. Call addpublisheraddress to add one.\n"
+			| None -> Printf.fprintf oc "No publisher address. Call addpublisher to add one.\n"
 			| Some(gamma) ->
 			    if payaddr_p gamma then
 			      let gammap = let (i,x0,x1,x2,x3,x4) = gamma in (i = 1,x0,x1,x2,x3,x4) in
@@ -1616,7 +1706,7 @@ let initialize_commands () =
 		  | None -> Printf.fprintf oc "No nonce is given. Call addnonce to add one automatically.\n"
 		  | Some(nonce) ->
 		      match gamma with
-		      | None -> Printf.fprintf oc "No publisher address. Call addpublisheraddress to add one.\n"
+		      | None -> Printf.fprintf oc "No publisher address. Call addpublisher to add one.\n"
 		      | Some(gamma) ->
 			  if payaddr_p gamma then
 			    let gammap = let (i,x0,x1,x2,x3,x4) = gamma in (i = 1,x0,x1,x2,x3,x4) in

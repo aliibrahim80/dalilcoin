@@ -7,7 +7,11 @@ open Logic
 open Mathdata
 
 val input_token : in_channel -> string
-val input_theoryspec : in_channel -> theoryspec * hashval option * addr option * (hashval,payaddr) Hashtbl.t * (hashval,payaddr * (int64 option)) Hashtbl.t
+val input_theoryspec : in_channel -> theoryspec * hashval option * addr option
+    * (string,hashval) Hashtbl.t
+    * (hashval,string) Hashtbl.t
+    * (hashval,payaddr) Hashtbl.t
+    * (hashval,payaddr * (int64 option)) Hashtbl.t
 val input_signaspec : in_channel -> hashval option -> stree option -> signaspec * hashval option * addr option
     * (string,stp * hashval) Hashtbl.t
     * (hashval,string) Hashtbl.t

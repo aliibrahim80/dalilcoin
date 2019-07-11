@@ -182,6 +182,7 @@ let input_theoryspec ch =
   let primc = ref 0 in
   let trmh : (string,Logic.stp * Logic.trm) Hashtbl.t = Hashtbl.create 100 in
   let proph : (string,hashval) Hashtbl.t = Hashtbl.create 100 in
+  let prophrev : (hashval,string) Hashtbl.t = Hashtbl.create 100 in
   let propownsh : (hashval,payaddr) Hashtbl.t = Hashtbl.create 100 in
   let proprightsh : (hashval,payaddr * (int64 option)) Hashtbl.t = Hashtbl.create 100 in
   let thyspec = ref [] in
@@ -297,15 +298,17 @@ let input_theoryspec ch =
 	    let m = input_trm baseh trmh ch [] [] in
 	    match Checking.beta_eta_delta_norm m ([],[]) with
 	    | Some(m) ->
-		Hashtbl.add proph nm (Mathdata.tm_hashroot m);
+		let h = Mathdata.tm_hashroot m in
+		Hashtbl.add proph nm h;
+		Hashtbl.add prophrev h nm;
 		thyspec := Logic.Thyaxiom(m)::!thyspec
 	    | None -> raise (Failure (Printf.sprintf "trouble normalizing Axiom %s" nm)))
       else
 	raise (Failure (Printf.sprintf "Unknown theory spec item %s" l))
     done;
-    (!thyspec,!nonce,!gamma,propownsh,proprightsh)
+    (!thyspec,!nonce,!gamma,proph,prophrev,propownsh,proprightsh)
   with
-  | End_of_file -> close_in ch; (!thyspec,!nonce,!gamma,propownsh,proprightsh)
+  | End_of_file -> close_in ch; (!thyspec,!nonce,!gamma,proph,prophrev,propownsh,proprightsh)
   | e -> close_in ch; raise e;;
 
 let ostree_lookup_fail sgt h =
