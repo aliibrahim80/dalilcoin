@@ -1849,6 +1849,7 @@ let sendtx2 oc blkh tm tr sr lr txbytes stau =
 let sendtx oc blkh tm tr sr lr staustr =
   let s = hexstring_string staustr in
   let l = String.length s in
+  if l > 450000 then raise (Failure "refusing to send tx bigger than 450K bytes");
   let (stau,_) = sei_stx seis (s,l,None,0,0) in
   sendtx2 oc blkh tm tr sr lr l stau
 
