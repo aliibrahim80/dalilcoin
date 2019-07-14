@@ -336,7 +336,7 @@ let stakingthread () =
 					  end
 					else
 					  begin
-(*				    log_string (Printf.sprintf "tx %s not being included because estimated block size would be too big (rembytesestimate %d, bytesestimate %d)\n" (hashval_hexstring h) !rembytesestimate bytesestimate); *)
+					    log_string (Printf.sprintf "tx %s not being included because estimated block size would be too big (rembytesestimate %d, bytesestimate %d)\n" (hashval_hexstring h) !rembytesestimate bytesestimate);
 					  end
 				    end
 				  else
