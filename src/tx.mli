@@ -34,6 +34,7 @@ val check_spend_obligation : int64 option -> addr -> int64 -> int64 -> big_int -
 val check_move_obligation : addr -> big_int -> gensignat -> obligation -> preasset -> addr_preasset list -> bool
 val tx_signatures_valid : int64 -> int64 -> asset list -> stx -> bool
 val tx_signatures_valid_asof_blkh : asset list -> stx -> int64 option * int64 option
+val estimate_required_signatures : asset list -> tx -> int
 
 val txout_update_ottree : addr_preasset list -> ttree option -> ttree option
 val txout_update_ostree : addr_preasset list -> stree option -> stree option
@@ -48,6 +49,8 @@ val sei_stx : (int -> 'a -> int * 'a) -> 'a -> stx * 'a
 val hashtxsigs : txsigs -> hashval
 
 val hashstx : stx -> hashval
+
+val stxsize : stx -> int
 
 module DbSTx :
     sig

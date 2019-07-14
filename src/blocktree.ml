@@ -1040,36 +1040,41 @@ Hashtbl.add msgtype_handler STx
           let (((tauin,tauout) as tau,_) as stau,_) = deserialize_exc_protect cs (fun () -> sei_stx seis r) in
 	  if hashstx stau = h then
 	    begin
-	      try
-		begin
-		  match get_bestblock() with
-		  | (Some(dbh,lbk,ltx),_) -> (*** ignore consensus warnings here ***)
-		      begin
-			let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
-			let nblkh = Int64.add 1L blkh in
-			let (_,tmstmp,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
-			if tx_valid tmstmp tau then
-			  let unsupportederror alpha k = log_string (Printf.sprintf "Could not find asset %s at address %s in ledger %s; throwing out tx %s\n" (hashval_hexstring k) (Cryptocurr.addr_daliladdrstr alpha) (hashval_hexstring lr) (hashval_hexstring h)) in
-			  let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true true false tauin (CHash(lr)) unsupportederror) in
-			  if tx_signatures_valid nblkh tmstmp al stau then (*** accept it if it will be valid in the next block ***)
-			    begin
-			      let nfee = ctree_supports_tx true true false (lookup_thytree tr) (lookup_sigtree sr) nblkh tau (CHash(lr)) in
-			      let fee = Int64.sub 0L nfee in
-			      if fee >= !Config.minrelayfee then
-				begin
-				  Hashtbl.add stxpool h stau;
-				  log_string (Printf.sprintf "Accepting tx %s into pool\n" (hashval_hexstring h));
-				  add_to_txpool h stau;
-				  savetxtopool_real h stau
-				end
-			      else
-				(log_string (Printf.sprintf "ignoring tx %s with low fee of %s fraenks (%Ld cants)\n" (hashval_hexstring h) (Cryptocurr.fraenks_of_cants fee) fee))
-			    end
+	      let txbytes = stxsize stau in
+	      if txbytes > 450000 then
+		(log_string (Printf.sprintf "ignoring tx %s since it is %d bytes, above the 450K bytes limit" (hashval_hexstring h) txbytes))
+	      else
+		let minfee = Int64.mul (Int64.of_int txbytes) !Config.minrelayfee in
+		try
+		  begin
+		    match get_bestblock() with
+		    | (Some(dbh,lbk,ltx),_) -> (*** ignore consensus warnings here ***)
+			begin
+			  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+			  let nblkh = Int64.add 1L blkh in
+			  let (_,tmstmp,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
+			  if tx_valid tmstmp tau then
+			    let unsupportederror alpha k = log_string (Printf.sprintf "Could not find asset %s at address %s in ledger %s; throwing out tx %s\n" (hashval_hexstring k) (Cryptocurr.addr_daliladdrstr alpha) (hashval_hexstring lr) (hashval_hexstring h)) in
+			    let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true true false tauin (CHash(lr)) unsupportederror) in
+			    if tx_signatures_valid nblkh tmstmp al stau then (*** accept it if it will be valid in the next block ***)
+			      begin
+				let nfee = ctree_supports_tx true true false (lookup_thytree tr) (lookup_sigtree sr) nblkh tau (CHash(lr)) in
+				let fee = Int64.sub 0L nfee in
+				if fee >= minfee then
+				  begin
+				    Hashtbl.add stxpool h stau;
+				    log_string (Printf.sprintf "Accepting tx %s into pool\n" (hashval_hexstring h));
+				    add_to_txpool h stau;
+				    savetxtopool_real h stau
+				  end
+				else
+				  (log_string (Printf.sprintf "ignoring tx %s with low fee of %s fraenks (%Ld cants)\n" (hashval_hexstring h) (Cryptocurr.fraenks_of_cants fee) fee))
+			      end
+			    else
+			      (log_string (Printf.sprintf "ignoring tx %s since signatures are not valid at the next block height of %Ld\n" (hashval_hexstring h) nblkh))
 			  else
-			    (log_string (Printf.sprintf "ignoring tx %s since signatures are not valid at the next block height of %Ld\n" (hashval_hexstring h) nblkh))
-			else
-			  (log_string (Printf.sprintf "misbehaving peer? [invalid Tx %s]\n" (hashval_hexstring h)))
-		      end
+			    (log_string (Printf.sprintf "misbehaving peer? [invalid Tx %s]\n" (hashval_hexstring h)))
+			end
 		    | _ -> raise Not_found
 		end
 	      with _ ->

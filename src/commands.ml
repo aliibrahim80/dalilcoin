@@ -1641,7 +1641,7 @@ let savetxtopool blkh tm lr staustr =
   else
     Printf.printf "Invalid tx\n"
 
-let validatetx3 oc blkh tm thtr sgtr ltr stau transform =
+let validatetx3 oc blkh tm thtr sgtr ltr txbytes stau transform =
   let ((tauin,tauout) as tau,tausg) = stau in
   if tx_valid_oc oc tm tau then
     begin
@@ -1666,13 +1666,14 @@ let validatetx3 oc blkh tm thtr sgtr ltr stau transform =
 	    verbose_supportedcheck := Some(oc);
 	    let nfee = ctree_supports_tx true true false thtr sgtr blkh tau ltr in
 	    verbose_supportedcheck := None;
+	    let minfee = Int64.mul (Int64.of_int txbytes) !Config.minrelayfee in
 	    let fee = Int64.sub 0L nfee in
 	    if fee < 0L then
               Printf.fprintf oc "Tx is supported by the current ledger and but requires %s fraenks more input.\n" (Cryptocurr.fraenks_of_cants (Int64.neg fee))
-	    else if fee >= !Config.minrelayfee then
-	      Printf.fprintf oc "Tx is supported by the current ledger and has fee %s fraenks (above minrelayfee %s fraenks)\n" (Cryptocurr.fraenks_of_cants fee) (Cryptocurr.fraenks_of_cants !Config.minrelayfee)
+	    else if fee >= minfee then
+	      Printf.fprintf oc "Tx is supported by the current ledger and has fee %s fraenks (above minrelayfee %s fraenks)\n" (Cryptocurr.fraenks_of_cants fee) (Cryptocurr.fraenks_of_cants minfee)
             else
-	      Printf.fprintf oc "Tx is supported by the current ledger and has fee %s fraenks (below minrelayfee %s fraenks)\n" (Cryptocurr.fraenks_of_cants fee) (Cryptocurr.fraenks_of_cants !Config.minrelayfee);
+	      Printf.fprintf oc "Tx is supported by the current ledger and has fee %s fraenks (below minrelayfee %s fraenks)\n" (Cryptocurr.fraenks_of_cants fee) (Cryptocurr.fraenks_of_cants minfee);
 	    flush oc;
 	    retval()
 	  with
@@ -1735,8 +1736,8 @@ let validatetx3 oc blkh tm thtr sgtr ltr stau transform =
   else
     (Printf.fprintf oc "Invalid tx\n"; None)
 
-let validatetx2 oc blkh tm tr sr lr stau =
-  ignore (validatetx3 oc blkh tm (lookup_thytree tr) (lookup_sigtree sr) (CHash(lr)) stau false)
+let validatetx2 oc blkh tm tr sr lr txbytes stau =
+  ignore (validatetx3 oc blkh tm (lookup_thytree tr) (lookup_sigtree sr) (CHash(lr)) txbytes stau false)
 
 let validatebatchtxs oc blkh tm tr sr lr staul =
   let i = ref 0 in
@@ -1748,7 +1749,7 @@ let validatebatchtxs oc blkh tm tr sr lr staul =
       (fun stau ->
 	incr i;
 	Printf.fprintf oc "Validating tx %d\n" !i;
-	match validatetx3 oc blkh tm !thtr !sgtr !ltr stau true with
+	match validatetx3 oc blkh tm !thtr !sgtr !ltr (stxsize stau) stau true with
 	| Some(thtr2,sgtr2,ltr2) ->
 	    thtr := thtr2;
 	    sgtr := sgtr2;
@@ -1761,10 +1762,11 @@ let validatebatchtxs oc blkh tm tr sr lr staul =
 
 let validatetx oc blkh tm tr sr lr staustr =
   let s = hexstring_string staustr in
-  let (stau,_) = sei_stx seis (s,String.length s,None,0,0) in
-  validatetx2 oc blkh tm tr sr lr stau
+  let l = String.length s in
+  let (stau,_) = sei_stx seis (s,l,None,0,0) in
+  validatetx2 oc blkh tm tr sr lr l stau
 
-let sendtx2 oc blkh tm tr sr lr stau =
+let sendtx2 oc blkh tm tr sr lr txbytes stau =
   let ((tauin,tauout) as tau,tausg) = stau in
   if tx_valid tm tau then
     begin
@@ -1776,16 +1778,17 @@ let sendtx2 oc blkh tm tr sr lr stau =
 	  let stxh = hashstx stau in
 	  begin
 	    try
+	      let minfee = Int64.mul (Int64.of_int txbytes) !Config.minrelayfee in
 	      let nfee = ctree_supports_tx true true false (lookup_thytree tr) (lookup_sigtree sr) blkh tau (CHash(lr)) in
 	      let fee = Int64.sub 0L nfee in
-	      if fee >= !Config.minrelayfee then
+	      if fee >= minfee then
 		begin
 		  savetxtopool_real stxh stau;
 		  publish_stx stxh stau;
 		  Printf.fprintf oc "%s\n" (hashval_hexstring stxh);
 		end
 	      else
-		Printf.fprintf oc "Tx is supported by the current ledger, but has too low fee of %s fraenks (below minrelayfee %s fraenks)\n" (Cryptocurr.fraenks_of_cants fee) (Cryptocurr.fraenks_of_cants !Config.minrelayfee);
+		Printf.fprintf oc "Tx is supported by the current ledger, but has too low fee of %s fraenks (below minrelayfee %s fraenks)\n" (Cryptocurr.fraenks_of_cants fee) (Cryptocurr.fraenks_of_cants minfee);
 	      flush oc
 	    with
 	    | NotSupported ->
@@ -1845,8 +1848,9 @@ let sendtx2 oc blkh tm tr sr lr stau =
 
 let sendtx oc blkh tm tr sr lr staustr =
   let s = hexstring_string staustr in
-  let (stau,_) = sei_stx seis (s,String.length s,None,0,0) in
-  sendtx2 oc blkh tm tr sr lr stau
+  let l = String.length s in
+  let (stau,_) = sei_stx seis (s,l,None,0,0) in
+  sendtx2 oc blkh tm tr sr lr l stau
 
 (*** should gather historic information as well ***)
 let dalilcoin_addr_jsoninfo raiseempty alpha pbh ledgerroot blkh =

@@ -1045,10 +1045,11 @@ let initialize_commands () =
 		Printf.fprintf oc "A commitment marker for this draft has already been published and will mature after %Ld more blocks.\nAfter that the draft can be published with the publishdraft command.\n" (Int64.sub (Int64.add bday 3L) blkh )
 	    with Not_found ->
 	      try
-		let (alpha,(aid,_,_,_),v) = find_spendable_utxo oc lr blkh !Config.defaulttxfee in
+		let minfee = Int64.mul 1000L !Config.defaulttxfee in (** very rough overestimate of 1K bytes for commitment tx **)
+		let (alpha,(aid,_,_,_),v) = find_spendable_utxo oc lr blkh minfee in
 		let txinl = [(alpha,aid)] in
 		let txoutl =
-		  if v >= Int64.mul 2L !Config.defaulttxfee then
+		  if v >= Int64.add 10000L !Config.defaulttxfee then (** only create change if it is at least 10000 cants ***)
 		    [(alpha,(None,Currency(Int64.sub v !Config.defaulttxfee)));(beta,(None,Marker))]
 		  else
 		    [(beta,(None,Marker))]
@@ -1421,16 +1422,8 @@ let initialize_commands () =
 					      begin
 						let b = theoryspec_burncost thyspec in
 						try
-						  let (alpha,(aid,_,_,_),v) = find_spendable_utxo oc lr blkh (Int64.add b !Config.defaulttxfee) in
-						  let txinl = [(alpha,aid);(beta,markerid)] in
-						  let change = Int64.sub v (Int64.add b !Config.defaulttxfee) in
 						  let delta = hashval_pub_addr thyh in
-						  let txoutl = 
-						    if change >= !Config.defaulttxfee then
-						      [(alpha,(None,Currency(change)));(delta,(None,TheoryPublication(gammap,h,thyspec)))]
-						    else
-						      [(delta,(None,TheoryPublication(gammap,h,thyspec)))]
-						  in
+						  let txoutl = [(delta,(None,TheoryPublication(gammap,h,thyspec)))] in
 						  let txoutlr = ref txoutl in
 						  let (_,kl) = thy in
 						  List.iter
@@ -1448,6 +1441,13 @@ let initialize_commands () =
 						      let h2 = hashtag (hashopair2 (Some(thyh)) h) 33l in
 						      txoutlr := (hashval_term_addr h,(Some(gamma1p,0L,false),OwnsProp(h,gamma2p,rp)))::(hashval_term_addr h2,(Some(gamma1p,0L,false),OwnsProp(h2,gamma2p,rp)))::!txoutlr)
 						    kl;
+						  let esttxbytes = 2000 + stxsize (([],!txoutlr),([],[])) in (** rough overestimate for txin and signatures at 2000 bytes **)
+						  let minfee = Int64.mul (Int64.of_int esttxbytes) !Config.defaulttxfee in
+						  let minamt = Int64.add b minfee in
+						  let (alpha,(aid,_,_,_),v) = find_spendable_utxo oc lr blkh minamt in
+						  let change = Int64.sub v minamt in
+						  if change >= 10000L then txoutlr := (alpha,(None,Currency(change)))::!txoutlr;
+						  let txinl = [(alpha,aid);(beta,markerid)] in
 						  let stau = ((txinl,!txoutlr),([],[])) in
 						  let c2 = open_out_bin g in
 						  begin
@@ -1455,7 +1455,7 @@ let initialize_commands () =
 						      Commands.signtxc oc lr stau c2 None;
 						      let p = pos_out c2 in
 						      close_out c2;
-						      if p > 475000 then Printf.fprintf oc "Warning: The transaction has %d bytes and may be too large to be confirmed in a block.\n" p;
+						      if p > 450000 then Printf.fprintf oc "Warning: The transaction has %d bytes and may be too large to be confirmed in a block.\n" p;
 						      Printf.fprintf oc "The transaction to publish the theory was created.\nTo inspect it:\n> decodetxfile %s\nTo validate it:\n> validatetxfile %s\nTo send it:\n> sendtxfile %s\n" g g g
 						    with e ->
 						      close_out c2;
@@ -1623,13 +1623,15 @@ let initialize_commands () =
 				    if Int64.add bday 3L <= blkh then
 				      begin
 					let b = signaspec_burncost signaspec in
-					let tospend = ref (Int64.add b !Config.defaulttxfee) in
 					let txinlr = ref [(beta,markerid)] in
 					let txoutlr = ref [(delta,(None,SignaPublication(gammap,nonce,th,signaspec)))] in
+					let esttxbytes = 2000 + stxsize (([],!txoutlr),([],[])) in (** rough overestimate for txin, possible change and signatures at 2000 bytes **)
+					let minfee = Int64.mul (Int64.of_int esttxbytes) !Config.defaulttxfee in
+					let tospend = ref (Int64.add b minfee) in
 					try
 					  let (alpha,(aid,_,_,_),v) = find_spendable_utxo oc lr blkh !tospend in
 					  let tauin = (alpha,aid)::!txinlr in
-					  let tauout = if Int64.sub v !tospend > !Config.defaulttxfee then (alpha,(None,Currency(Int64.sub v !tospend)))::!txoutlr else !txoutlr in
+					  let tauout = if Int64.sub v !tospend >= 10000L then (alpha,(None,Currency(Int64.sub v !tospend)))::!txoutlr else !txoutlr in
 					  let stau = ((tauin,tauout),([],[])) in
 					  let c2 = open_out_bin g in
 					  begin
@@ -1637,7 +1639,7 @@ let initialize_commands () =
 					      Commands.signtxc oc lr stau c2 None;
 					      let p = pos_out c2 in
 					      close_out c2;
-					      if p > 475000 then Printf.fprintf oc "Warning: The transaction has %d bytes and may be too large to be confirmed in a block.\n" p;
+					      if p > 450000 then Printf.fprintf oc "Warning: The transaction has %d bytes and may be too large to be confirmed in a block.\n" p;
 					      Printf.fprintf oc "The transaction to publish the signature was created.\nTo inspect it:\n> decodetxfile %s\nTo validate it:\n> validatetxfile %s\nTo send it:\n> sendtxfile %s\n" g g g
 					    with e ->
 					      close_out c2;
@@ -1718,7 +1720,8 @@ let initialize_commands () =
 				try
 				  if Int64.add bday 3L <= blkh then
 				    begin
-				      let tospend = ref !Config.defaulttxfee in
+				      let tospend = ref 0L in
+				      let al = ref [(markerid,bday,obl,Marker)] in
 				      let txinlr = ref [(beta,markerid)] in
 				      let txoutlr = ref [(delta,(None,DocPublication(gammap,nonce,th,dl)))] in
 				      let usesobjs = doc_uses_objs dl in
@@ -1762,6 +1765,7 @@ let initialize_commands () =
 						    | (aid,bday,obl,RightsObj(h,r)) ->
 							if r > 0L then
 							  begin
+							    al := a::!al;
 							    txinlr := (alpha,aid)::!txinlr;
 							    if r > 1L then
 							      txoutlr := (alpha,(obl,RightsObj(h,Int64.sub r 1L)))::!txoutlr
@@ -1789,6 +1793,7 @@ let initialize_commands () =
 							| (aid,bday,obl,RightsObj(h,r)) ->
 							    if r > 0L then
 							      begin
+								al := a::!al;
 								txinlr := (alpha,aid)::!txinlr;
 								if r > 1L then
 								  txoutlr := (alpha,(obl,RightsObj(h,Int64.sub r 1L)))::!txoutlr
@@ -1819,6 +1824,7 @@ let initialize_commands () =
 						    | (aid,bday,obl,RightsProp(h,r)) ->
 							if r > 0L then
 							  begin
+							    al := a::!al;
 							    txinlr := (alpha,aid)::!txinlr;
 							    if r > 1L then
 							      txoutlr := (alpha,(obl,RightsProp(h,Int64.sub r 1L)))::!txoutlr
@@ -1846,6 +1852,7 @@ let initialize_commands () =
 							| (aid,bday,obl,RightsProp(h,r)) ->
 							    if r > 0L then
 							      begin
+								al := a::!al;
 								txinlr := (alpha,aid)::!txinlr;
 								if r > 1L then
 								  txoutlr := (alpha,(obl,RightsProp(h,Int64.sub r 1L)))::!txoutlr
@@ -1921,9 +1928,12 @@ let initialize_commands () =
 					  | Some(deltap,lkh) -> txoutlr := (alphathy,(Some(deltap,lkh,false),Bounty(amt)))::!txoutlr)
 					bountyh;
 				      try
+					let esttxbytes = 2000 + stxsize ((!txinlr,!txoutlr),([],[])) + 200 * estimate_required_signatures !al (!txinlr,!txoutlr) in (** rough overestimate for funding asset, possible change and signature for the funding asset 2000 bytes; overestimate of 200 bytes per other signature **)
+					let minfee = Int64.mul (Int64.of_int esttxbytes) !Config.defaulttxfee in
+					tospend := Int64.add !tospend minfee;
 					let (alpha,(aid,_,_,_),v) = find_spendable_utxo oc lr blkh !tospend in
 					let tauin = (alpha,aid)::!txinlr in
-					let tauout = if Int64.sub v !tospend > !Config.defaulttxfee then (alpha,(None,Currency(Int64.sub v !tospend)))::!txoutlr else !txoutlr in
+					let tauout = if Int64.sub v !tospend > 10000L then (alpha,(None,Currency(Int64.sub v !tospend)))::!txoutlr else !txoutlr in
 					let stau = ((tauin,tauout),([],[])) in
 					let c2 = open_out_bin g in
 					begin
@@ -1931,7 +1941,7 @@ let initialize_commands () =
 					    Commands.signtxc oc lr stau c2 None;
 					    let p = pos_out c2 in
 					    close_out c2;
-					    if p > 475000 then Printf.fprintf oc "Warning: The transaction has %d bytes and may be too large to be confirmed in a block.\n" p;
+					    if p > 450000 then Printf.fprintf oc "Warning: The transaction has %d bytes and may be too large to be confirmed in a block.\n" p;
 					    Printf.fprintf oc "The transaction to publish the document was created.\nTo inspect it:\n> decodetxfile %s\nTo validate it:\n> validatetxfile %s\nTo send it:\n> sendtxfile %s\n" g g g
 					  with e ->
 					    close_out c2;
@@ -2038,11 +2048,13 @@ let initialize_commands () =
 		      end
 		| _ -> ())
 	      cbl;
-	    if !vtot < !Config.defaulttxfee then
-	      Printf.fprintf oc "Total bounties are less than the default tx fee, so refusing to make the tx.\n"
+	    let esttxbytes = 2000 + stxsize ((!txinl,!txoutl),([],[])) in
+	    let minfee = Int64.mul (Int64.of_int esttxbytes) !Config.defaulttxfee in
+	    if !vtot < minfee then
+	      Printf.fprintf oc "Total bounties are less than the tx fee, so refusing to make the tx.\n"
 	    else
 	      begin
-		let totminusfee = Int64.sub !vtot !Config.defaulttxfee in
+		let totminusfee = Int64.sub !vtot minfee in
 		txoutl := (gamma,(None,Currency(totminusfee)))::!txoutl;
 		let stau = ((!txinl,!txoutl),([],[])) in
 		let c2 = open_out_bin fn in
@@ -3102,8 +3114,12 @@ let initialize_commands () =
 		  let (_,tm,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
 		  let c = open_in_bin s in
 		  let (stau,_) = Tx.sei_stx seic (c,None) in
+		  let txbytes = pos_in c in
 		  close_in c;
-		  Commands.sendtx2 oc (Int64.add 1L blkh) tm tr sr lr stau
+		  if txbytes > 450000 then
+		    Printf.fprintf oc "Refusing to send tx > 450K bytes\n"
+		  else
+		    Commands.sendtx2 oc (Int64.add 1L blkh) tm tr sr lr txbytes stau
 		with Not_found ->
 		  Printf.fprintf oc "Cannot find block height for best block %s\n" (hashval_hexstring dbh)
 	  end
@@ -3147,8 +3163,12 @@ let initialize_commands () =
 		    try
 		      let c = open_in_bin s in
 		      let (stau,_) = Tx.sei_stx seic (c,None) in
+		      let txbytes = pos_in c in
 		      close_in c;
-		      Commands.validatetx2 oc (Int64.add 1L blkh) tm tr sr lr stau
+		      if txbytes > 450000 then
+			Printf.fprintf oc "Tx is > 450K bytes and will be considered too big to include in a block\n"
+		      else
+			Commands.validatetx2 oc (Int64.add 1L blkh) tm tr sr lr txbytes stau
 		    with exn ->
 		      Printf.fprintf oc "Trouble validating tx %s\n" (Printexc.to_string exn)
 		  with Not_found ->

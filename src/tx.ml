@@ -403,6 +403,23 @@ let tx_signatures_valid_asof_blkh al stau =
   else
     raise BadOrMissingSignature
 
+let rec estimate_required_in_signatures al =
+  match al with
+  | [] -> 0
+  | (a::ar) when marker_or_bounty_p a -> estimate_required_in_signatures ar
+  | (a::ar) -> 1+ estimate_required_in_signatures ar
+
+let rec estimate_required_out_signatures outpl =
+  match outpl with
+  | [] -> 0
+  | (_,(_,TheoryPublication(alpha,n,thy)))::outpr -> 1 + estimate_required_out_signatures outpr
+  | (_,(_,SignaPublication(alpha,n,th,si)))::outpr -> 1 + estimate_required_out_signatures outpr
+  | (_,(_,DocPublication(alpha,n,th,d)))::outpr -> 1 + estimate_required_out_signatures outpr
+  | _::outpr -> estimate_required_out_signatures outpr
+
+let estimate_required_signatures al (tauin,tauout) =
+  estimate_required_in_signatures al + estimate_required_out_signatures tauout
+
 let tx_signatures_valid blkh tm al stau =
   try
     let (mbh,mtm) = tx_signatures_valid_asof_blkh al stau in
@@ -477,6 +494,11 @@ let hashtxsigs g =
  Since the assetid is what is referenced when spent by future txs, we have behavior like segwit.
 ***)
 let hashstx (tau,tausigs) = hashpair (hashtx tau) (hashtxsigs tausigs)
+
+let stxsize stau =
+  let b = Buffer.create 1000 in
+  seosbf (seo_stx seosb stau (b,None));
+  String.length (Buffer.contents b)
 
 module DbSTx = Dbbasic (struct type t = stx let basedir = "stx" let seival = sei_stx seic let seoval = seo_stx seoc end)
 
