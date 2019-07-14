@@ -779,8 +779,15 @@ let connlistener (s,sin,sout,gcs) =
 	  close_in sin;
 	  close_out sout;
 	  raise Exit
+      | Sys_error(_) ->
+	  log_string (Printf.sprintf "Stopping connection listener for %s due to Sys_error" (peeraddr !gcs));
+	  shutdown_close s;
+	  close_in sin;
+	  close_out sout;
+	  raise Exit
       | exc -> (*** report but ignore all other exceptions ***)
-	  log_string (Printf.sprintf "Ignoring exception raised in connection listener for %s:\n%s\n" (peeraddr !gcs) (Printexc.to_string exc))
+	  log_string (Printf.sprintf "Ignoring exception raised in connection listener for %s:\n%s\n" (peeraddr !gcs) (Printexc.to_string exc));
+	  Thread.delay 600. (* wait for 10 minutes before reading any more messages *)
     done
   with _ -> gcs := None (*** indicate that the connection is dead; it will be removed from netaddr by the netlistener or netseeker ***)
 
