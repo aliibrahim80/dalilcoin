@@ -379,6 +379,90 @@ let initialize_commands () =
   ac "version" "version" "Print client description and version number"
     (fun oc _ ->
       Printf.fprintf oc "%s %s\n" Version.clientdescr Version.clientversion);
+  ac "sendtoaddress" "sendtoaddress <payaddress> <fraenks>" "Consolidate enough spendable utxos to send the given number of fraenks to the given payaddress"
+    (fun oc al ->
+      match al with
+      | [a;v] ->
+	  let gamma = daliladdrstr_addr a in
+	  if not (payaddr_p gamma) then (Printf.fprintf oc "%s is not a pay address.\n" a; raise BadCommandForm);
+	  let amt = Cryptocurr.cants_of_fraenks v in
+	  let esttxsize = ref 500 in
+	  let gathered = ref 0L in
+	  let gatheredkeys = ref [] in
+	  let gatheredassets = ref [] in
+	  let txinlr = ref [] in
+	  begin
+	    let (blkh,tm,lr,tr,sr) =
+	      match get_bestblock_print_warnings oc with
+	      | None -> raise Not_found
+	      | Some(dbh,lbk,ltx) ->
+		  let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+		  let (_,tm,lr,tr,sr) = Hashtbl.find validheadervals (lbk,ltx) in
+		  (blkh,tm,lr,tr,sr)
+	    in
+	    try
+	      List.iter
+		(fun (alpha,a,v) ->
+		  match a with
+		  | (aid,_,obl,Currency(_)) when not (Hashtbl.mem unconfirmedspentutxo (lr,aid)) ->
+		      begin
+			match obl with
+			| None ->
+			    begin
+			      let (p,x4,x3,x2,x1,x0) = alpha in
+			      if p = 0 then (** only handling assets controlled by p2pkh addresses for now **)
+				begin
+				  let s kl = List.find (fun (_,_,_,_,h,_) -> h = (x4,x3,x2,x1,x0)) kl in
+				  try
+				    let (k,c,(x,y),_,h,_) = try s !Commands.walletkeys_staking with Not_found -> s !Commands.walletkeys_nonstaking in
+				    gatheredkeys := (k,c,(x,y),h)::!gatheredkeys;
+				    gatheredassets := a::!gatheredassets;
+				    txinlr := (alpha,aid)::!txinlr;
+				    gathered := Int64.add !gathered v;
+				    esttxsize := !esttxsize + 300;
+				    if !gathered >= Int64.add amt (Int64.mul (Int64.of_int !esttxsize) !Config.defaulttxfee) then raise Exit
+				  with Not_found -> ()
+				end
+			    end
+			| Some(beta,_,_) ->
+			    begin
+			      let (p,x4,x3,x2,x1,x0) = beta in
+			      if not p then (** only handling assets controlled by p2pkh addresses for now **)
+				begin
+				  let s kl = List.find (fun (_,_,_,_,h,_) -> h = (x4,x3,x2,x1,x0)) kl in
+				  try
+				    let (k,c,(x,y),_,h,_) = try s !Commands.walletkeys_staking with Not_found -> s !Commands.walletkeys_nonstaking in
+				    gatheredkeys := (k,c,(x,y),h)::!gatheredkeys;
+				    gatheredassets := a::!gatheredassets;
+				    txinlr := (alpha,aid)::!txinlr;
+				    gathered := Int64.add !gathered v;
+				    esttxsize := !esttxsize + 300;
+				    if !gathered >= Int64.add amt (Int64.mul (Int64.of_int !esttxsize) !Config.defaulttxfee) then raise Exit
+				  with Not_found -> ()
+				end
+			    end
+		      end
+	          | _ -> ())
+                (Commands.get_spendable_assets_in_ledger oc lr blkh);
+	      Printf.fprintf oc "Could not consolidate enough spendable currency to send %s to address %s\n" v a
+	    with Exit ->
+	      let minfee = Int64.mul (Int64.of_int !esttxsize) !Config.defaulttxfee in
+	      let change = Int64.sub !gathered (Int64.add amt minfee) in
+	      let txoutl =
+		if change >= 10000L then
+		  let (_,delta) = Commands.generate_newkeyandaddress lr "" in
+		  [(gamma,(None,Currency(amt)));(p2pkhaddr_addr delta,(None,Currency(change)))]
+		else
+		  [(gamma,(None,Currency(amt)))]
+	      in
+	      let stau = ((!txinlr,txoutl),([],[])) in
+	      let (stau,ci,co) = Commands.signtx2 oc lr stau (Some(!gatheredkeys)) in
+	      if (ci && co) then
+		Commands.sendtx2 oc blkh tm tr sr lr (stxsize stau) stau
+	      else
+		Printf.fprintf oc "Transaction was created but only partially signed and so was not sent.\n"
+	  end
+      | _ -> raise BadCommandForm);
   ac "getaddressinfo" "getaddressinfo <address>" "Print information about address"
     (fun oc al ->
       match al with
@@ -1049,8 +1133,8 @@ let initialize_commands () =
 		let (alpha,(aid,_,_,_),v) = find_spendable_utxo oc lr blkh minfee in
 		let txinl = [(alpha,aid)] in
 		let txoutl =
-		  if v >= Int64.add 10000L !Config.defaulttxfee then (** only create change if it is at least 10000 cants ***)
-		    [(alpha,(None,Currency(Int64.sub v !Config.defaulttxfee)));(beta,(None,Marker))]
+		  if v >= Int64.add 10000L minfee then (** only create change if it is at least 10000 cants ***)
+		    [(alpha,(None,Currency(Int64.sub v minfee)));(beta,(None,Marker))]
 		  else
 		    [(beta,(None,Marker))]
 		in
