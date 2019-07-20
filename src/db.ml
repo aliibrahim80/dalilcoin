@@ -83,7 +83,7 @@ let count_index d =
     0
 
 let rec db_iter_subdirs d f =
-  if Sys.is_directory d then
+  if Sys.file_exists d && Sys.is_directory d then
     begin
       f d;
       List.iter
@@ -321,67 +321,71 @@ let dbfind_next_space d k =
 
 let defrag d seival seoval =
   let ind = ref (load_index d) in
-  let indf = Filename.concat d "index" in
-  let datf = Filename.concat d "data" in
-  let del = load_deleted d in
-  let chd = open_in_bin datf in
-  let l = in_channel_length chd in
-  let dat =
-    ref (List.map
-	   (fun (k,p) ->
-	     if List.mem k del then
-	       None
-	     else if p < l then
-	       begin
-		 seek_in chd p;
-		 let (v,_) = seival (chd,None) in
-		 Some(v)
-	       end
-	     else
-	       begin
-		 close_in chd;
-		 raise (Failure ("Corrupted data file " ^ datf))
-	       end)
-	   !ind)
-  in
-  close_in chd;
-  Sys.remove (Filename.concat d "deleted");
-  let chd = open_out_gen [Open_wronly;Open_trunc;Open_binary] 0b110110000 datf in
-  let newind = ref [] in
-  try
-    while not (!ind = []) do
-      match (!ind,!dat) with
-      | ((k,_)::ir,Some(v)::dr) ->
-	  ind := ir;
-	  dat := dr;
-	  if not (List.mem k del) then
-	    let p = pos_out chd in
-	    newind := List.merge (fun (h',p') (k',q') -> compare h' k') !newind [(k,p)];
-	    let cd2 = seoval v (chd,None) in
-	    seocf cd2;
-      | ((k,_)::ir,None::dr) ->
-	  ind := ir;
-	  dat := dr
-      | _ ->
-	  raise (Failure ("impossible"))
-    done;
-    let chi = open_out_gen [Open_wronly;Open_trunc;Open_binary] 0b110110000 indf in
+  let ddel = Filename.concat d "deleted" in
+  if Sys.file_exists ddel then
     begin
+      let del = load_deleted_to_hashtable d in
+      let indf = Filename.concat d "index" in
+      let datf = Filename.concat d "data" in
+      let chd = open_in_bin datf in
+      let l = in_channel_length chd in
+      let dat =
+	ref (List.map
+	       (fun (k,p) ->
+		 if Hashtbl.mem del k then
+		   None
+		 else if p < l then
+		   begin
+		     seek_in chd p;
+		     let (v,_) = seival (chd,None) in
+		     Some(v)
+		   end
+		 else
+		   begin
+		     close_in chd;
+		     raise (Failure ("Corrupted data file " ^ datf))
+		   end)
+	       !ind)
+      in
+      close_in chd;
+      Sys.remove ddel;
+      let chd = open_out_gen [Open_wronly;Open_trunc;Open_binary] 0b110110000 datf in
+      let newind = ref [] in
       try
-	List.iter (fun (k,p) ->
-	  let ci2 = seo_hashval seoc k (chi,None) in
-	  let ci2 = seo_int32 seoc (Int32.of_int p) ci2 in
-	  seocf ci2)
-	  !newind;
-	close_out chi;
-	close_out chd
+	while not (!ind = []) do
+	  match (!ind,!dat) with
+	  | ((k,_)::ir,Some(v)::dr) ->
+	      ind := ir;
+	      dat := dr;
+	      if not (Hashtbl.mem del k) then
+		let p = pos_out chd in
+		newind := List.merge (fun (h',p') (k',q') -> compare h' k') !newind [(k,p)];
+		let cd2 = seoval v (chd,None) in
+		seocf cd2;
+	  | ((k,_)::ir,None::dr) ->
+	      ind := ir;
+	      dat := dr
+	  | _ ->
+	      raise (Failure ("impossible"))
+	done;
+	let chi = open_out_gen [Open_wronly;Open_trunc;Open_binary] 0b110110000 indf in
+	begin
+	  try
+	    List.iter (fun (k,p) ->
+	      let ci2 = seo_hashval seoc k (chi,None) in
+	      let ci2 = seo_int32 seoc (Int32.of_int p) ci2 in
+	      seocf ci2)
+	      !newind;
+	    close_out chi;
+	    close_out chd
+	  with exc ->
+	    close_out chi;
+	    raise exc
+	end
       with exc ->
-	close_out chi;
+	close_out chd;
 	raise exc
     end
-  with exc ->
-    close_out chd;
-    raise exc
 
 module type dbtype = functor (M:sig type t val basedir : string val seival : (seict -> t * seict) val seoval : (t -> seoct -> seoct) end) ->
   sig
@@ -554,7 +558,7 @@ module Dbbasic : dbtype = functor (M:sig type t val basedir : string val seival 
       | Not_found -> () (*** not an entry, do nothing ***)
 
     let dbpurge () =
-      db_iter_subdirs M.basedir (fun di -> defrag di M.seival M.seoval)
+      db_iter_subdirs (Filename.concat !dbdir M.basedir) (fun di -> defrag di M.seival M.seoval)
 
   end
 
@@ -661,7 +665,7 @@ module Dbbasic2 : dbtype = functor (M:sig type t val basedir : string val seival
       | Not_found -> () (*** not an entry, do nothing ***)
 
     let dbpurge () =
-      db_iter_subdirs M.basedir (fun di -> defrag di M.seival M.seoval)
+      db_iter_subdirs (Filename.concat !dbdir M.basedir) (fun di -> defrag di M.seival M.seoval)
 
   end
 
@@ -768,7 +772,7 @@ module Dbbasic2keyiter : dbtypekeyiter = functor (M:sig type t val basedir : str
       | Not_found -> () (*** not an entry, do nothing ***)
 
     let dbpurge () =
-      db_iter_subdirs M.basedir (fun di -> defrag di M.seival M.seoval)
+      db_iter_subdirs (Filename.concat !dbdir M.basedir) (fun di -> defrag di M.seival M.seoval)
 
     let dbkeyiter f =
       Hashtbl.iter
