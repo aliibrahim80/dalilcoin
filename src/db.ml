@@ -324,7 +324,8 @@ let defrag d seival seoval =
   let ddel = Filename.concat d "deleted" in
   if Sys.file_exists ddel then
     begin
-      let del = load_deleted_to_hashtable d in
+      let del : (hashval,unit) Hashtbl.t = Hashtbl.create 100 in
+      load_deleted_to_hashtable del d;
       let indf = Filename.concat d "index" in
       let datf = Filename.concat d "data" in
       let chd = open_in_bin datf in
