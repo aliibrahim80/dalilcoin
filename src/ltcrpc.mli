@@ -17,6 +17,7 @@ module DbLtcDacStatus :
       val dbexists : hashval -> bool
       val dbput : hashval -> ltcdacstatus -> unit
       val dbdelete : hashval -> unit
+      val dbpurge : unit -> unit
     end
 
 val ltcdacstatus_dbget : hashval -> hashval * ((hashval * hashval * hashval * int64 * int64) list list)
@@ -28,6 +29,7 @@ module DbLtcBurnTx :
       val dbexists : hashval -> bool
       val dbput : hashval -> int64 * hashval * hashval -> unit
       val dbdelete : hashval -> unit
+      val dbpurge : unit -> unit
     end
 
 module DbLtcBlock :
@@ -37,6 +39,7 @@ module DbLtcBlock :
       val dbexists : hashval -> bool
       val dbput : hashval -> hashval * int64 * int64 * hashval list -> unit
       val dbdelete : hashval -> unit
+      val dbpurge : unit -> unit
     end
 
 val ltc_getbestblockhash : unit -> string
@@ -71,3 +74,5 @@ val ltc_best_chaintips : unit -> hashval list list
 val find_dalilcoin_header_ltc_burn : hashval -> poburn * hashval option
 
 val ltc_old_sync : unit -> unit
+
+val reprocessltcblock : string -> unit

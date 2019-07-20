@@ -379,6 +379,11 @@ let initialize_commands () =
   ac "version" "version" "Print client description and version number"
     (fun oc _ ->
       Printf.fprintf oc "%s %s\n" Version.clientdescr Version.clientversion);
+  ac "reprocessltcblock" "reprocessltcblock <ltcblock>" "Purge ltc information back to the given block and regenerate the information from the ltc node"
+    (fun oc al ->
+      match al with
+      | [h] -> reprocessltcblock h
+      | _ -> raise BadCommandForm);
   ac "sendtoaddress" "sendtoaddress <payaddress> <fraenks>" "Consolidate enough spendable utxos to send the given number of fraenks to the given payaddress"
     (fun oc al ->
       match al with

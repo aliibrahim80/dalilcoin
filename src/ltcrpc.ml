@@ -917,3 +917,34 @@ let ltc_old_sync () =
     ltc_process_block
     (if !Config.testnet then ltc_testnet_oldblocks else ltc_oldblocks)
 
+let rec delete_to_ltc_block kfrom k =
+  try
+    let (prevh,_,_,_) = DbLtcBlock.dbget k in
+    DbLtcDacStatus.dbdelete k;
+    DbLtcBlock.dbdelete k;
+    if k = kfrom then
+      begin
+	DbLtcDacStatus.dbpurge ();
+	DbLtcBlock.dbpurge ()
+      end
+    else
+      delete_to_ltc_block kfrom prevh
+  with Not_found ->
+    let (prev,_,_,_) = ltc_getblock (hashval_hexstring k) in
+    let prevh = hexstring_hashval prev in
+    DbLtcDacStatus.dbdelete k;
+    if k = kfrom then
+      begin
+	DbLtcDacStatus.dbpurge ();
+	DbLtcBlock.dbpurge ()
+      end
+    else
+      delete_to_ltc_block kfrom prevh
+
+let reprocessltcblock h =
+  let k = hexstring_hashval h in
+  let hnow = ltc_getbestblockhash () in
+  let know = hexstring_hashval hnow in
+  delete_to_ltc_block k know;
+  ltc_process_block h;
+  ltc_process_block hnow

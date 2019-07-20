@@ -15,6 +15,7 @@ module type dbtype = functor (M:sig type t val basedir : string val seival : (se
     val dbexists : hashval -> bool
     val dbput : hashval -> M.t -> unit
     val dbdelete : hashval -> unit
+    val dbpurge : unit -> unit
   end
 
 module type dbtypekeyiter = functor (M:sig type t val basedir : string val seival : (seict -> t * seict) val seoval : (t -> seoct -> seoct) end) ->
@@ -24,6 +25,7 @@ module type dbtypekeyiter = functor (M:sig type t val basedir : string val seiva
     val dbexists : hashval -> bool
     val dbput : hashval -> M.t -> unit
     val dbdelete : hashval -> unit
+    val dbpurge : unit -> unit
     val dbkeyiter : (hashval -> unit) -> unit
   end
 
@@ -38,6 +40,7 @@ module DbBlacklist :
     val dbexists : hashval -> bool
     val dbput : hashval -> bool -> unit
     val dbdelete : hashval -> unit
+    val dbpurge : unit -> unit
   end
 
 module DbArchived :
@@ -47,4 +50,5 @@ module DbArchived :
     val dbexists : hashval -> bool
     val dbput : hashval -> bool -> unit
     val dbdelete : hashval -> unit
+    val dbpurge : unit -> unit
   end
