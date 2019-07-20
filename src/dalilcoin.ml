@@ -616,7 +616,7 @@ let initialize_commands () =
 						| Some(x) -> Printf.sprintf "right for each use costs %Ld cants (%s fraenks) payable to %s" x (Cryptocurr.fraenks_of_cants x) (Cryptocurr.addr_daliladdrstr (payaddr_addr delta2))
 					      with Not_found -> "free to use"
 					    in
-					    Printf.fprintf oc "Pure proposition '%s' has no owner.\nYou will be declared as the owner when the document is published with the following details:\nNew ownership: %s.\n (This can be changed prior to publication with NewOwner <defname> <payaddress>.)\nRights policy: %s\n (This can be changed prior to publication with NewRights <defname> <payaddress> [Free|None|<fraenks>].)\n" nm delta1str rstr
+					    Printf.fprintf oc "Pure proposition '%s' has no owner.\nYou will be declared as the owner when the document is published with the following details:\nNew ownership: %s.\n (This can be changed prior to publication with NewOwner <propname> <payaddress>.)\nRights policy: %s\n (This can be changed prior to publication with NewRights <propname> <payaddress> [Free|None|<fraenks>].)\n" nm delta1str rstr
 					  end;
 					  let bl = hlist_filter_assets_gen true true (fun a -> match a with (_,_,_,Bounty(_)) -> true | _ -> false) hl in
 					  if not (bl = []) then
@@ -654,7 +654,7 @@ let initialize_commands () =
 						| Some(x) -> Printf.sprintf "right for each use costs %Ld cants (%s fraenks) payable to %s" x (Cryptocurr.fraenks_of_cants x) (Cryptocurr.addr_daliladdrstr (payaddr_addr delta2))
 					      with Not_found -> "free to use"
 					    in
-					    Printf.fprintf oc "Proposition '%s' in theory has no owner.\nYou will be declared as the owner when the document is published with the following details:\nNew ownership: %s.\n (This can be changed prior to publication with NewOwner <defname> <payaddress>.)\nRights policy: %s\n (This can be changed prior to publication with NewRights <defname> <payaddress> [Free|None|<fraenks>].)\n" nm delta1str rstr
+					    Printf.fprintf oc "Proposition '%s' in theory has no owner.\nYou will be declared as the owner when the document is published with the following details:\nNew ownership: %s.\n (This can be changed prior to publication with NewOwner <propname> <payaddress>.)\nRights policy: %s\n (This can be changed prior to publication with NewRights <propname> <payaddress> [Free|None|<fraenks>].)\n" nm delta1str rstr
 					  end;
 					  let bl = hlist_filter_assets_gen true true (fun a -> match a with (_,_,_,Bounty(_)) -> true | _ -> false) hl in
 					  if not (bl = []) then
@@ -1014,7 +1014,7 @@ let initialize_commands () =
 				   | Some(x) -> Printf.sprintf "right for each use costs %Ld cants (%s fraenks) payable to %s" x (Cryptocurr.fraenks_of_cants x) (Cryptocurr.addr_daliladdrstr (payaddr_addr delta2))
 				  with Not_found -> "free to use"
 			      in
-			      Printf.fprintf oc "Pure proposition '%s' has no owner.\nYou will be declared as the owner when the document is published with the following details:\nNew ownership: %s.\n (This can be changed prior to publication with NewOwner <defname> <payaddress>.)\nRights policy: %s\n (This can be changed prior to publication with NewRights <defname> <payaddress> [Free|None|<fraenks>].)\n" nm delta1str rstr
+			      Printf.fprintf oc "Pure proposition '%s' has no owner.\nYou will be declared as the owner when the document is published with the following details:\nNew ownership: %s.\n (This can be changed prior to publication with NewOwner <propname> <payaddress>.)\nRights policy: %s\n (This can be changed prior to publication with NewRights <propname> <payaddress> [Free|None|<fraenks>].)\n" nm delta1str rstr
 			    end;
 			    let bl = hlist_filter_assets_gen true true (fun a -> match a with (_,_,_,Bounty(_)) -> true | _ -> false) hl in
 			    if not (bl = []) then
@@ -1052,7 +1052,7 @@ let initialize_commands () =
 				   | Some(x) -> Printf.sprintf "right for each use costs %Ld cants (%s fraenks) payable to %s" x (Cryptocurr.fraenks_of_cants x) (Cryptocurr.addr_daliladdrstr (payaddr_addr delta2))
 				  with Not_found -> "free to use"
 			      in
-			      Printf.fprintf oc "Proposition '%s' in theory has no owner.\nYou will be declared as the owner when the document is published with the following details:\nNew ownership: %s.\n (This can be changed prior to publication with NewOwner <defname> <payaddress>.)\nRights policy: %s\n (This can be changed prior to publication with NewRights <defname> <payaddress> [Free|None|<fraenks>].)\n" nm delta1str rstr
+			      Printf.fprintf oc "Proposition '%s' in theory has no owner.\nYou will be declared as the owner when the document is published with the following details:\nNew ownership: %s.\n (This can be changed prior to publication with NewOwner <propname> <payaddress>.)\nRights policy: %s\n (This can be changed prior to publication with NewRights <propname> <payaddress> [Free|None|<fraenks>].)\n" nm delta1str rstr
 			    end;
 			    let bl = hlist_filter_assets_gen true true (fun a -> match a with (_,_,_,Bounty(_)) -> true | _ -> false) hl in
 			    if not (bl = []) then
