@@ -307,52 +307,55 @@ let stakingthread () =
 			    remove_from_txpool h
 			  with Not_found ->
 			    try
-			      ignore (List.find (fun (alpha,_) -> alpha = alpha2) tauout) (*** Do not include txs that spend to the staking address, to avoid the possibility of ending up with too many assets at the staking address ***)
+			      ignore (List.find (fun (alpha,_) -> alpha = alpha2) tauin) (*** Do not include txs that spend from the staking address, to avoid the ctree in the header not being minimal ***)
 			    with Not_found ->
-			      if tx_valid tm (tauin,tauout) then
-				try
-				  let unsupportederror alpha h = log_string (Printf.sprintf "Could not find asset %s at address %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha)) in
-				  let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true true false tauin !dync unsupportederror) in
-				  if tx_signatures_valid blkh tm al ((tauin,tauout),sg) then
-				    begin
-				      let nfee = ctree_supports_tx true true false !dyntht !dynsigt blkh (tauin,tauout) !dync in
-				      if nfee > 0L then (*** note: nfee is negative of the fee, not the fee itself ***)
-					begin
-(*				  log_string (Printf.sprintf "tx %s has negative fees %Ld; removing from pool\n" (hashval_hexstring h) nfee); *)
-					  remove_from_txpool h;
-					end
-				      else
-					let bytesestimate = 2048 * List.length tauin + 2048 * List.length tauout in (*** simple 2K per input and output (since must include relevant parts of ctree) ***)
-					if bytesestimate < !rembytesestimate then
+			      try
+				ignore (List.find (fun (alpha,_) -> alpha = alpha2) tauout) (*** Do not include txs that spend to the staking address, to avoid the possibility of ending up with too many assets at the staking address ***)
+			      with Not_found ->
+				if tx_valid tm (tauin,tauout) then
+				  try
+				    let unsupportederror alpha h = log_string (Printf.sprintf "Could not find asset %s at address %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha)) in
+				    let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true true false tauin !dync unsupportederror) in
+				    if tx_signatures_valid blkh tm al ((tauin,tauout),sg) then
+				      begin
+					let nfee = ctree_supports_tx true true false !dyntht !dynsigt blkh (tauin,tauout) !dync in
+					if nfee > 0L then (*** note: nfee is negative of the fee, not the fee itself ***)
 					  begin
-					    try
-					      let c = octree_ctree (tx_octree_trans true false blkh (tauin,tauout) (Some(!dync))) in
-					      otherstxs := (h,((tauin,tauout),sg))::!otherstxs;
-					      othersout := !othersout @ tauout;
-					      fees := Int64.sub !fees nfee;
-					      dync := c;
-					      rembytesestimate := !rembytesestimate - bytesestimate
-					    with MaxAssetsAtAddress -> ()
+(*				  log_string (Printf.sprintf "tx %s has negative fees %Ld; removing from pool\n" (hashval_hexstring h) nfee); *)
+					    remove_from_txpool h;
 					  end
 					else
-					  begin
-					    log_string (Printf.sprintf "tx %s not being included because estimated block size would be too big (rembytesestimate %d, bytesestimate %d)\n" (hashval_hexstring h) !rembytesestimate bytesestimate);
-					  end
-				    end
-				  else
-				    begin
+					  let bytesestimate = 2048 * List.length tauin + 2048 * List.length tauout in (*** simple 2K per input and output (since must include relevant parts of ctree) ***)
+					  if bytesestimate < !rembytesestimate then
+					    begin
+					      try
+						let c = octree_ctree (tx_octree_trans true false blkh (tauin,tauout) (Some(!dync))) in
+						otherstxs := (h,((tauin,tauout),sg))::!otherstxs;
+						othersout := !othersout @ tauout;
+						fees := Int64.sub !fees nfee;
+						dync := c;
+						rembytesestimate := !rembytesestimate - bytesestimate
+					      with MaxAssetsAtAddress -> ()
+					    end
+					  else
+					    begin
+					      log_string (Printf.sprintf "tx %s not being included because estimated block size would be too big (rembytesestimate %d, bytesestimate %d)\n" (hashval_hexstring h) !rembytesestimate bytesestimate);
+					    end
+				      end
+				    else
+				      begin
 (*			      log_string (Printf.sprintf "tx %s has an invalid signature; removing from pool\n" (hashval_hexstring h)); *)
-				      remove_from_txpool h;
-				    end
-				with exn ->
-				  begin
+					remove_from_txpool h;
+				      end
+				  with exn ->
+				    begin
 (*			    log_string (Printf.sprintf "Exception %s raised while trying to validate tx %s; this may mean the tx is not yet supported so leaving it in the pool\n" (Printexc.to_string exn) (hashval_hexstring h)); *)
-				  end
-			      else
-				begin
+				    end
+				else
+				  begin
 (*			  log_string (Printf.sprintf "tx %s is invalid; removing from pool\n" (hashval_hexstring h)); *)
-				  remove_from_txpool h;
-				end
+				    remove_from_txpool h;
+				  end
 			in
 			let localbatchtxsfile = Filename.concat (datadir()) "localbatchtxs" in
 			if Sys.file_exists localbatchtxsfile then (*** if localbatchtxs file exists in the datadir, then first try to include these txs (in order) ***)
