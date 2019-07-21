@@ -99,7 +99,7 @@ bin/setconfig.cmi: src/setconfig.mli bin/json.cmi
 bin/commands.cmi: src/commands.mli bin/ctre.cmi bin/json.cmi
 	$(OCAMLC) -I bin -o bin/commands.cmi -c src/commands.mli
 
-bin/inputdraft.cmi: src/inputdraft.mli bin/logic.cmi bin/hash.cmi
+bin/inputdraft.cmi: src/inputdraft.mli bin/logic.cmi bin/mathdata.cmi bin/hash.cmi
 	$(OCAMLC) -I bin -o bin/inputdraft.cmi -c src/inputdraft.mli
 
 bin/staking.cmi: src/staking.mli bin/hash.cmi bin/mathdata.cmi bin/assets.cmi
@@ -189,7 +189,7 @@ bin/setconfig.cmx: src/setconfig.ml bin/setconfig.cmi bin/config.cmx bin/json.cm
 bin/commands.cmx: src/commands.ml bin/commands.cmi bin/config.cmx bin/ser.cmx bin/hash.cmx bin/signat.cmx bin/net.cmx bin/ctre.cmx bin/cryptocurr.cmx bin/ctre.cmx bin/blocktree.cmx bin/json.cmx
 	$(OCAMLOPT) $(OCAMLOPTARGS) -I bin -I +threads -o bin/commands.cmx -c src/commands.ml
 
-bin/inputdraft.cmx: src/inputdraft.ml bin/inputdraft.cmi bin/hash.cmx bin/logic.cmx bin/cryptocurr.cmx
+bin/inputdraft.cmx: src/inputdraft.ml bin/inputdraft.cmi bin/hash.cmx bin/logic.cmx bin/mathdata.cmx bin/cryptocurr.cmx
 	$(OCAMLOPT) $(OCAMLOPTARGS) -I bin -o bin/inputdraft.cmx -c src/inputdraft.ml
 
 bin/staking.cmx: src/staking.ml bin/staking.cmi bin/config.cmx bin/ser.cmx bin/hash.cmx bin/signat.cmx bin/net.cmx bin/ctre.cmx bin/secp256k1.cmx bin/cryptocurr.cmx bin/block.cmx bin/blocktree.cmx bin/json.cmx
@@ -285,7 +285,7 @@ bin/setconfig.cmo: src/setconfig.ml bin/setconfig.cmi bin/config.cmo bin/json.cm
 bin/commands.cmo: src/commands.ml bin/commands.cmi bin/config.cmo bin/ser.cmo bin/hash.cmo bin/signat.cmo bin/net.cmo bin/ctre.cmo bin/cryptocurr.cmo bin/ctre.cmo bin/blocktree.cmo bin/json.cmo
 	$(OCAMLC) -I bin -I +threads -o bin/commands.cmo -c src/commands.ml
 
-bin/inputdraft.cmo: src/inputdraft.ml bin/inputdraft.cmi bin/hash.cmo bin/logic.cmo bin/cryptocurr.cmo
+bin/inputdraft.cmo: src/inputdraft.ml bin/inputdraft.cmi bin/hash.cmo bin/logic.cmo bin/mathdata.cmo bin/cryptocurr.cmo
 	$(OCAMLC) -I bin -o bin/inputdraft.cmo -c src/inputdraft.ml
 
 bin/staking.cmo: src/staking.ml bin/staking.cmi bin/config.cmo bin/ser.cmo bin/hash.cmo bin/signat.cmo bin/net.cmo bin/ctre.cmo bin/secp256k1.cmo bin/cryptocurr.cmo bin/block.cmo bin/blocktree.cmo bin/json.cmo

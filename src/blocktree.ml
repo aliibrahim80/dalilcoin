@@ -648,7 +648,7 @@ let rec get_bestblock () =
       let tm = ltc_medtime() in
       if ctips0l = [] && tm > Int64.add !Config.genesistimestamp 604800L then
 	begin
-	  Printf.printf "No blocks were created in the past week. Dalilcoin has reached terminal status.\n"
+	  Printf.printf "No blocks were created in the past week. Dalilcoin has reached terminal status.\nSometimes this message means the node is out of sync with ltc.\n"
 	end;
       let rec get_bestblock_r2 ctips ctipsr cwl =
 	match ctips with

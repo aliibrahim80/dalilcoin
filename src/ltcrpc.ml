@@ -941,10 +941,8 @@ let rec delete_to_ltc_block kfrom k =
     else
       delete_to_ltc_block kfrom prevh
 
-let reprocessltcblock h =
+let retractltcblock h =
   let k = hexstring_hashval h in
   let hnow = ltc_getbestblockhash () in
   let know = hexstring_hashval hnow in
-  delete_to_ltc_block k know;
-  ltc_process_block h;
-  ltc_process_block hnow
+  delete_to_ltc_block k know

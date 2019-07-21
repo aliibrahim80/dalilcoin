@@ -75,4 +75,4 @@ val find_dalilcoin_header_ltc_burn : hashval -> poburn * hashval option
 
 val ltc_old_sync : unit -> unit
 
-val reprocessltcblock : string -> unit
+val retractltcblock : string -> unit

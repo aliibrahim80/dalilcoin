@@ -28,6 +28,8 @@ open Setconfig;;
 open Staking;;
 open Inputdraft;;
 
+let ltc_listener_paused = ref false;;
+
 exception BadCommandForm;;
 
 let get_ledgerroot b =
@@ -179,6 +181,7 @@ let ltc_init sout =
 let ltc_listener () =
   while true do
     try
+      if !ltc_listener_paused then raise Exit;
       let lbh = ltc_getbestblockhash () in
       ltc_process_block lbh;
       ltc_bestblock := hexstring_hashval lbh;
@@ -379,10 +382,10 @@ let initialize_commands () =
   ac "version" "version" "Print client description and version number"
     (fun oc _ ->
       Printf.fprintf oc "%s %s\n" Version.clientdescr Version.clientversion);
-  ac "reprocessltcblock" "reprocessltcblock <ltcblock>" "Purge ltc information back to the given block and regenerate the information from the ltc node"
+  ac "retractltcblockandexit" "retractltcblockandexit <ltcblock>" "Purge ltc information back to the given block and exit.\nWhen Dalilcoin restarts it will resync with ltc back to the retracted block."
     (fun oc al ->
       match al with
-      | [h] -> reprocessltcblock h
+      | [h] -> (try ltc_listener_paused := true; retractltcblock h; !exitfn 0 with e -> Printf.fprintf oc "%s\n" (Printexc.to_string e); !exitfn 7)
       | _ -> raise BadCommandForm);
   ac "sendtoaddress" "sendtoaddress <payaddress> <fraenks>" "Consolidate enough spendable utxos to send the given number of fraenks to the given payaddress"
     (fun oc al ->
@@ -2413,7 +2416,7 @@ let initialize_commands () =
       let tm = ltc_medtime() in
       if zll = [] && tm > Int64.add !Config.genesistimestamp 604800L then
 	begin
-	  Printf.fprintf oc "No blocks were created in the past week. Dalilcoin has reached terminal status.\nThe only recovery possible for the network is a hard fork.\n"
+	  Printf.fprintf oc "No blocks were created in the past week. Dalilcoin has reached terminal status.\nThe only recovery possible for the network is a hard fork.\nSometimes this message means the node is out of sync with ltc.\n"
 	end;
       let i = ref 0 in
       List.iter

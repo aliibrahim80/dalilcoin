@@ -11,6 +11,9 @@ let stop_after_byte = 100000000
 let defrag_limit = 1024
 let dbdir = ref ""
 
+let remove_file_if_exists f =
+  if Sys.file_exists f then Sys.remove f
+
 let dbconfig dir =
   dbdir := dir;
   if Sys.file_exists dir then
@@ -236,7 +239,7 @@ let load_deleted_to_hashtable ht d =
 let undelete d k =
   let dl = load_deleted d in
   let ddel = Filename.concat d "deleted" in
-  let chd = open_out_gen [Open_wronly;Open_trunc;Open_binary] 0b110110000 ddel in
+  let chd = open_out_gen [Open_wronly;Open_trunc;Open_creat;Open_binary] 0b110110000 ddel in
   try
     List.iter
       (fun h ->
@@ -349,7 +352,7 @@ let defrag d seival seoval =
 	       !ind)
       in
       close_in chd;
-      Sys.remove ddel;
+      remove_file_if_exists ddel;
       let chd = open_out_gen [Open_wronly;Open_trunc;Open_binary] 0b110110000 datf in
       let newind = ref [] in
       try
@@ -541,17 +544,19 @@ module Dbbasic : dbtype = functor (M:sig type t val basedir : string val seival 
 	  withlock (fun () -> find_in_deleted di k); (*** if has already been deleted, do nothing ***)
 	with Not_found ->
 	  let ddel = Filename.concat di "deleted" in
-	  let ch = open_out_gen [Open_append;Open_creat;Open_binary] 0b110110000 ddel in
-	  let c = seo_hashval seoc k (ch,None) in
-	  seocf c;
-	  close_out ch;
+	  withlock
+	    (fun () ->
+	      let ch = open_out_gen [Open_append;Open_creat;Open_binary] 0b110110000 ddel in
+	      let c = seo_hashval seoc k (ch,None) in
+	      seocf c;
+	      close_out ch);
 	  del_from_cache k;
 	  let nd = count_deleted di in
 	  if nd = count_index di then (*** easy case: all entries in the dir have been deleted; a common case would likely be when a dir has 1 entry and it gets deleted ***)
 	    begin
-	      Sys.remove ddel;
-	      Sys.remove (Filename.concat di "index");
-	      Sys.remove (Filename.concat di "data")
+	      remove_file_if_exists ddel;
+	      remove_file_if_exists (Filename.concat di "index");
+	      remove_file_if_exists (Filename.concat di "data")
 	    end
 	  else if count_deleted di > defrag_limit then
 	    withlock (fun () -> defrag di M.seival M.seoval);
@@ -559,7 +564,9 @@ module Dbbasic : dbtype = functor (M:sig type t val basedir : string val seival 
       | Not_found -> () (*** not an entry, do nothing ***)
 
     let dbpurge () =
-      db_iter_subdirs (Filename.concat !dbdir M.basedir) (fun di -> defrag di M.seival M.seoval)
+      withlock
+	(fun () ->
+	  db_iter_subdirs (Filename.concat !dbdir M.basedir) (fun di -> defrag di M.seival M.seoval))
 
   end
 
@@ -657,16 +664,20 @@ module Dbbasic2 : dbtype = functor (M:sig type t val basedir : string val seival
 	  () (*** if has already been deleted, do nothing ***)
 	else
 	  let ddel = Filename.concat di "deleted" in
-	  let ch = open_out_gen [Open_append;Open_creat;Open_binary] 0b110110000 ddel in
-	  let c = seo_hashval seoc k (ch,None) in
-	  seocf c;
-	  close_out ch;
-	  Hashtbl.add deletedtable k ()
+	  withlock
+	    (fun () ->
+	      let ch = open_out_gen [Open_append;Open_creat;Open_binary] 0b110110000 ddel in
+	      let c = seo_hashval seoc k (ch,None) in
+	      seocf c;
+	      close_out ch;
+	      Hashtbl.add deletedtable k ())
       with
       | Not_found -> () (*** not an entry, do nothing ***)
 
     let dbpurge () =
-      db_iter_subdirs (Filename.concat !dbdir M.basedir) (fun di -> defrag di M.seival M.seoval)
+      withlock
+	(fun () ->
+	  db_iter_subdirs (Filename.concat !dbdir M.basedir) (fun di -> defrag di M.seival M.seoval))
 
   end
 
@@ -764,16 +775,20 @@ module Dbbasic2keyiter : dbtypekeyiter = functor (M:sig type t val basedir : str
 	  () (*** if has already been deleted, do nothing ***)
 	else
 	  let ddel = Filename.concat di "deleted" in
-	  let ch = open_out_gen [Open_append;Open_creat;Open_binary] 0b110110000 ddel in
-	  let c = seo_hashval seoc k (ch,None) in
-	  seocf c;
-	  close_out ch;
-	  Hashtbl.add deletedtable k ()
+	  withlock
+	    (fun () ->
+	      let ch = open_out_gen [Open_append;Open_creat;Open_binary] 0b110110000 ddel in
+	      let c = seo_hashval seoc k (ch,None) in
+	      seocf c;
+	      close_out ch;
+	      Hashtbl.add deletedtable k ())
       with
       | Not_found -> () (*** not an entry, do nothing ***)
 
     let dbpurge () =
-      db_iter_subdirs (Filename.concat !dbdir M.basedir) (fun di -> defrag di M.seival M.seoval)
+      withlock
+	(fun () ->
+	  db_iter_subdirs (Filename.concat !dbdir M.basedir) (fun di -> defrag di M.seival M.seoval))
 
     let dbkeyiter f =
       Hashtbl.iter
