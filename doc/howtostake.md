@@ -214,7 +214,8 @@ using the importendorsement command:
 ...
 ```
 
-If this was successful, you can now stake with or spend the airdrop coins.
+If this was successful, you can now spend the airdrop coins to
+an address to stake with them.
 
 8. Prepare your wallet and decide how to treat dalilcoin rewards.
 
@@ -369,22 +370,24 @@ dalilcoin address for which you have the key (offline).
 The ability of an asset to stake depends on its age and whether it is
 locked.
 
-All airdrop assets are unlocked and start with their maximum age, so
-it makes more sense to stake with an airdropped asset than spend it.
-You can still spend the airdrop asset after staking with it.
+Airdropped assets could only be used for staking during the first 
+730 blocks (until March 2019). Since then airdropped assets must
+be spent to a new address before staking with them. Note that the
+amount of fraenks spendable from the airdrop halves every 730 blocks
+(roughly every 6 months).
 
-All other unlocked assets age slowly and reach their maximum age in
-about 4 months.  Reward assets are always locked for 512 blocks (about
-4 months) and become mature for staking after 32 blocks.  Once a
-reward asset is mature it ages slowly and reaches its maximum age in
-about 4 months, just like an unlocked asset.  Other assets intended
-for staking should be locked until a certain block height.  All locked
+Unlocked assets age slowly and reach their maximum age in about 4
+months.  Reward assets are always locked for 512 blocks (about 4
+months) and become mature for staking after 32 blocks.  Once a reward
+asset is mature it ages slowly and reaches its maximum age in about 4
+months, just like an unlocked asset.  Other assets intended for
+staking should be locked until a certain block height.  All locked
 assets have maximum age until the lock height has been reached.  After
 the lock height has past, the asset goes back to being new and ages
 very slowly reaching the maximum age again in about 12 years.  Of
 course, the intention is that after the lock height has past, the
-owner of the asset should either spend it or lock it again.
-Locked assets cannot be spent until their lock height is reached.
+owner of the asset should either spend it or lock it again.  Locked
+assets cannot be spent until their lock height is reached.
 
 The command createsplitlocktx can be used to spend an asset to be several
 assets locked until a certain height.

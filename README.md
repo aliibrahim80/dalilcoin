@@ -219,28 +219,28 @@ Importing as Dalilcoin address dK1EDZZZF3dhqnii52aLqx7bzYNR3hFA5R
 ```
 
 We next ask Dalilcoin to print the assets held at the wallet addresses
-in the current ledger. At the moment (Dec 2018) the ledger is the one
-after the block at height 580.
+in the current ledger. At the moment (July 2019) the ledger is the one
+after the block at height 1293.
 
 ```
 > printassets
-Assets in ledger with root af6b3b954c20df2a8a7d8ce969671a0aa0af46908d1b4f8a19915eabc896a440:
+Assets in ledger with root d09d62d8b7d3a864c8cc0a86f889ef5b7374acf56e9f51db7d7f471a1c2cafe7:
 Controlled p2pkh assets:
 Possibly controlled p2sh assets:
 Assets via endorsement:
 Watched assets:
-dK1EDZZZF3dhqnii52aLqx7bzYNR3hFA5R:
-0a50e9aaae7517139d3c5c1453adae6499c70218b4ef4695579a953a38753eba: (id 000000000000000000000000ab6f7c6f2d94d3f7a36f39c64b46f4f6d5b492d0) [0] Currency 0.0015 fraenks (150000000 cants)
-DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy:
-5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4: (id 0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824) [0] Currency 0.0015 fraenks (150000000 cants)
-DpQ4k4STnJt6kVJLfm4ENSz51kGh8PsQVg:
-5f6eea1d442bdc4683aab077382b3aeff14247117dc383dc4b3f07dc721f1081: (id 00000000000000000000000037cfcd67a77ded709ff0b03c1d80ed5fbed8b33f) [0] Currency 0.0015 fraenks (150000000 cants)
 DXpj9Qi9YM7cgZUzXTobhNCYkaY346HF8q:
-737b615b1608bb483754b4dddc8e1aee692d89d51bd86491cd4c1d69b9bcd2f4: (id 0000000000000000000000000d5edd430a4ffe63fa96dd5c189989bd39b628cb) [0] Currency 0.1 fraenks (10000000000 cants)
-Total p2pkh: 0.0000000000 fraenks
-Total p2sh: 0.0000000000 fraenks
-Total via endorsement: 0.0000000000 fraenks
-Total watched: 0.1045 fraenks
+737b615b1608bb483754b4dddc8e1aee692d89d51bd86491cd4c1d69b9bcd2f4: (id 0000000000000000000000000d5edd430a4ffe63fa96dd5c189989bd39b628cb) [0] Currency 0.05 fraenks (5000000000 cants)
+DpQ4k4STnJt6kVJLfm4ENSz51kGh8PsQVg:
+5f6eea1d442bdc4683aab077382b3aeff14247117dc383dc4b3f07dc721f1081: (id 00000000000000000000000037cfcd67a77ded709ff0b03c1d80ed5fbed8b33f) [0] Currency 0.00075 fraenks (75000000 cants)
+DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy:
+5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4: (id 0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824) [0] Currency 0.00075 fraenks (75000000 cants)
+dK1EDZZZF3dhqnii52aLqx7bzYNR3hFA5R:
+0a50e9aaae7517139d3c5c1453adae6499c70218b4ef4695579a953a38753eba: (id 000000000000000000000000ab6f7c6f2d94d3f7a36f39c64b46f4f6d5b492d0) [0] Currency 0.00075 fraenks (75000000 cants)
+Total p2pkh: 0.0000000000 fraenks (0.0000000000 unlocked)
+Total p2sh: 0.0000000000 fraenks (0.0000000000 unlocked)
+Total via endorsement: 0.0000000000 fraenks (0.0000000000 unlocked)
+Total watched: 0.05225 fraenks (0.05225 unlocked)
 ```
 
 For each of the imported addresses, there is a currency asset.
@@ -250,16 +250,22 @@ By Bitcoin Block 350,000
 14M2d3UDXkkTL8AJmTUifUmAEwYo67cW2Q had a balance of 0.1 bitcoins (10000000 satoshis)
 
 Hence the corresponding Dalilcoin address DXpj9Qi9YM7cgZUzXTobhNCYkaY346HF8q
-has 0.1 fraenks (10000000000 cants). The number of cants is 1000 times more
-than the number of satoshis since Dalilcoin has three extra digits of precision.
-(The particular addresses used here came from the Qeditas README
-and still contain their airdropped dalilcoin fraenks as of Dec 2018.)
+was airdropped 0.1 fraenks (10000000000 cants). The number of cants is 1000
+times more than the number of satoshis since Dalilcoin has three extra digits of
+precision.  Every 730 blocks (roughly six months) the number of fraenks spendable
+from the airdrop halves. As of July 2019, DXpj9Qi9YM7cgZUzXTobhNCYkaY346HF8q
+has 0.05 fraenks spendable from the airdrop. The next airdrop halving should
+take place in August or September of 2019. (Many of the particular addresses used 
+here came from the Qeditas README and still contain their airdropped dalilcoin
+fraenks as of July 2019.)
 
 Similarly, by Bitcoin Block 350,000 the addresses
 1LvNDhCXmiWwQ3yeukjMLZYgW7HT9wCMru, 15muB9t6z5UZBCWTkTApgEUYnMZdcnumKo
 and 37GxXLE4tiFEKwsLzNGFdHyjVfUEbj6wt2 had balances of 0.0015 bitcoins
 (150000 satoshis).  Consequently, the corresponding Dalilcoin addresseses
-have 0.0015 fraenks (150000000 cants) each.
+was airdropped 0.0015 fraenks (150000000 cants) each, and the amount of this
+spendable halves every 730 blocks. As of July 2019, each could be spent
+to obtain 0.00075 fraenks.
 
 If the node does not have the full ledger tree, Dalilcoin may warn you that some data is missing.
 If data is missing and there are connections to peers, the node will try to request the missing data.
@@ -280,10 +286,10 @@ using the btcdaliladdr command:
 Dalilcoin address DiTnhYiCPSjzw8qX185j25FWeJjRL9fErf corresponds to Bitcoin address 1Ez6BBUGNrNqahWqF7kqzBp88fkBKfoRmj
 ```
 
-This means that if the Dalilcoin wallet has the private key for the
+This means that if the Dalilcoin wallet had the private key for the
 Bitcoin address 1Ez6BBUGNrNqahWqF7kqzBp88fkBKfoRmj, which is the same
 as the private key for the Dalilcoin address
-DiTnhYiCPSjzw8qX185j25FWeJjRL9fErf, then the Dalilcoin node can spend
+DiTnhYiCPSjzw8qX185j25FWeJjRL9fErf, then the Dalilcoin node could spend
 the 1.01 fraenks. Endorsements give a way to spend the 1.01 fraenks
 without importing this private key.
 
@@ -341,24 +347,26 @@ The query command can be used to obtain information about addresses or
 hash values.  In particular using query with an address (Bitcoin or
 Dalilcoin) gives a list of the assets at the address. If a Bitcoin
 address is given, then the corresponding Dalilcoin address will be
-given. The output is given in json format. Here is an example:
+given. The output is given in json format. Here is an example
+(in July 2019 at block height 1293):
 
 ```
 query 15muB9t6z5UZBCWTkTApgEUYnMZdcnumKo
-{"response":"bitcoin address","daliladdress":"DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy","info":{"ledgerroot":"af6b3b954c20df2a8a7d8ce969671a0aa0af46908d1b4f8a19915eabc896a440","block":{"block":"5b47277f4383c6543b32978fa3998228b1f9aa482e47788bcfb5242f51094176","height":580,"ltcblock":"818c59d812a79623746806f4904dc3d87879eb76020a06c385394d1429387b0a","ltcburntx":"4461e47cfa8a7c1a02b718ff055a1dc9abb7bfda90cc250abcf554f8bedc2987","ltcmedtm":0,"ltcburned":0},"address":"DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy","total":0.0015,"contents":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824 [0] Currency 0.0015 fraenks; coinage 163350000000\n","currentassets":[{"type":"asset","assethash":"5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4","assetid":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824","bday":0,"preasset":{"type":"preasset","preassettype":"currency","val":{"cants":150000000,"fraenks":"0.0015"}}}]}}
+{"response":"bitcoin address","daliladdress":"DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy","info":{"ledgerroot":"d09d62d8b7d3a864c8cc0a86f889ef5b7374acf56e9f51db7d7f471a1c2cafe7","block":{"block":"7ceffac9ffe328ee7898b3bd457078a453fd7b385780fcf2b1dca8f6334589e6","height":1293,"ltcblock":"b33ebff0aee1406ed07bcae0633745a07d247f6635fbd7bd3cf7e99c06205a2e","ltcburntx":"4461710a01616a10a5dc43adfe6ebcae4381b0dca03466405083ddd87a728069","ltcmedtm":1564166879,"ltcburned":0},"address":"DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy","total":0.0015,"contents":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824 [0] Currency 0.00075 fraenks; coinage 81675000000\n","currentassets":[{"type":"asset","assethash":"5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4","assetid":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824","bday":0,"preasset":{"type":"preasset","preassettype":"currency","val":{"cants":150000000,"fraenks":"0.0015"}}}]}}
 ```
 
 The result indicates 15muB9t6z5UZBCWTkTApgEUYnMZdcnumKo is a Bitcoin
 address with corresponding Dalilcoin address
 DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy. The "info" part includes an array
 of "currentassets". In this case there is one asset, a currency asset
-with value 0.0015 fraenks.
+of 0.0015 fraenks from the airdrop. The "contents" part indicates
+that the currency asset is now spendable for 0.00075 fraenks.
 
 Here is the same example giving the Dalilcoin address to the query command:
 
 ```
 query DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy
-{"response":"daliladdress","info":{"ledgerroot":"af6b3b954c20df2a8a7d8ce969671a0aa0af46908d1b4f8a19915eabc896a440","block":{"block":"5b47277f4383c6543b32978fa3998228b1f9aa482e47788bcfb5242f51094176","height":580,"ltcblock":"818c59d812a79623746806f4904dc3d87879eb76020a06c385394d1429387b0a","ltcburntx":"4461e47cfa8a7c1a02b718ff055a1dc9abb7bfda90cc250abcf554f8bedc2987","ltcmedtm":0,"ltcburned":0},"address":"DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy","total":0.0015,"contents":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824 [0] Currency 0.0015 fraenks; coinage 163350000000\n","currentassets":[{"type":"asset","assethash":"5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4","assetid":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824","bday":0,"preasset":{"type":"preasset","preassettype":"currency","val":{"cants":150000000,"fraenks":"0.0015"}}}]}}
+{"response":"daliladdress","info":{"ledgerroot":"d09d62d8b7d3a864c8cc0a86f889ef5b7374acf56e9f51db7d7f471a1c2cafe7","block":{"block":"7ceffac9ffe328ee7898b3bd457078a453fd7b385780fcf2b1dca8f6334589e6","height":1293,"ltcblock":"b33ebff0aee1406ed07bcae0633745a07d247f6635fbd7bd3cf7e99c06205a2e","ltcburntx":"4461710a01616a10a5dc43adfe6ebcae4381b0dca03466405083ddd87a728069","ltcmedtm":1564166879,"ltcburned":0},"address":"DZFbhX82zfqiXdq9WTVhi7uwHzYsjEUGgy","total":0.0015,"contents":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824 [0] Currency 0.00075 fraenks; coinage 81675000000\n","currentassets":[{"type":"asset","assethash":"5f3d6ade600b330ba405413935f32cb07dfe904ee52c894c015b8cb27ff702c4","assetid":"0000000000000000000000003b522a6135a10dff029666431e145aa4a2d0e824","bday":0,"preasset":{"type":"preasset","preassettype":"currency","val":{"cants":150000000,"fraenks":"0.0015"}}}]}}
 ```
 
 * Staking
