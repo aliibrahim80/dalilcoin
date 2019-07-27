@@ -418,7 +418,7 @@ let ltc_createburntx h1 h2 toburn =
 	let extradata = (*** before the May 2019 hard fork, do not burn enough to require pushing more than 75 bytes in the burn tx (and wait an extra day before burning more than 75 bytes even after the hard fork time, out of abundance of caution) ***)
 	  if 67 + String.length extradata >= 76 && Int64.of_float (Unix.time()) < Int64.add 86400L !Utils.may2019hardforktime then
 	    ""
-	  else if 67 + String.length extradata >= 65536 then
+	  else if 67 + String.length extradata > 80 then (** ltc will not relay OP_RETURN with more than 80 bytes; increase this if it changes **)
 	    ""
 	  else
 	    extradata
