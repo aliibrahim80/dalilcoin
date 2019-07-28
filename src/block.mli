@@ -136,6 +136,8 @@ val valid_blockheader_signat : blockheader -> asset -> bool
 
 val valid_blockheader : int64 -> stakemod -> targetinfo -> blockheader -> int64 -> int64 -> bool
 
+val sanity_check_header : blockheader -> bool
+
 val ctree_of_block : block -> ctree
 
 val txl_of_block : block -> tx * tx list
@@ -161,3 +163,6 @@ val valid_blockchain : int64 -> blockchain -> int64 -> int64 -> bool
 val valid_blockheaderchain : int64 -> blockheaderchain -> int64 -> int64 -> bool
 
 val collect_header_inv_nbhd : int -> hashval -> (int * hashval) list ref -> unit
+
+val unburned_headers : (hashval,(hashval * hashval) -> unit) Hashtbl.t
+val unburned_deltas : (hashval,(hashval * hashval) -> unit) Hashtbl.t

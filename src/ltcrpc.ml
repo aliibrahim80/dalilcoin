@@ -732,7 +732,21 @@ let rec ltc_process_block h =
 		      Hashtbl.add outlinevals (hh,txhh) (dnxt,tm,burned,None,hashpair hh txhh,1L);
 		      (*** since the burn is presumably new, add to missing lists; this should never happen since the genesis phase has passed. ***)
 		      missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(1L,dnxt)] !missingheaders;
-		      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(1L,dnxt)] !missingdeltas
+		      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(1L,dnxt)] !missingdeltas;
+		      begin
+			try
+			  Hashtbl.find unburned_headers dnxt (hh,txhh);
+			  Hashtbl.remove unburned_headers dnxt
+			with Not_found ->
+			  ()
+		      end;
+		      begin
+			try
+			  Hashtbl.find unburned_deltas dnxt (hh,txhh);
+			  Hashtbl.remove unburned_deltas dnxt
+			with Not_found ->
+			  ()
+		      end
 		    end
 		end
 	      else

@@ -404,6 +404,12 @@ let valid_blockheader blkh csm tinfo (bhd,bhs) lmedtm burned =
   | HeaderStakedAssetNotMin -> false
   | HeaderNoStakedAsset -> false
 
+(** just check that the staked asset is there and that the signature is valid **)
+let sanity_check_header (bhd,bhs) =
+  try
+    valid_blockheader_signat (bhd,bhs) (blockheader_stakeasset bhd)
+  with _ -> false
+
 let ctree_of_block (b:block) =
   let ((bhd,bhs),bd) = b in
   ctree_cgraft bd.prevledgergraft bhd.prevledger
@@ -837,4 +843,7 @@ and collect_header_inv_nbhd_2 m h bhd tosend =
     | Some(k,_) -> collect_header_inv_nbhd (m-1) k tosend
     | _ -> ()
   end
+
+let unburned_headers : (hashval,(hashval * hashval) -> unit) Hashtbl.t = Hashtbl.create 100
+let unburned_deltas : (hashval,(hashval * hashval) -> unit) Hashtbl.t = Hashtbl.create 100
 

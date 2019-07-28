@@ -720,7 +720,13 @@ Hashtbl.add msgtype_handler GetHeader
 	seosbf (seo_blockheader seosb bh (seo_hashval seosb h (seo_int8 seosb 1 (s,None))));
 	Hashtbl.replace cs.sentinv (i,h) tm;
 	let ss = Buffer.contents s in
-	ignore (queue_msg cs Headers ss)
+	ignore (queue_msg cs Headers ss);
+	begin
+	  try
+	    let cnt = Hashtbl.find localnewheader_sent h in
+	    Hashtbl.replace localnewheader_sent h (cnt + 1)
+	  with Not_found -> ()
+	end
       with Not_found ->
 	(*** don't have it to send, ignore ***)
 	());;
@@ -751,7 +757,13 @@ Hashtbl.add msgtype_handler GetHeaders
 	      incr m;
 	      bhl := (h,bh)::!bhl;
 	      log_string (Printf.sprintf "sending header %s to %s upon request at time %f (GetHeaders)\n" (hashval_hexstring h) cs.addrfrom (Unix.time()));
-	      Hashtbl.replace cs.sentinv (i,h) tm
+	      Hashtbl.replace cs.sentinv (i,h) tm;
+	      begin
+		try
+		  let cnt = Hashtbl.find localnewheader_sent h in
+		  Hashtbl.replace localnewheader_sent h (cnt + 1)
+		with Not_found -> ()
+	      end
 	    end;
 	with
 	| Not_found ->
@@ -788,50 +800,65 @@ Hashtbl.add msgtype_handler Headers
       let (h,cn) = sei_hashval seis !c in
       let (bh,cn) = deserialize_exc_protect cs (fun () -> sei_blockheader seis cn) in (*** deserialize if only to get to the next one ***)
       c := cn;
-      log_string (Printf.sprintf "Headers msg %d %s at time %f\n"j (hashval_hexstring h) tm);
-      begin
-	try
-	  let (lbk,ltx) = get_burn h in
-	  let (bhd,bhs) = bh in
-	  if not (Hashtbl.mem validheadervals (lbk,ltx)) then
-	    begin
-	      let (dbh,lmedtm,burned,par,newcsm,currhght) = Hashtbl.find outlinevals (lbk,ltx) in
-	      if not (dbh = h) then
-		begin
-		  log_string (Printf.sprintf "Impossible Error: Header burn mismatch %s %s %s != %s\n" (hashval_hexstring lbk) (hashval_hexstring ltx) (hashval_hexstring dbh) (hashval_hexstring h))
-		end
-	      else
-		begin
-		  match par with
-		  | None -> (*** genesis ***)
-		      if bhd.prevblockhash = None then
-			process_header !Utils.log true true true (lbk,ltx) h (bhd,bhs) currhght !genesisstakemod !genesistarget lmedtm burned
-		      else
-			begin
-			  Printf.fprintf !Utils.log "Alleged genesis block %s had an invalid header (claims point to a previous block).\n" (hashval_hexstring h);
-			  DbInvalidatedBlocks.dbput h true
-			end
-		  | Some(plbk,pltx) ->
-		      try
-			let (pdbh,plmedtm,pburned,_,csm,_) = Hashtbl.find outlinevals (plbk,pltx) in
-			if bhd.prevblockhash = Some(pdbh,Poburn(plbk,pltx,plmedtm,pburned)) then
-			  begin
-			    try
-			      let (tar,_,_,_,_) = Hashtbl.find validheadervals (plbk,pltx) in
-			      process_header !Utils.log true true true (lbk,ltx) h (bhd,bhs) currhght csm tar lmedtm burned
-			    with Not_found ->
-			      Hashtbl.add delayed_headers (lbk,ltx) (fun tar -> process_header !Utils.log true true true (lbk,ltx) h (bhd,bhs) currhght csm tar lmedtm burned)
-			  end
+      if not (h = blockheader_id bh) then
+	begin
+	  log_string (Printf.sprintf "Ignoring header since it had the wrong id, %s but expected %s.\n" (hashval_hexstring (blockheader_id bh)) (hashval_hexstring h));
+	end
+      else
+	begin
+	  let local_process_header (lbk,ltx) =
+	    let (bhd,bhs) = bh in
+	    if not (Hashtbl.mem validheadervals (lbk,ltx)) then
+	      begin
+		let (dbh,lmedtm,burned,par,newcsm,currhght) = Hashtbl.find outlinevals (lbk,ltx) in
+		if not (dbh = h) then
+		  begin
+		    log_string (Printf.sprintf "Impossible Error: Header burn mismatch %s %s %s != %s\n" (hashval_hexstring lbk) (hashval_hexstring ltx) (hashval_hexstring dbh) (hashval_hexstring h))
+		  end
+		else
+		  begin
+		    match par with
+		    | None -> (*** genesis ***)
+			if bhd.prevblockhash = None then
+			  process_header !Utils.log true true true (lbk,ltx) h (bhd,bhs) currhght !genesisstakemod !genesistarget lmedtm burned
 			else
 			  begin
-			    Printf.fprintf !Utils.log "Alleged block %s at height %Ld had an invalid header, pointing to an incorrect previous block or proof of burn.\n" (hashval_hexstring h) currhght;
+			    Printf.fprintf !Utils.log "Alleged genesis block %s had an invalid header (claims point to a previous block).\n" (hashval_hexstring h);
 			    DbInvalidatedBlocks.dbput h true
 			  end
-		      with Not_found -> () (*** do not know the burn for the parent; ignore header ***)
-		end
-	    end
-	with Not_found -> () (*** the burn is not there, so ignore the header ***)
-      end
+		    | Some(plbk,pltx) ->
+			try
+			  let (pdbh,plmedtm,pburned,_,csm,_) = Hashtbl.find outlinevals (plbk,pltx) in
+			  if bhd.prevblockhash = Some(pdbh,Poburn(plbk,pltx,plmedtm,pburned)) then
+			    begin
+			      try
+				let (tar,_,_,_,_) = Hashtbl.find validheadervals (plbk,pltx) in
+				process_header !Utils.log true true true (lbk,ltx) h (bhd,bhs) currhght csm tar lmedtm burned
+			      with Not_found ->
+				Hashtbl.add delayed_headers (lbk,ltx) (fun tar -> process_header !Utils.log true true true (lbk,ltx) h (bhd,bhs) currhght csm tar lmedtm burned)
+			    end
+			  else
+			    begin
+			      Printf.fprintf !Utils.log "Alleged block %s at height %Ld had an invalid header, pointing to an incorrect previous block or proof of burn.\n" (hashval_hexstring h) currhght;
+			      DbInvalidatedBlocks.dbput h true
+			    end
+			with Not_found -> () (*** do not know the burn for the parent; ignore header ***)
+		  end
+	      end
+	  in
+	  try
+	    let (lbk,ltx) = get_burn h in
+	    local_process_header (lbk,ltx)
+	  with Not_found -> (*** the burn is not there, so do some checks on the header, save the function to process it in unburned_headers, and request delta ***)
+	    if sanity_check_header bh then
+	      let msb = Buffer.create 100 in
+	      seosbf (seo_hashval seosb h (msb,None));
+	      let ms = Buffer.contents msb in
+	      let di = int_of_msgtype GetBlockdelta in
+	      Hashtbl.replace cs.invreq (di,h) tm;
+	      ignore (queue_msg cs GetBlockdelta ms);
+	      Hashtbl.add unburned_headers h local_process_header
+	end
     done);;
 
 let req_headers sout cs m nw =
@@ -905,6 +932,7 @@ Hashtbl.add msgtype_handler Inv
 	with Not_found ->
 	  ()
       end;
+      if i = int_of_msgtype Headers && not (DbBlockHeader.dbexists h) && not (DbArchived.dbexists h) && not (invalid_or_blacklisted_p h) then hl := h::!hl; (* request headers early *)
       if i = int_of_msgtype STx && not (DbArchived.dbexists h) then
 	begin
 	  if not (DbSTx.dbexists h) && not (Hashtbl.mem stxpool h) then
@@ -937,7 +965,13 @@ Hashtbl.add msgtype_handler GetBlockdelta
 	  seosbf (seo_blockdelta seosb blkdel (seo_hashval seosb h (bdsb,None)));
 	  let bdser = Buffer.contents bdsb in
 	  ignore (queue_msg cs Blockdelta bdser);
-	  Hashtbl.replace cs.sentinv (i,h) tm
+	  Hashtbl.replace cs.sentinv (i,h) tm;
+	  begin
+	    try
+	      let cnt = Hashtbl.find localnewdelta_sent h in
+	      Hashtbl.replace localnewdelta_sent h (cnt + 1)
+	    with Not_found -> ()
+	  end
 	with Not_found ->
 	  log_string (Printf.sprintf "Unknown Block Delta %s (Bad Peer or Did I Advertize False Inventory?)\n" (hashval_hexstring h));
 	  ());;
@@ -946,8 +980,7 @@ Hashtbl.add msgtype_handler Blockdelta
   (fun (sin,sout,cs,ms) ->
     let (h,r) = sei_hashval seis (ms,String.length ms,None,0,0) in
     begin
-      try
-	let (lbk,ltx) = get_burn h in
+      let local_process_delta (lbk,ltx) =
 	let (dbh,lmedtm,burned,par,newcsm,currhght) = Hashtbl.find outlinevals (lbk,ltx) in
 	if not (dbh = h) then
 	  begin
@@ -977,8 +1010,13 @@ Hashtbl.add msgtype_handler Blockdelta
 			    process_delta !Utils.log true true true (lbk,ltx) h (bh,bd) thtr tht sgtr sgt currhght csm tar lmedtm burned)
 	      end
 	  end
-      with Not_found ->
-	log_string (Printf.sprintf "Got delta %s but not enough info for it so dropping it" (hashval_hexstring h))
+      in
+      try
+	let (lbk,ltx) = get_burn h in
+	local_process_delta (lbk,ltx)
+      with Not_found -> (** save the function to process the delta in unburned_deltas in case we need it later **)
+	log_string (Printf.sprintf "Got delta %s but not enough info for it so saving it for later" (hashval_hexstring h));
+	Hashtbl.add unburned_deltas h local_process_delta
     end);;
 
 Hashtbl.add msgtype_handler GetSTx

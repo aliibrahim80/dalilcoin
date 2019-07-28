@@ -1240,3 +1240,7 @@ let liberally_accept_elements_p tm =
   match !liberally_accept_elements_tm with
   | Some(ltm) -> if tm < ltm then true else (liberally_accept_elements_tm := None; false)
   | None -> false;;
+
+let localnewheader_sent : (hashval,int) Hashtbl.t = Hashtbl.create 100
+let localnewdelta_sent : (hashval,int) Hashtbl.t = Hashtbl.create 100
+

@@ -23,6 +23,11 @@ open Block
 open Blocktree
 open Commands
 
+let advertise_new_block newblkid =
+  broadcast_inv [(int_of_msgtype Headers,newblkid);(int_of_msgtype Blockdelta,newblkid)];
+  Hashtbl.add localnewheader_sent newblkid 0;
+  Hashtbl.add localnewdelta_sent newblkid 0
+
 let stakegenesis = false (*** set this to true and recompile to stake a genesis block for the testnet; then reset it to false and recompile to continue ***)
 
 let get_reward_locktime blkh =
@@ -548,7 +553,7 @@ let stakingthread () =
 			  in
 			  let bhnew = (bhdnew,bhsnew) in
 			  let newblkid = blockheader_id bhnew in
-			  DbBlockHeader.dbput newblkid bhnew;
+			  DbBlockHeader.dbput newblkid bhnew; (** save current block in local database **)
 			  DbBlockDelta.dbput newblkid bdnew;
 			  List.iter
 			    (fun stau -> DbSTx.dbput (hashstx stau) stau)
@@ -577,8 +582,10 @@ let stakingthread () =
 			    begin
 			      match valid_block thytree sigtree blkh csm0 tar0 (bhnew,bdnew) tm (match toburn with Some(burn) -> burn | _ -> 0L) with
 			      | Some(tht2,sigt2) ->
-				  update_theories thyroot thytree tht2;
-				  update_signatures sigroot sigtree sigt2;
+				  update_theories thyroot thytree tht2; (* locally update theories *)
+				  update_signatures sigroot sigtree sigt2; (* locally update signatures *)
+				  (** now that we have double checked validity, advertise the block to peers (before burning ltc) **)
+				  advertise_new_block newblkid
 			      | None ->
 				  log_string (Printf.sprintf "New block is not valid\n");
 				  begin
@@ -627,10 +634,12 @@ let stakingthread () =
 			  end;
 			  let publish_new_block () =
 			    log_string (Printf.sprintf "called publish_new_block\n");
-			    if List.length !netconns < !Config.minconnstostake then
+			    let hscnt = (try Hashtbl.find localnewheader_sent newblkid with Not_found -> -1) in
+			    let dscnt = (try Hashtbl.find localnewdelta_sent newblkid with Not_found -> -1) in
+			    if max hscnt dscnt < !Config.minconnstostake then
 			      begin
-				log_string (Printf.sprintf "Refusing to publish new block since node is insufficiently connected (only %d connections).\n" (List.length !netconns));
-				Thread.delay 600.0 (*** delay for 10 minutes before continuing trying to stake to see if more connections arrive by then ***)
+				log_string (Printf.sprintf "Delaying publication of block until it has been sent to %d peers (minconnstostake), currently header sent to %d peers and delta sent to %d peers.\n" !Config.minconnstostake hscnt dscnt);
+				Thread.delay 120.0 (*** delay for 2 minutes before continuing trying to stake to see if more peers request the block by then ***)
 			      end
 			    else
 			      begin
