@@ -41,6 +41,7 @@ let get_reward_locktime blkh =
   | None -> m
   | Some(a) -> if a > m then a else m
 
+let pendingdlcblock : (unit -> unit) option ref = ref None;;
 let pendingltctxs : string list ref = ref [];;
 
 type nextstakeinfo = NextStake of (int64 * p2pkhaddr * hashval * int64 * obligation * int64 * int64 option * (hashval * hashval) option ref * hashval option * ttree option * hashval option * stree option) | NoStakeUpTo of int64;;
@@ -122,6 +123,7 @@ let maxburnnow tm =
 
 exception StakingPause of float
 exception StakingProblemPause
+exception StakingPublishBlockPause
 
 let compute_staking_chances (prevblkh,lbk,ltx) fromtm totm =
   try
@@ -249,6 +251,7 @@ let stakingthread () =
       if not (ltc_synced()) then (log_string (Printf.sprintf "ltc not synced yet; delaying staking\n"); raise (StakingPause(60.0)));
       pendingltctxs := List.filter (fun h -> not (ltc_tx_confirmed h)) !pendingltctxs;
       if not (!pendingltctxs = []) then (log_string (Printf.sprintf "there are pending ltc txs; delaying staking\n"); raise (StakingPause(60.0)));
+      (match !pendingdlcblock with Some(p) -> p() | None -> ()); (* if a dlc block has been staked, but not yet burned *)
       let (pbhh1,lbk,ltx) = get_bestblock_cw_exception (if stakegenesis then Genesis else SyncIssue) in
       try
 	let (_,plmedtm,pburned,par,csm0,pblkh) = Hashtbl.find outlinevals (lbk,ltx) in
@@ -632,22 +635,29 @@ let stakingthread () =
 			      done
 			    with Exit -> ()
 			  end;
-			  let publish_new_block () =
-			    log_string (Printf.sprintf "called publish_new_block\n");
-			    let hscnt = (try Hashtbl.find localnewheader_sent newblkid with Not_found -> -1) in
-			    let dscnt = (try Hashtbl.find localnewdelta_sent newblkid with Not_found -> -1) in
-			    if max hscnt dscnt < !Config.minconnstostake then
-			      begin
-				log_string (Printf.sprintf "Delaying publication of block until it has been sent to %d peers (minconnstostake), currently header sent to %d peers and delta sent to %d peers.\n" !Config.minconnstostake hscnt dscnt);
-				Thread.delay 120.0 (*** delay for 2 minutes before continuing trying to stake to see if more peers request the block by then ***)
-			      end
+			  let publish_new_block_2 () =
+			    log_string (Printf.sprintf "called publish_new_block_2\n");
+			    let (pbh2,lbk2,ltx2) = get_bestblock_cw_exception (StakingPause(300.0)) in
+			    if not ((pbh2,lbk2,ltx2) = (pbhh1,lbk,ltx)) then (*** if the best block has changed, don't publish it ***)
+begin log_string "best block changed, not publishing\n";
+			      pendingdlcblock := None
+end
 			    else
-			      begin
-				let ftm = Int64.add (ltc_medtime()) 3600L in
-				if tm <= ftm then
-				  begin
-				    let (pbh2,lbk2,ltx2) = get_bestblock_cw_exception (StakingPause(300.0)) in
-				    if (pbh2,lbk2,ltx2) = (pbhh1,lbk,ltx) then (*** if the best block has changed, don't publish it ***)
+			      let hscnt = (try Hashtbl.find localnewheader_sent newblkid with Not_found -> -1) in
+			      let dscnt = (try Hashtbl.find localnewdelta_sent newblkid with Not_found -> -1) in
+			      if max hscnt dscnt < !Config.minconnstostake then
+				begin
+				  log_string (Printf.sprintf "Delaying publication of block %s until it has been sent to %d peers (minconnstostake), currently header sent to %d peers and delta sent to %d peers.\n" (hashval_hexstring newblkid) !Config.minconnstostake hscnt dscnt);
+				  broadcast_inv [(int_of_msgtype Headers,newblkid);(int_of_msgtype Blockdelta,newblkid)];
+				  raise StakingPublishBlockPause
+				end
+			      else
+				begin
+log_string "now publishing for real\n";
+				  pendingdlcblock := None;
+				  let ftm = Int64.add (ltc_medtime()) 3600L in
+				  if tm <= ftm then
+				    begin
 				      begin
 					match toburn with
 					| Some(u) ->
@@ -679,8 +689,13 @@ let stakingthread () =
 					    end
 					| None -> raise (Failure("must burn, should have known"))
 				      end
-				  end			      
-			      end
+				    end			      
+				end
+			  in
+			  let publish_new_block () =
+			    log_string (Printf.sprintf "called publish_new_block\n");
+			    pendingdlcblock := Some(publish_new_block_2);
+			    raise StakingPublishBlockPause
 			  in
  			  let (pbh2,lbk2,ltx2) = get_bestblock_cw_exception (StakingPause(300.0)) in
 			  if (pbh2,lbk2,ltx2) = (pbhh1,lbk,ltx) then (*** if the best block has changed, don't publish it ***)
@@ -913,6 +928,9 @@ let stakingthread () =
 	log_string (Printf.sprintf "Staking pause of %f seconds\n" del);
 	Thread.delay del;
 	sleepuntil := ltc_medtime()
+    | StakingPublishBlockPause -> (** delay to allow peers to request the new block **)
+	log_string (Printf.sprintf "Staking pause while peers request new block.\n");
+	Thread.delay 60.0
     | e ->
 	log_string (Printf.sprintf "Staking exception: %s\nPausing staking for about an hour.\n" (Printexc.to_string e));
 	Thread.delay 3600.0;

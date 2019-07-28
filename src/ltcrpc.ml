@@ -1,4 +1,4 @@
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -737,15 +737,13 @@ let rec ltc_process_block h =
 			try
 			  Hashtbl.find unburned_headers dnxt (hh,txhh);
 			  Hashtbl.remove unburned_headers dnxt
-			with Not_found ->
-			  ()
+			with _ -> ()
 		      end;
 		      begin
 			try
 			  Hashtbl.find unburned_deltas dnxt (hh,txhh);
 			  Hashtbl.remove unburned_deltas dnxt
-			with Not_found ->
-			  ()
+			with _ -> ()
 		      end
 		    end
 		end
@@ -768,7 +766,19 @@ let rec ltc_process_block h =
 			      Hashtbl.add outlinevals (hh,txhh) (dnxt,tm,burned,Some(lprevblkh,lprevtx),hashpair hh txhh,currhght);
 			      (*** since the burn is presumably new, add to missing lists (unless it was staked by the current node which is handled in staking module) ***)
 			      missingheaders := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingheaders;
-			      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingdeltas
+			      missingdeltas := List.merge (fun (i,_) (j,_) -> compare i j) [(currhght,dnxt)] !missingdeltas;
+			      begin
+				try
+				  Hashtbl.find unburned_headers dnxt (hh,txhh);
+				  Hashtbl.remove unburned_headers dnxt
+				with _ -> ()
+			      end;
+			      begin
+				try
+				  Hashtbl.find unburned_deltas dnxt (hh,txhh);
+				  Hashtbl.remove unburned_deltas dnxt
+				with _ -> ()
+			      end;
 			  | None -> ()
 			with Not_found -> ()
 		      end

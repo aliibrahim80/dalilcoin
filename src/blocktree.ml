@@ -857,6 +857,7 @@ Hashtbl.add msgtype_handler Headers
 	      let di = int_of_msgtype GetBlockdelta in
 	      Hashtbl.replace cs.invreq (di,h) tm;
 	      ignore (queue_msg cs GetBlockdelta ms);
+	      log_string (Printf.sprintf "Got header %s but not enough info for it so saving it for later\n" (hashval_hexstring h));
 	      Hashtbl.add unburned_headers h local_process_header
 	end
     done);;
@@ -1015,7 +1016,7 @@ Hashtbl.add msgtype_handler Blockdelta
 	let (lbk,ltx) = get_burn h in
 	local_process_delta (lbk,ltx)
       with Not_found -> (** save the function to process the delta in unburned_deltas in case we need it later **)
-	log_string (Printf.sprintf "Got delta %s but not enough info for it so saving it for later" (hashval_hexstring h));
+	log_string (Printf.sprintf "Got delta %s but not enough info for it so saving it for later\n" (hashval_hexstring h));
 	Hashtbl.add unburned_deltas h local_process_delta
     end);;
 
