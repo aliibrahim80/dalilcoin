@@ -16,6 +16,8 @@ val dalilwif : big_int -> bool -> string
 val ltcwif : big_int -> bool -> string
 val privkey_from_wif : string -> big_int * bool
 val privkey_from_btcwif : string -> big_int * bool
+val pubkey_hexstring : (big_int * big_int) -> bool -> string
+val hexstring_pubkey : string -> (big_int * big_int) * bool
 val pubkey_hashval : big_int * big_int -> bool -> hashval
 val pubkey_md160 : big_int * big_int -> bool -> md160
 val md160_from_addrstr : string -> md160

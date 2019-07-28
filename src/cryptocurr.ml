@@ -198,6 +198,36 @@ let count0bytes (x0,x1,x2,x3,x4) =
   else
     count_int32_bytes x0
 
+let pubkey_hexstring (x,y) compr =
+  if compr then
+    if evenp y then
+      Printf.sprintf "02%s" (hexstring_of_big_int x 64)
+    else
+      Printf.sprintf "03%s" (hexstring_of_big_int x 64)
+  else
+    Printf.sprintf "04%s%s" (hexstring_of_big_int x 64) (hexstring_of_big_int y 64)
+
+let hexstring_pubkey s =
+  if String.length s = 66 then
+    if s.[0] = '0' then
+      if s.[1] = '2' || s.[1] = '3' then
+	let x = big_int_of_hexstring (String.sub s 2 64) in
+	let y = curve_y (s.[1] = '2') x in
+	((x,y),true)
+      else
+	raise (Failure (Printf.sprintf "cannot decode %s as pubkey" s))
+    else
+      raise (Failure (Printf.sprintf "cannot decode %s as pubkey" s))
+  else if String.length s = 130 then
+    if s.[0] = '0' && s.[1] = '4' then
+	let x = big_int_of_hexstring (String.sub s 2 64) in
+	let y = big_int_of_hexstring (String.sub s 66 64) in
+	((x,y),false)
+    else
+      raise (Failure (Printf.sprintf "cannot decode %s as pubkey" s))
+  else
+    raise (Failure (Printf.sprintf "cannot decode %s as pubkey" s))
+
 let pubkey_hashval (x,y) compr =
   if compr then
     hashpubkeyc (if evenp y then 2 else 3) (big_int_md256 x)
