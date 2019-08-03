@@ -77,6 +77,8 @@ val query_blockheight : int64 -> jsonval
 
 val preassetinfo_report : out_channel -> preasset -> unit
 
+val report_subtop_subsubtop : out_channel -> bool list -> unit
+
 val verifyfullledger : out_channel -> hashval -> unit
 
 val requestfullledger : out_channel -> hashval -> unit

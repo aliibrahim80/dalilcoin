@@ -3069,3 +3069,172 @@ let rec ctree_from_json j =
 	raise (Failure("not json of a ctree"))
   | _ ->
       raise (Failure("not json of a ctree"))
+
+let import_ctree_subelts c h =
+  let m = ref 0 in
+  let n = ref 0 in
+  let s : (hashval,unit) Hashtbl.t = Hashtbl.create 1000 in
+  Hashtbl.add s h ();
+  let rec mark_sought_ctree tr =
+    match tr with
+    | CHash(h) -> Hashtbl.add s h ()
+    | CLeaf(_,NehHash(h,_)) -> Hashtbl.add s h ()
+    | CLeft(tr0) -> mark_sought_ctree tr0
+    | CRight(tr1) -> mark_sought_ctree tr1
+    | CBin(tr0,tr1) -> mark_sought_ctree tr0; mark_sought_ctree tr1
+    | _ -> ()
+  in
+  try
+    while true do
+      let k = input_byte c in
+      let (h,_) = sei_hashval seic (c,None) in
+      if k = 1 then
+	let (tr,_) = sei_ctree seic (c,None) in
+	if Hashtbl.mem s h then
+	  begin
+	    incr m;
+	    mark_sought_ctree tr;
+	    if not (DbCTreeElt.dbexists h) then
+	      begin
+		if ctree_element_p tr && ctree_hashroot tr = h then
+		  begin
+		    incr n;
+		    DbCTreeElt.dbput h tr
+		  end
+	      end
+	  end;
+      else if k = 2 then
+	let ((ah,hr),_) = sei_prod sei_hashval (sei_option (sei_prod sei_hashval sei_int8)) seic (c,None) in
+	if Hashtbl.mem s h then
+	  begin
+	    incr m;
+	    Hashtbl.add s ah ();
+	    (match hr with None -> () | Some(k,_) -> Hashtbl.add s k ());
+	    if not (DbHConsElt.dbexists h) then
+	      begin
+		let (r,l) =
+		  match hr with
+		  | None -> (hashtag ah 3l,1)
+		  | Some(k,l) ->
+		      Hashtbl.add s k ();
+		      (hashtag (hashpair ah k) (Int32.of_int (4096+l)),1+l)
+		in
+		if r = h then
+		  begin
+		    incr n;
+		    DbHConsElt.dbput h (ah,hr)
+		  end
+	      end
+	  end;
+      else if k = 3 then
+	let (a,_) = sei_asset seic (c,None) in
+	if Hashtbl.mem s h then
+	  begin
+	    incr m;
+	    if not (DbAsset.dbexists h) then
+	      begin
+		if hashasset a = h then
+		  begin
+		    incr n;
+		    DbAsset.dbput h a
+		  end
+	      end
+	  end;
+      else
+	raise Exit
+    done;
+    (!m,!n)
+  with
+  | End_of_file -> (!m,!n)
+  | Exit -> (!m,!n)
+
+let export_ctree_subelts c h bl =
+  let export_asset h =
+    try
+      let a = DbAsset.dbget h in
+      output_byte c 3;
+      seocf (seo_hashval seoc h (c,None));
+      seocf (seo_asset seoc a (c,None));
+    with Not_found -> ()
+  in
+  let rec export_full_hconselts h =
+    try
+      let (h1,h2) = DbHConsElt.dbget h in
+      output_byte c 2;
+      seocf (seo_hashval seoc h (c,None));
+      seocf (seo_prod seo_hashval (seo_option (seo_prod seo_hashval seo_int8)) seoc (h1,h2) (c,None));
+      export_asset h1;
+      match h2 with
+      | Some(h3,_) -> export_full_hconselts h3
+      | None -> ()
+    with Not_found -> ()
+  in
+  let rec export_full_ctree_r tr =
+    match tr with
+    | CHash(h) -> export_full_ctree_h h
+    | CLeaf(cl,NehHash(h,_)) -> export_full_hconselts h
+    | CLeft(tr0) -> export_full_ctree_r tr0
+    | CRight(tr1) -> export_full_ctree_r tr1
+    | CBin(tr0,tr1) -> export_full_ctree_r tr0; export_full_ctree_r tr1
+    | _ -> ()
+  and export_full_ctree_h h =
+    try
+      let tr = DbCTreeElt.dbget(h) in
+      output_byte c 1;
+      seocf (seo_hashval seoc h (c,None));
+      seocf (seo_ctree seoc tr (c,None));
+      export_full_ctree_r tr
+    with Not_found -> ()
+  in
+  let rec export_ctree_subpos_r tr bl =
+    match bl with
+    | [] -> export_full_ctree_r tr
+    | b::br ->
+	match tr with
+	| CHash(h) -> export_ctree_subpos_h h bl
+	| CLeaf(cl,hl) when cl = bl -> export_full_ctree_r tr
+	| CLeft(tr0) -> if not b then export_ctree_subpos_r tr0 br
+	| CRight(tr1) -> if b then export_ctree_subpos_r tr1 br
+	| CBin(tr0,tr1) ->
+	    if b then
+	      export_ctree_subpos_r tr1 br
+	    else
+	      export_ctree_subpos_r tr0 br
+	| _ -> ()
+  and export_ctree_subpos_h h bl =
+    try
+      let tr = DbCTreeElt.dbget(h) in
+      output_byte c 1;
+      seocf (seo_hashval seoc h (c,None));
+      seocf (seo_ctree seoc tr (c,None));
+      export_ctree_subpos_r tr bl
+    with Not_found -> ()
+  in
+  export_ctree_subpos_h h bl
+
+let export_ctree_subtop c h p =
+  let bl = ref [] in
+  for i = 0 downto 8 do
+    if (p lsr i) land 1 = 1 then
+      bl := true::!bl
+    else
+      bl := false::!bl
+  done;
+  export_ctree_subelts c h !bl
+
+let export_ctree_subtop_subsubtop c h p1 p2 =
+  let bl = ref [] in
+  for i = 0 to 8 do
+    if (p2 lsr i) land 1 = 1 then
+      bl := true::!bl
+    else
+      bl := false::!bl
+  done;
+  for i = 0 downto 8 do
+    if (p1 lsr i) land 1 = 1 then
+      bl := true::!bl
+    else
+      bl := false::!bl
+  done;
+  export_ctree_subelts c h !bl
+

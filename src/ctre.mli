@@ -154,3 +154,8 @@ val ctree_from_json : jsonval -> ctree
 val collect_hcons_inv_nbhd : int -> hashval -> (int * hashval) list ref -> unit
 val collect_hlist_inv_nbhd : hlist -> (int * hashval) list ref -> unit
 val collect_ctree_inv_nbhd : ctree -> (int * hashval) list ref -> unit
+
+val import_ctree_subelts : in_channel -> hashval -> int * int
+val export_ctree_subelts : out_channel -> hashval -> bool list -> unit
+val export_ctree_subtop : out_channel -> hashval -> int -> unit
+val export_ctree_subtop_subsubtop : out_channel -> hashval -> int -> int -> unit

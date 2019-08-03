@@ -2593,40 +2593,64 @@ let rec ctree_tagged_hashes c pl par r =
   | CRight(c1) -> ctree_tagged_hashes c1 (true::pl) par r
   | CBin(c0,c1) -> ctree_tagged_hashes c0 (false::pl) par (ctree_tagged_hashes c1 (true::pl) par r)
 
-exception MissingAsset of hashval
-exception MissingHConsElt of hashval
-exception MissingCTreeElt of hashval
+exception MissingAsset of hashval * bool list
+exception MissingHConsElt of hashval * bool list
+exception MissingCTreeElt of hashval * bool list
 
-let rec verifyhcons (aid,k) =
-  if not (DbAsset.dbexists aid) then raise (MissingAsset(aid));
+let rec verifyhcons (aid,k) pl =
+  if not (DbAsset.dbexists aid) then raise (MissingAsset(aid,pl));
   match k with
   | None -> ()
-  | Some(k,_) -> verifyhlist_h k
-and verifyhlist_h h =
+  | Some(k,_) -> verifyhlist_h k pl
+and verifyhlist_h h pl =
   try
     let hc = DbHConsElt.dbget h in
-    verifyhcons hc
+    verifyhcons hc pl
   with Not_found ->
-    raise (MissingHConsElt(h))
+    raise (MissingHConsElt(h,pl))
 
-let rec verifyledger c =
+let rec verifyledger c pl =
   match c with
-  | CHash(h) -> verifyledger_h h
-  | CLeaf(bl,NehHash(h,_)) ->  verifyhlist_h h
+  | CHash(h) -> verifyledger_h h pl
+  | CLeaf(bl,NehHash(h,_)) ->  verifyhlist_h h pl
   | CLeaf(_,_) -> raise (Failure "Bug: Unexpected ctree elt case of nehhlist other than hash")
   | CLeft(c0) ->
-      verifyledger c0
+      verifyledger c0 (false::pl)
   | CRight(c1) ->
-      verifyledger c1
+      verifyledger c1 (true::pl)
   | CBin(c0,c1) ->
-      verifyledger c0;
-      verifyledger c1
-and verifyledger_h h =
+      verifyledger c0 (false::pl);
+      verifyledger c1 (true::pl)
+and verifyledger_h h pl =
   try
     let c = DbCTreeElt.dbget h in
-    verifyledger c
+    verifyledger c pl
   with Not_found ->
-    raise (MissingCTreeElt(h))
+    raise (MissingCTreeElt(h,pl))
+
+let report_subtop_subsubtop oc pl =
+  let rec r2 sub1 sub2 i bl =
+    if i = 9 then
+      Printf.fprintf oc "%d:%d\n" sub1 sub2
+    else
+      match bl with
+      | (b::br) ->
+	let sub2 = if b then (sub2 lsl 1) lor 1 else sub2 lsl 1 in
+	r2 sub1 sub2 (i+1) br
+      | [] ->
+	  Printf.fprintf oc "%d\n" sub1
+  in
+  let rec r1 sub1 i bl =
+    if i = 9 then
+      r2 sub1 0 0 bl
+    else
+      match bl with
+      | (b::br) ->
+	let sub1 = if b then (sub1 lsl 1) lor 1 else sub1 lsl 1 in
+	r1 sub1 (i+1) br
+      | [] -> ()
+  in
+  r1 0 0 pl
 
 let verifyfullledger oc h =
   try
@@ -2638,7 +2662,7 @@ let verifyfullledger oc h =
     let rec verify_tagged_hashes thl =
       match thl with
       | [] -> ()
-      | (i,_,_,h)::thr ->
+      | (i,pl,_,h)::thr ->
 	  incr cnt;
 	  let p = (!cnt * 100) / ncl in
 	  if p > !perc then
@@ -2648,9 +2672,9 @@ let verifyfullledger oc h =
 	      perc := p;
 	    end;
 	  if i = 0 then
-	    verifyledger_h h
+	    verifyledger_h h pl
 	  else
-	    verifyhlist_h h;
+	    verifyhlist_h h pl;
 	  verify_tagged_hashes thr
     in
     try
@@ -2660,15 +2684,35 @@ let verifyfullledger oc h =
       Printf.fprintf oc "Ledger is complete.\n";
       flush oc
     with
-    | MissingAsset(h) ->
-	Printf.fprintf oc "Ledger is not complete. Asset %s is missing.\n" (hashval_hexstring h);
-	flush oc
-    | MissingHConsElt(h) ->
-	Printf.fprintf oc "Ledger is not complete. HConsElt %s is missing.\n" (hashval_hexstring h);
-	flush oc
-    | MissingCTreeElt(h) ->
-	Printf.fprintf oc "Ledger is not complete. CTreeElt %s is missing.\n" (hashval_hexstring h);
-	flush oc
+    | MissingAsset(h,pl) ->
+	begin
+	  Printf.fprintf oc "Ledger is not complete. Asset %s is missing.\n" (hashval_hexstring h);
+	  let pl = List.rev pl in
+	  if List.length pl = 162 then
+	    Printf.fprintf oc "At address: %s\n" (addr_daliladdrstr (bitseq_addr pl))
+	  else
+	    Printf.fprintf oc "Asset appears not to be at the right depth? %d instead of 162\n" (List.length pl);
+	  report_subtop_subsubtop oc pl;
+	  flush oc
+	end
+    | MissingHConsElt(h,pl) ->
+	begin
+	  Printf.fprintf oc "Ledger is not complete. HConsElt %s is missing.\n" (hashval_hexstring h);
+	  let pl = List.rev pl in
+	  if List.length pl = 162 then
+	    Printf.fprintf oc "At address: %s\n" (addr_daliladdrstr (bitseq_addr pl))
+	  else
+	    Printf.fprintf oc "HCons appears not to be at the right depth? %d instead of 162\n" (List.length pl);
+	  report_subtop_subsubtop oc pl;
+	  flush oc
+	end
+    | MissingCTreeElt(h,pl) ->
+	begin
+	  Printf.fprintf oc "Ledger is not complete. CTreeElt %s is missing.\n" (hashval_hexstring h);
+	  let pl = List.rev pl in
+	  report_subtop_subsubtop oc pl;
+	  flush oc
+	end
   with Not_found ->
     Printf.fprintf oc "Do not have the root of ledger %s\n" (hashval_hexstring h);
     flush oc
@@ -2718,11 +2762,11 @@ let rec requestfullctree_subtop cnt thl =
 	try
 	  begin
 	    try
-	      verifyhlist_h h;
+	      verifyhlist_h h pl;
 	      requestfullctree_subtop cnt thr
 	    with
-	    | MissingAsset(_) -> raise Not_found
-	    | MissingHConsElt(_) -> raise Not_found
+	    | MissingAsset(_,_) -> raise Not_found
+	    | MissingHConsElt(_,_) -> raise Not_found
 	  end
 	with Not_found -> (** the hlist is incomplete, just request all of it **)
 	  let gebi = int_of_msgtype GetElementsBelow in
@@ -2761,12 +2805,12 @@ and requestfullctree_subsubtop cnt thr thl2 =
 	try
 	  begin
 	    try
-	      verifyledger_h h;
+	      verifyledger_h h pl;
 	      requestfullctree_subsubtop cnt thr thr2
 	    with
-	    | MissingAsset(_) -> raise Not_found
-	    | MissingHConsElt(_) -> raise Not_found
-	    | MissingCTreeElt(_) -> raise Not_found
+	    | MissingAsset(_,_) -> raise Not_found
+	    | MissingHConsElt(_,_) -> raise Not_found
+	    | MissingCTreeElt(_,_) -> raise Not_found
 	  end
 	with Not_found ->
 	  let cei = int_of_msgtype CTreeElement in
@@ -3400,6 +3444,3 @@ let createmultisig m jpks =
       let pubkeys = List.map (fun j -> match j with JsonStr(s) -> (s,hexstring_pubkey s) | _ -> raise (Failure "expected an array of pubkeys")) jpkl in
       createmultisig2 m pubkeys
   | _ -> raise (Failure "expected an array of pubkeys")
-
-
-  
