@@ -2267,6 +2267,12 @@ let initialize_commands () =
 	      artificialledgerroot := Some(h)
 	  end
       | _ -> raise BadCommandForm);
+  ac "addresslocation" "addresslocation <address>"
+    "Print the location of an address in the ledger tree as two numbers i:j with both between 0 and 511"
+    (fun oc al ->
+      match al with
+      | [a] -> Commands.report_subtop_subsubtop oc (addr_bitseq (daliladdrstr_addr a))
+      | _ -> raise BadCommandForm);
   ac "verifyfullledger" "verifyfullledger [<ledgerroot>]" "Ensure the node has the full ledger with the given ledger root. This may take serveral hours."
     (fun oc al ->
       match al with
@@ -2912,6 +2918,30 @@ let initialize_commands () =
 	  let currledgerroot = get_ledgerroot best in
 	  Commands.printctreeinfo oc currledgerroot
       | [h] -> Commands.printctreeinfo oc (hexstring_hashval h)
+      | _ -> raise BadCommandForm);
+  ac "exportctreeelts" "exportctreeelts <new file to save binary ctree> <ledgerroot> <subtop[0-511]> [<subsubtop[0-511]>]"
+    "Export a ctree as elements into a binary file.\nThe root of the tree must be given and either a subtop or a subtop and subsubtop.\nOnly the relevant subtrees are saved, with the others abbreviated by hashes."
+    (fun oc al ->
+      match al with
+      | [f;lr;subtop] ->
+	  let c = open_out_bin f in
+	  export_ctree_subtop c (hexstring_hashval lr) (int_of_string subtop);
+	  close_out c
+      | [f;lr;subtop;subsubtop] ->
+	  let c = open_out_bin f in
+	  export_ctree_subtop_subsubtop c (hexstring_hashval lr) (int_of_string subtop) (int_of_string subsubtop);
+	  close_out c
+      | _ -> raise BadCommandForm);
+  ac "importctreeelts" "importctreeelts <binary file with a ctree> <ledgerroot>"
+    "Read a elements of a ctree (ledger tree) from a file and save them in the local database."
+    (fun oc al ->
+      match al with
+      | [f;lr] ->
+	  let lr = hexstring_hashval lr in
+	  let c = open_in_bin f in
+	  let (m,n) = import_ctree_subelts c lr in
+	  close_in c;
+	  Printf.fprintf oc "Finished importing elements of ctree with root %s: read %d and saved %d as new.\n" (hashval_hexstring lr) m n
       | _ -> raise BadCommandForm);
   ac "newofflineaddress" "newofflineaddress" "Find an address in the watch wallet that was marked as offlinekey and fresh.\nPrint it and mark it as no longer fresh."
     (fun oc al ->
