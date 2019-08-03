@@ -1,5 +1,5 @@
 (* Copyright (c) 2015 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -93,20 +93,19 @@ let md256_bytelist h =
   bl := Int32.to_int (Int32.shift_right_logical h7 24)::!bl;
   !bl
 
-let hash160_bytelist l : md160 =
+let bytelist_string l =
   let b = Buffer.create 100 in
   List.iter (fun x -> Buffer.add_char b (Char.chr x)) l;
-  hash160 (Buffer.contents b)
+  Buffer.contents b
+
+let hash160_bytelist l : md160 =
+  hash160 (bytelist_string l)
 
 let sha256_bytelist l =
-  let b = Buffer.create 100 in
-  List.iter (fun x -> Buffer.add_char b (Char.chr x)) l;
-  sha256str (Buffer.contents b)
+  sha256str (bytelist_string l)
 
 let hash256_bytelist l =
-  let b = Buffer.create 100 in
-  List.iter (fun x -> Buffer.add_char b (Char.chr x)) l;
-  sha256dstr (Buffer.contents b)
+  sha256dstr (bytelist_string l)
 
 let rec next_bytes i bl =
   if i > 0 then

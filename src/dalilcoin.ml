@@ -320,6 +320,35 @@ let parse_json_privkeys kl =
 	  | _ -> raise BadCommandForm)
 	kla
   | _ -> raise BadCommandForm;;
+
+let parse_json_redeemscripts rl =
+  let (rlj,_) = parse_jsonval rl in
+  match rlj with
+  | JsonArr(rla) ->
+      List.map
+	(fun rj ->
+	  match rj with
+	  | JsonStr(r) -> 
+	      let il = string_bytelist (hexstring_string r) in
+	      (il,Script.hash160_bytelist il)
+	  | _ -> raise BadCommandForm)
+	rla
+  | _ -> raise BadCommandForm;;
+
+let parse_json_secrets sl =
+  let (slj,_) = parse_jsonval sl in
+  match slj with
+  | JsonArr(sla) ->
+      List.map
+	(fun sj ->
+	  match sj with
+	  | JsonStr(s) -> 
+	      let sh = hexstring_hashval s in
+	      let shh = Script.sha256_bytelist (string_bytelist (hexstring_string s)) in
+	      (sh,shh)
+	  | _ -> raise BadCommandForm)
+	sla
+  | _ -> raise BadCommandForm;;
 	
 let commandh : (string,(string * string * (out_channel -> string list -> unit))) Hashtbl.t = Hashtbl.create 100;;
 let sortedcommands : string list ref = ref [];;
@@ -464,7 +493,7 @@ let initialize_commands () =
 		  [(gamma,(None,Currency(amt)))]
 	      in
 	      let stau = ((!txinlr,txoutl),([],[])) in
-	      let (stau,ci,co) = Commands.signtx2 oc lr stau (Some(!gatheredkeys)) in
+	      let (stau,ci,co) = Commands.signtx2 oc lr stau [] [] (Some(!gatheredkeys)) in
 	      if (ci && co) then
 		Commands.sendtx2 oc blkh tm tr sr lr (stxsize stau) stau
 	      else
@@ -1150,7 +1179,7 @@ let initialize_commands () =
 		let c2 = open_out_bin g in
 		begin
 		  try
-		    Commands.signtxc oc lr stau c2 None;
+		    Commands.signtxc oc lr stau c2 [] [] None;
 		    close_out c2;
 		    Printf.fprintf oc "The commitment transaction (to publish the marker) was created.\nTo inspect it:\n> decodetxfile %s\nTo validate it:\n> validatetxfile %s\nTo send it:\n> sendtxfile %s\n" g g g
 		  with e ->
@@ -1544,7 +1573,7 @@ let initialize_commands () =
 						  let c2 = open_out_bin g in
 						  begin
 						    try
-						      Commands.signtxc oc lr stau c2 None;
+						      Commands.signtxc oc lr stau c2 [] [] None;
 						      let p = pos_out c2 in
 						      close_out c2;
 						      if p > 450000 then Printf.fprintf oc "Warning: The transaction has %d bytes and may be too large to be confirmed in a block.\n" p;
@@ -1728,7 +1757,7 @@ let initialize_commands () =
 					  let c2 = open_out_bin g in
 					  begin
 					    try
-					      Commands.signtxc oc lr stau c2 None;
+					      Commands.signtxc oc lr stau c2 [] [] None;
 					      let p = pos_out c2 in
 					      close_out c2;
 					      if p > 450000 then Printf.fprintf oc "Warning: The transaction has %d bytes and may be too large to be confirmed in a block.\n" p;
@@ -2030,7 +2059,7 @@ let initialize_commands () =
 					let c2 = open_out_bin g in
 					begin
 					  try
-					    Commands.signtxc oc lr stau c2 None;
+					    Commands.signtxc oc lr stau c2 [] [] None;
 					    let p = pos_out c2 in
 					    close_out c2;
 					    if p > 450000 then Printf.fprintf oc "Warning: The transaction has %d bytes and may be too large to be confirmed in a block.\n" p;
@@ -2152,7 +2181,7 @@ let initialize_commands () =
 		let c2 = open_out_bin fn in
 		begin
 		  try
-		    Commands.signtxc oc lr stau c2 None;
+		    Commands.signtxc oc lr stau c2 [] [] None;
 		    close_out c2;
 		    Printf.fprintf oc "Transaction created to claim %s fraenks from bounties.\nTo validate it:\n> validatetxfile %s\nTo send it:\n> sendtxfile %s\n" (Cryptocurr.fraenks_of_cants totminusfee) fn fn
 		  with e ->
@@ -2930,7 +2959,7 @@ let initialize_commands () =
       match al with
       | [alpha] -> Commands.reclassify_staking oc alpha false
       | _ -> raise BadCommandForm);
-  ac "createp2sh" "createp2sh <script in hex>" "Create a p2sh address by giving the script in hex"
+  ac "createp2sh" "createp2sh <redeem script in hex>" "Create a p2sh address by giving the redeem script in hex"
     (fun oc al ->
       match al with
       | [a] ->
@@ -2942,7 +2971,7 @@ let initialize_commands () =
 	  let alpha = Script.hash160_bytelist !bl in
 	  Printf.fprintf oc "p2sh address: %s\n" (addr_daliladdrstr (p2shaddr_addr alpha));
       | _ -> raise BadCommandForm);
-  ac "importp2sh" "importp2sh <script in hex>" "Create a p2sh address by giving the script in hex and import it into wallet"
+  ac "importp2sh" "importp2sh <redeem script in hex>" "Create a p2sh address by giving the redeem script in hex and import it into wallet"
     (fun oc al ->
       match al with
       | [a] ->
@@ -2953,7 +2982,357 @@ let initialize_commands () =
 	  done;
 	  Commands.importp2sh oc !bl
       | _ -> raise BadCommandForm);
-  ac "createtx" "createtx <inputs as json array> <outputs as json array>" "Create a simple tx spending some assets to create new currency assets.\neach input: {\"<addr>\":\"<assetid>\"}\neach output: {\"addr\":\"<addr>\",\"val\":<fraenks>,\"lock\":<height>,\"obligationaddress\":\"<addr>\"}\nwhere lock is optional (default null, unlocked output)\nand obligationaddress is optional (default null, meaning the holder address is implicitly the obligationaddress)\nSee also: creategeneraltx"
+  ac "createchannel" "createchannel <alphapubkey> <betapubkey> <alphaassetid> <betaassetid> <alphaamt[fraenks]> <betaamt[fraenks]> [json]"
+    "Create the initial information for a payment channel,\nincluding the unsigned funding tx, the funding address and funding asset id."
+    (fun oc al ->
+      let (alphapubkey,betapubkey,alphaaid,betaaid,alphaamt,betaamt,jb) =
+	match al with
+	| [alphapubkey;betapubkey;alphaaid;betaaid;alphaamt;betaamt] ->
+	    (alphapubkey,betapubkey,alphaaid,betaaid,alphaamt,betaamt,false)
+	| [alphapubkey;betapubkey;alphaaid;betaaid;alphaamt;betaamt;"json"] ->
+	    (alphapubkey,betapubkey,alphaaid,betaaid,alphaamt,betaamt,true)
+	| _ -> raise BadCommandForm
+      in
+      let (alphapk,alphab) = hexstring_pubkey alphapubkey in
+      let (betapk,betab) = hexstring_pubkey betapubkey in
+      let aaid = hexstring_hashval alphaaid in
+      let baid = hexstring_hashval betaaid in
+      let aamt = cants_of_fraenks alphaamt in
+      let bamt = cants_of_fraenks betaamt in
+      let esttxbytes = 2000 in
+      let fee = Int64.mul (Int64.of_int esttxbytes) !Config.defaulttxfee in
+      let halffee = Int64.div fee 2L in
+      let (blkh,lr) =
+	match get_bestblock_print_warnings oc with
+	| None -> raise (Failure "trouble finding current ledger")
+	| Some(_,lbk,ltx) ->
+	    let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+	    let (_,_,lr,_,_) = Hashtbl.find validheadervals (lbk,ltx) in
+	    (blkh,lr)
+      in
+      let alpha = pubkey_md160 alphapk alphab in
+      let beta = pubkey_md160 betapk betab in
+      let alpha2 = p2pkhaddr_addr alpha in
+      let beta2 = p2pkhaddr_addr beta in
+      let (fundaddress,fundredscr) = Commands.createmultisig2 2 [(alphapubkey,(alphapk,alphab));(betapubkey,(betapk,betab))] in
+      let fundaddress2 = p2shaddr_addr fundaddress in
+      let (aa,av) =
+	match ctree_lookup_asset false true true aaid (CHash(lr)) (addr_bitseq alpha2) with
+	  Some((_,_,_,Currency(_)) as a) ->
+	    begin
+	      match asset_value blkh a with
+	      | Some(v) -> (a,v)
+	      | _ -> raise (Failure (Printf.sprintf "could not find currency asset with id %s at address %s" alphaaid (addr_daliladdrstr alpha2)))
+	    end
+	| _ -> raise (Failure (Printf.sprintf "could not find currency asset with id %s at address %s" alphaaid (addr_daliladdrstr alpha2)))
+      in
+      let ach = Int64.sub av (Int64.add aamt halffee) in
+      if ach < 0L then raise (Failure (Printf.sprintf "asset %s has insufficient value" alphaaid));
+      let (ba,bv) =
+	match ctree_lookup_asset false true true baid (CHash(lr)) (addr_bitseq beta2) with
+	  Some((_,_,_,Currency(_)) as a) ->
+	    begin
+	      match asset_value blkh a with
+	      | Some(v) -> (a,v)
+	      | _ -> raise (Failure (Printf.sprintf "could not find currency asset with id %s at address %s" betaaid (addr_daliladdrstr beta2)))
+	    end
+	| _ -> raise (Failure (Printf.sprintf "could not find currency asset with id %s at address %s" betaaid (addr_daliladdrstr beta2)))
+      in
+      let bch = Int64.sub bv (Int64.add bamt halffee) in
+      if bch < 0L then raise (Failure (Printf.sprintf "asset %s has insufficient value" betaaid));
+      let tauin = [(alpha2,aaid);(beta2,baid)] in
+      let tauout = ref [] in
+      if bch > 0L then tauout := (beta2,(None,Currency(bch)))::!tauout;
+      if ach > 0L then tauout := (alpha2,(None,Currency(ach)))::!tauout;
+      (* split into two assets so commitment txs replace the two assets with two assets, avoiding full address attack (since addresses can only hold at most 32 assets) *)
+      tauout := (fundaddress2,(None,Currency(bamt)))::!tauout;
+      tauout := (fundaddress2,(None,Currency(aamt)))::!tauout;
+      let tau = (tauin,!tauout) in
+      let s = Buffer.create 100 in
+      seosbf (seo_stx seosb (tau,([],[])) (s,None));
+      let txh = hashtx tau in
+      let fundid1 = hashpair txh (hashint32 0l) in
+      let fundid2 = hashpair txh (hashint32 1l) in
+      let hs = Hashaux.string_hexstring (Buffer.contents s) in
+      if jb then
+	begin
+	  let redscr = Buffer.create 10 in
+	  List.iter (fun x -> Buffer.add_string redscr (Printf.sprintf "%02x" x)) fundredscr;
+	  let jol = [("fundingtx",JsonStr(hs));
+		     ("fundaddress",JsonStr(addr_daliladdrstr (p2shaddr_addr fundaddress)));
+		     ("redeemscript",JsonStr(Buffer.contents redscr));
+		     ("fundassetid1",JsonStr(hashval_hexstring fundid1));
+		     ("fundassetid2",JsonStr(hashval_hexstring fundid2))]
+	  in
+	  print_jsonval oc (JsonObj(jol))
+	end
+      else
+	begin
+	  Printf.fprintf oc "Funding tx: %s\n" hs;
+	  Printf.fprintf oc "Fund 2-of-2 address: %s\n" (addr_daliladdrstr (p2shaddr_addr fundaddress));
+	  Printf.fprintf oc "Redeem script: ";
+	  List.iter (fun x -> Printf.fprintf oc "%02x" x) fundredscr;
+	  Printf.fprintf oc "\nFund asset id 1: %s\n" (hashval_hexstring fundid1);
+	  Printf.fprintf oc "Fund asset id 2: %s\n" (hashval_hexstring fundid2)
+	end);
+  ac "createchannelonefunder" "createchannelonefunder <alphapubkey> <betapubkey> <alphaassetid> <alphaamt[fraenks]> [json]"
+    "Create the initial information for a payment channel (with only alpha funding the channel),\nincluding the unsigned funding tx, the funding address and funding asset id."
+    (fun oc al ->
+      let (alphapubkey,betapubkey,alphaaid,alphaamt,jb) =
+	match al with
+	| [alphapubkey;betapubkey;alphaaid;alphaamt] ->
+	    (alphapubkey,betapubkey,alphaaid,alphaamt,false)
+	| [alphapubkey;betapubkey;alphaaid;alphaamt;"json"] ->
+	    (alphapubkey,betapubkey,alphaaid,alphaamt,true)
+	| _ -> raise BadCommandForm
+      in
+      let (alphapk,alphab) = hexstring_pubkey alphapubkey in
+      let (betapk,betab) = hexstring_pubkey betapubkey in
+      let aaid = hexstring_hashval alphaaid in
+      let aamt = cants_of_fraenks alphaamt in
+      let esttxbytes = 2000 in
+      let fee = Int64.mul (Int64.of_int esttxbytes) !Config.defaulttxfee in
+      let (blkh,lr) =
+	match get_bestblock_print_warnings oc with
+	| None -> raise (Failure "trouble finding current ledger")
+	| Some(_,lbk,ltx) ->
+	    let (_,_,_,_,_,blkh) = Hashtbl.find outlinevals (lbk,ltx) in
+	    let (_,_,lr,_,_) = Hashtbl.find validheadervals (lbk,ltx) in
+	    (blkh,lr)
+      in
+      let alpha = pubkey_md160 alphapk alphab in
+      let alpha2 = p2pkhaddr_addr alpha in
+      let (fundaddress,fundredscr) = Commands.createmultisig2 2 [(alphapubkey,(alphapk,alphab));(betapubkey,(betapk,betab))] in
+      let fundaddress2 = p2shaddr_addr fundaddress in
+      let (aa,av) =
+	match ctree_lookup_asset false true true aaid (CHash(lr)) (addr_bitseq alpha2) with
+	  Some((_,_,_,Currency(_)) as a) ->
+	    begin
+	      match asset_value blkh a with
+	      | Some(v) -> (a,v)
+	      | _ -> raise (Failure (Printf.sprintf "could not find currency asset with id %s at address %s" alphaaid (addr_daliladdrstr alpha2)))
+	    end
+	| _ -> raise (Failure (Printf.sprintf "could not find currency asset with id %s at address %s" alphaaid (addr_daliladdrstr alpha2)))
+      in
+      let ach = Int64.sub av (Int64.add aamt fee) in
+      if ach < 0L then raise (Failure (Printf.sprintf "asset %s has insufficient value" alphaaid));
+      let tauin = [(alpha2,aaid)] in
+      let tauout = ref [] in
+      if ach > 0L then tauout := (alpha2,(None,Currency(ach)))::!tauout;
+      (* split into two assets so commitment txs replace the two assets with two assets, avoiding full address attack (since addresses can only hold at most 32 assets) *)
+      let aamthalf = Int64.div aamt 2L in
+      tauout := (fundaddress2,(None,Currency(aamthalf)))::!tauout;
+      tauout := (fundaddress2,(None,Currency(Int64.sub aamt aamthalf)))::!tauout;
+      let tau = (tauin,!tauout) in
+      let s = Buffer.create 100 in
+      seosbf (seo_stx seosb (tau,([],[])) (s,None));
+      let txh = hashtx tau in
+      let fundid1 = hashpair txh (hashint32 0l) in
+      let fundid2 = hashpair txh (hashint32 1l) in
+      let hs = Hashaux.string_hexstring (Buffer.contents s) in
+      if jb then
+	begin
+	  let redscr = Buffer.create 10 in
+	  List.iter (fun x -> Buffer.add_string redscr (Printf.sprintf "%02x" x)) fundredscr;
+	  let jol = [("fundingtx",JsonStr(hs));
+		     ("fundaddress",JsonStr(addr_daliladdrstr (p2shaddr_addr fundaddress)));
+		     ("redeemscript",JsonStr(Buffer.contents redscr));
+		     ("fundassetid1",JsonStr(hashval_hexstring fundid1));
+		     ("fundassetid2",JsonStr(hashval_hexstring fundid2))]
+	  in
+	  print_jsonval oc (JsonObj(jol))
+	end
+      else
+	begin
+	  Printf.fprintf oc "Funding tx: %s\n" hs;
+	  Printf.fprintf oc "Fund 2-of-2 address: %s\n" (addr_daliladdrstr (p2shaddr_addr fundaddress));
+	  Printf.fprintf oc "Redeem script: ";
+	  List.iter (fun x -> Printf.fprintf oc "%02x" x) fundredscr;
+	  Printf.fprintf oc "\nFund asset id 1: %s\n" (hashval_hexstring fundid1);
+	  Printf.fprintf oc "Fund asset id 2: %s\n" (hashval_hexstring fundid2)
+	end);
+  ac "createhtlc" "createhtlc <p2pkhaddr:alpha> <p2pkhaddr:beta> <timelock> [relative] [<secret>] [json]"
+    "Create hash timelock constract script and address.\nThe controller of address alpha can spend with the secret.\nThe controller of the address beta can spend after the timelock.\nThe controller of address alpha should call this command and the secret will be held in alpha's wallet.\nA hex 32 byte secret can optionally be given, otherwise one will be randomly generated.\nIf 'relative' is given, then relative lock time (CSV) is used. Otherwise absolute lock time (CLTV) is used.\nThe timelock is either in block time (if less than 500000000) or unix time (otherwise).\nOnly block time can be used with relative block time."
+    (fun oc al ->
+      let (alphas,alpha,betas,beta,tmlock,rel,secr,jb) =
+	match al with
+	  [alpha;beta;tmlock] -> (alpha,daliladdrstr_addr alpha,beta,daliladdrstr_addr beta,Int32.of_string tmlock,false,big_int_md256 (strong_rand_256()),false)
+	| [alpha;beta;tmlock;"relative"] -> (alpha,daliladdrstr_addr alpha,beta,daliladdrstr_addr beta,Int32.of_string tmlock,true,big_int_md256 (strong_rand_256()),false)
+	| [alpha;beta;tmlock;"json"] -> (alpha,daliladdrstr_addr alpha,beta,daliladdrstr_addr beta,Int32.of_string tmlock,false,big_int_md256 (strong_rand_256()),false)
+	| [alpha;beta;tmlock;secr] -> (alpha,daliladdrstr_addr alpha,beta,daliladdrstr_addr beta,Int32.of_string tmlock,false,hexstring_hashval secr,false)
+	| [alpha;beta;tmlock;"relative";"json"] -> (alpha,daliladdrstr_addr alpha,beta,daliladdrstr_addr beta,Int32.of_string tmlock,true,big_int_md256 (strong_rand_256()),true)
+	| [alpha;beta;tmlock;"relative";secr] -> (alpha,daliladdrstr_addr alpha,beta,daliladdrstr_addr beta,Int32.of_string tmlock,true,hexstring_hashval secr,false)
+	| [alpha;beta;tmlock;secr;"json"] -> (alpha,daliladdrstr_addr alpha,beta,daliladdrstr_addr beta,Int32.of_string tmlock,false,hexstring_hashval secr,true)
+	| [alpha;beta;tmlock;"relative";secr;"true"] -> (alpha,daliladdrstr_addr alpha,beta,daliladdrstr_addr beta,Int32.of_string tmlock,true,hexstring_hashval secr,true)
+	| _ -> raise BadCommandForm
+      in
+      if not (p2pkhaddr_p alpha) then raise (Failure (Printf.sprintf "%s is not a p2pkh address" alphas));
+      if not (p2pkhaddr_p beta) then raise (Failure (Printf.sprintf "%s is not a p2pkh address" betas));
+      if tmlock < 1l then raise (Failure ("locktime must be positive"));
+      if rel && tmlock >= 500000000l then raise (Failure ("relative lock time must be given in number of blocks"));
+      let (_,a1,a2,a3,a4,a5) = alpha in
+      let (_,b1,b2,b3,b4,b5) = beta in
+      let (gamma,scrl,secrh) = Commands.createhtlc (a1,a2,a3,a4,a5) (b1,b2,b3,b4,b5) tmlock rel secr in
+      if jb then
+	begin
+	  let redscr = Buffer.create 10 in
+	  List.iter (fun x -> Buffer.add_string redscr (Printf.sprintf "%02x" x)) scrl;
+	  let jol = [("address",JsonStr(addr_daliladdrstr (p2shaddr_addr gamma)));
+		     ("redeemscript",JsonStr(Buffer.contents redscr));
+		     ("secret",JsonStr(hashval_hexstring secr));
+		     ("hashofsecret",JsonStr(hashval_hexstring secrh))]
+	  in
+	  print_jsonval oc (JsonObj(jol))
+	end
+      else
+	begin
+	  Printf.fprintf oc "P2sh address: %s\n" (addr_daliladdrstr (p2shaddr_addr gamma));
+	  Printf.fprintf oc "Redeem script: ";
+	  List.iter (fun x -> Printf.fprintf oc "%02x" x) scrl;
+	  Printf.fprintf oc "\n";
+	  Printf.fprintf oc "Secret: %s\n" (hashval_hexstring secr);
+	  Printf.fprintf oc "Hash of secret: %s\n" (hashval_hexstring secrh)
+	end);
+  ac "verifycommitmenttx" "verifycommitmenttx alpha beta fundaddress fundid1 fundid2 alphaamt betaamt secrethash tx [json]"
+    "Verify a commitment tx"
+    (fun oc al ->
+      let (alphas,betas,gammas,fundid1s,fundid2s,alphaamts,betaamts,secrethashs,txs,jb) =
+	match al with
+	| [alphas;betas;gammas;fundid1s;fundid2s;alphaamts;betaamts;secrethashs;txs] ->
+	    (alphas,betas,gammas,fundid1s,fundid2s,alphaamts,betaamts,secrethashs,txs,false)
+	| [alphas;betas;gammas;fundid1s;fundid2s;alphaamts;betaamts;secrethashs;txs;"json"] ->
+	    (alphas,betas,gammas,fundid1s,fundid2s,alphaamts,betaamts,secrethashs,txs,true)
+	| _ -> raise BadCommandForm
+      in
+      let alpha = daliladdrstr_addr alphas in
+      let beta = daliladdrstr_addr betas in
+      let gamma = daliladdrstr_addr gammas in
+      let fundid1 = hexstring_hashval fundid1s in
+      let fundid2 = hexstring_hashval fundid2s in
+      let alphaamt = cants_of_fraenks alphaamts in
+      let betaamt = cants_of_fraenks betaamts in
+      let secrethash = hexstring_hashval secrethashs in
+      let txs2 = hexstring_string txs in
+      let (((tauin,tauout) as tau,(tausigsin,_)),_) = sei_stx seis (txs2,String.length txs2,None,0,0) in
+      let inputsok =
+	match tauin with
+	| [(a1,aid1);(a2,aid2)] when a1 = gamma && a2 = gamma && aid1 = fundid1 && aid2 = fundid2 -> true
+	| _ -> false
+      in
+      let (outputsok,htlcaddr) =
+	match tauout with
+	| [(a01,(Some(aaddr2,0L,false),Currency(aamt2)));(a02,(Some(baddr2,0L,false),Currency(bamt2)))] when aamt2 = alphaamt && bamt2 = betaamt && a01 = gamma && a02 = gamma ->
+	    if payaddr_addr aaddr2 = alpha then (*** this must be a commitment for beta to close the channel ***)
+	      (2,Some(payaddr_addr baddr2))
+	    else if payaddr_addr baddr2 = beta then (*** this must be a commitment for alpha to close the channel ***)
+	      (1,Some(payaddr_addr aaddr2))
+	    else
+	      (0,None)
+	| _ -> (0,None)
+      in
+      if inputsok then
+	if outputsok = 1 then
+	  begin
+	    let (_,a1,a2,a3,a4,a5) = alpha in
+	    let (_,b1,b2,b3,b4,b5) = beta in
+	    let (delta,scrl,secrh) = Commands.createhtlc2 (b1,b2,b3,b4,b5) (a1,a2,a3,a4,a5) 28l true secrethash in
+	    if Some(p2shaddr_addr delta) = htlcaddr then
+	      begin (** it's good, could also check if beta has already signed it -- for now alpha can check the signature by signing with alphas key and ensuring the result is completely signed **)
+		if jb then
+		  print_jsonval oc (JsonObj([("result",JsonBool(true));("commitmentfor",JsonStr(alphas))]))
+		else
+		  Printf.fprintf oc "Valid commitment tx for %s\n" alphas
+	      end
+	    else
+	      begin
+		if jb then
+		  print_jsonval oc (JsonBool(false))
+		else
+		  begin
+		    Printf.fprintf oc "Appears to be a commitment tx for alpha, but htlc address mismatch:\nFound %s\nExpected %s\n"
+		      (addr_daliladdrstr (p2shaddr_addr delta))
+		      (match htlcaddr with Some(delta2) -> addr_daliladdrstr delta2 | None -> "None")
+		  end
+	      end
+	  end
+	else if outputsok = 2 then
+	  begin
+	    let (_,a1,a2,a3,a4,a5) = alpha in
+	    let (_,b1,b2,b3,b4,b5) = beta in
+	    let (delta,scrl,secrh) = Commands.createhtlc2 (a1,a2,a3,a4,a5) (b1,b2,b3,b4,b5) 28l true secrethash in
+	    if Some(p2shaddr_addr delta) = htlcaddr then
+	      begin (** it's good, could also check if alpha has already signed it -- for now alpha can check the signature by signing with alphas key and ensuring the result is completely signed **)
+		if jb then
+		  print_jsonval oc (JsonObj([("result",JsonBool(true));("commitmentfor",JsonStr(betas))]))
+		else
+		  Printf.fprintf oc "Valid commitment tx for %s\n" betas
+	      end
+	    else
+	      begin
+		if jb then
+		  print_jsonval oc (JsonBool(false))
+		else
+		  begin
+		    Printf.fprintf oc "Appears to be a commitment tx for beta, but htlc address mismatch:\nFound %s\nExpected %s\n"
+		      (addr_daliladdrstr (p2shaddr_addr delta))
+		      (match htlcaddr with Some(delta2) -> addr_daliladdrstr delta2 | None -> "None")
+		  end
+	      end
+	  end
+	else
+	  begin
+	    if jb then
+	      print_jsonval oc (JsonBool(false))
+	    else
+	      Printf.fprintf oc "Outputs do not match the form of a commitment tx.\n"
+	  end
+      else
+	if not (outputsok = 0) then
+	  begin
+	    if jb then
+	      print_jsonval oc (JsonBool(false))
+	    else
+	      Printf.fprintf oc "Inputs do not match the form of a commitment tx.\n"
+	  end
+	else
+	  begin
+	    if jb then
+	      print_jsonval oc (JsonBool(false))
+	    else
+	      Printf.fprintf oc "Inputs and outputs do not match the form of a commitment tx.\n"
+	  end);
+  ac "createmultisig" "createmultisig <m> <jsonarrayofpubkeys>" "Create an m-of-n script and address"
+    (fun oc al ->
+      match al with
+      | [ms;pubkeyss] ->
+	  let m = int_of_string ms in
+	  begin
+	    let (jpks,_) = parse_jsonval pubkeyss in
+	    let (alpha,scrl) = Commands.createmultisig m jpks in
+	    let alphastr = addr_daliladdrstr (p2shaddr_addr alpha) in
+	    Printf.fprintf oc "P2sh address: %s\n" alphastr;
+	    Printf.fprintf oc "Redeem script: ";
+	    List.iter (fun x -> Printf.fprintf oc "%02x" x) scrl;
+	    Printf.fprintf oc "\n";
+	  end
+      | _ -> raise BadCommandForm);
+  ac "addmultisigaddress" "addmultisigaddress <m> <jsonarrayofpubkeys>" "Create an m-of-n script and address and add it to the wallet"
+    (fun oc al ->
+      match al with
+      | [ms;pubkeyss] ->
+	  let m = int_of_string ms in
+	  begin
+	    let (jpks,_) = parse_jsonval pubkeyss in
+	    let (alpha,scrl) = Commands.createmultisig m jpks in
+	    let alphastr = addr_daliladdrstr (p2shaddr_addr alpha) in
+	    Commands.importp2sh oc scrl;
+	    Printf.fprintf oc "P2sh address: %s\n" alphastr;
+	    Printf.fprintf oc "Redeem script: ";
+	    List.iter (fun x -> Printf.fprintf oc "%02x" x) scrl;
+	    Printf.fprintf oc "\n";
+	  end
+      | _ -> raise BadCommandForm);
+  ac "createtx" "createtx <inputs as json array> <outputs as json array>" "Create a simple tx spending some assets to create new currency assets.\neach input: {\"<addr>\":\"<assetid>\"}\neach output: {\"addr\":\"<addr>\",\"val\":<fraenks>,\"lockheight\":<height>,\"lockaddr\":\"<addr>\"}\nwhere lock is optional (default null, unlocked output)\nand lockaddr is optional (default null, meaning the holder address is implicitly the lockaddr)\nSee also: creategeneraltx"
     (fun oc al ->
       match al with
       | [inp;outp] ->
@@ -3046,56 +3425,84 @@ let initialize_commands () =
 		    | _ -> raise BadCommandForm
 	  end
       | _ -> raise BadCommandForm);
-  ac "signtx" "signtx <tx in hex> [<jsonarrayofprivkeys> [<ledgerroot>]]" "Sign a dalilcoin tx."
+  ac "hashsecret" "hashsecret <hashval in hex>"
+    "Compute the sha256 hash of a secret (32 bytes given in hex)\nintended to be used to check secrets used in hash time lock contracts (htlc)\nespecially in payment channels."
     (fun oc al ->
       match al with
-      | [s] -> Commands.signtx oc (get_ledgerroot (get_bestblock_print_warnings oc)) s None
+      | [secr] when String.length secr = 64 ->
+	  let secrh = Script.sha256_bytelist (string_bytelist (hexstring_string secr)) in
+	  Printf.fprintf oc "%s\n" (hashval_hexstring secrh)
+      | _ -> raise BadCommandForm);
+  ac "simplesigntx" "simplesigntx <tx in hex> [<jsonarrayofprivkeys> [<redeemscripts> [<secrets>]]]" "Sign a dalilcoin tx, under the simple assumption that the obligations are defaults\nand all inputs and outputs are currency assets.\nThis command is useful for signing txs that spend assets that are not yet in the ledger,\nfor example when creating a payment channel."
+    (fun oc al ->
+      match al with
+      | [s] -> Commands.simplesigntx oc s [] [] None
       | [s;kl] ->
 	  let kl = parse_json_privkeys kl in
-	  Commands.signtx oc (get_ledgerroot (get_bestblock_print_warnings oc)) s (Some(kl))
-      | [s;kl;lr] ->
+	  Commands.simplesigntx oc s [] [] (Some(kl))
+      | [s;kl;rl] ->
 	  let kl = parse_json_privkeys kl in
-	  Commands.signtx oc (hexstring_hashval lr) s (Some(kl))
+	  let rl = parse_json_redeemscripts rl in
+	  Commands.simplesigntx oc s rl [] (Some(kl))
+      | [s;kl;rl;sl] ->
+	  let kl = parse_json_privkeys kl in
+	  let rl = parse_json_redeemscripts rl in
+	  let sl = parse_json_secrets sl in
+	  Commands.simplesigntx oc s rl sl (Some(kl))
       | _ -> raise BadCommandForm);
-  ac "signtxfile" "signtxfile <infile> <outfile> [<jsonarrayofprivkeys> [<ledgerroot>]]" "Sign a dalilcoin tx.\n<infile> is an existing binary file with the (possibly partially signed) tx.\n<outfile> is a binary file created with the output tx."
+  ac "signtx" "signtx <tx in hex> [<jsonarrayofprivkeys> [<redeemscripts> [<secrets> [<ledgerroot>]]]]" "Sign a dalilcoin tx."
     (fun oc al ->
       match al with
-      | [s1;s2] ->
-	  let c1 = open_in_bin s1 in
-	  let (stau,_) = Tx.sei_stx seic (c1,None) in
-	  close_in c1;
-	  let c2 = open_out_bin s2 in
-	  begin
-	    try
-	      Commands.signtxc oc (get_ledgerroot (get_bestblock_print_warnings oc)) stau c2 None;
-	      close_out c2
-	    with e ->
-	      close_out c2;
-	      raise e
-	  end
-      | [s1;s2;kl] ->
-	  let c1 = open_in_bin s1 in
-	  let (stau,_) = Tx.sei_stx seic (c1,None) in
-	  close_in c1;
+      | [s] -> Commands.signtx oc (get_ledgerroot (get_bestblock_print_warnings oc)) s [] [] None
+      | [s;kl] ->
 	  let kl = parse_json_privkeys kl in
-	  let c2 = open_out_bin s2 in
-	  begin
-	    try
-	      Commands.signtxc oc (get_ledgerroot (get_bestblock_print_warnings oc)) stau c2 (Some(kl));
-	      close_out c2
-	    with e ->
-	      close_out c2;
-	      raise e
-	  end
-      | [s1;s2;kl;lr] ->
+	  Commands.signtx oc (get_ledgerroot (get_bestblock_print_warnings oc)) s [] [] (Some(kl))
+      | [s;kl;rl] ->
+	  let kl = parse_json_privkeys kl in
+	  let rl = parse_json_redeemscripts rl in
+	  Commands.signtx oc (get_ledgerroot (get_bestblock_print_warnings oc)) s rl [] (Some(kl))
+      | [s;kl;rl;sl] ->
+	  let kl = parse_json_privkeys kl in
+	  let rl = parse_json_redeemscripts rl in
+	  let sl = parse_json_secrets sl in
+	  Commands.signtx oc (get_ledgerroot (get_bestblock_print_warnings oc)) s rl sl (Some(kl))
+      | [s;kl;rl;sl;lr] ->
+	  let kl = parse_json_privkeys kl in
+	  let rl = parse_json_redeemscripts rl in
+	  let sl = parse_json_secrets sl in
+	  Commands.signtx oc (hexstring_hashval lr) s rl sl (Some(kl))
+      | _ -> raise BadCommandForm);
+  ac "signtxfile" "signtxfile <infile> <outfile> [<jsonarrayofprivkeys> [<redeemscripts> [<secrets> [<ledgerroot>]]]]" "Sign a dalilcoin tx.\n<infile> is an existing binary file with the (possibly partially signed) tx.\n<outfile> is a binary file created with the output tx."
+    (fun oc al ->
+      let kl =
+	match al with
+	| (_::_::kl::_) -> Some(parse_json_privkeys kl)
+	| _ -> None
+      in
+      let rl =
+	match al with
+	| (_::_::_::rl::_) -> parse_json_redeemscripts rl
+	| _ -> []
+      in
+      let sl =
+	match al with
+	| (_::_::_::_::sl::_) -> parse_json_secrets sl
+	| _ -> []
+      in
+      let lr =
+	match al with
+	| (_::_::_::_::_::lr::_) -> hexstring_hashval lr
+	| _ -> get_ledgerroot (get_bestblock_print_warnings oc)
+      in
+      match al with
+      | (s1::s2::_) ->
 	  let c1 = open_in_bin s1 in
 	  let (stau,_) = Tx.sei_stx seic (c1,None) in
 	  close_in c1;
-	  let kl = parse_json_privkeys kl in
 	  let c2 = open_out_bin s2 in
 	  begin
 	    try
-	      Commands.signtxc oc (hexstring_hashval lr) stau c2 (Some(kl));
+	      Commands.signtxc oc lr stau c2 rl sl kl;
 	      close_out c2
 	    with e ->
 	      close_out c2;
@@ -3123,7 +3530,7 @@ let initialize_commands () =
 	  let c2 = open_out_bin s2 in
 	  begin
 	    try
-	      Commands.signbatchtxsc oc (get_ledgerroot (get_bestblock_print_warnings oc)) staul c2 None;
+	      Commands.signbatchtxsc oc (get_ledgerroot (get_bestblock_print_warnings oc)) staul c2 [] [] None;
 	      close_out c2
 	    with e ->
 	      close_out c2;
@@ -3135,7 +3542,7 @@ let initialize_commands () =
 	  let c2 = open_out_bin s2 in
 	  begin
 	    try
-	      Commands.signbatchtxsc oc (get_ledgerroot (get_bestblock_print_warnings oc)) staul c2 (Some(kl));
+	      Commands.signbatchtxsc oc (get_ledgerroot (get_bestblock_print_warnings oc)) staul c2 [] [] (Some(kl));
 	      close_out c2
 	    with e ->
 	      close_out c2;
@@ -3147,7 +3554,7 @@ let initialize_commands () =
 	  let c2 = open_out_bin s2 in
 	  begin
 	    try
-	      Commands.signbatchtxsc oc (hexstring_hashval lr) staul c2 (Some(kl));
+	      Commands.signbatchtxsc oc (hexstring_hashval lr) staul c2 [] [] (Some(kl));
 	      close_out c2
 	    with e ->
 	      close_out c2;

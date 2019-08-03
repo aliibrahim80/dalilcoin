@@ -1,5 +1,5 @@
 (* Copyright (c) 2015 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -59,12 +59,12 @@ val reclassify_staking : out_channel -> string -> bool -> unit
 val createtx : jsonval -> jsonval -> tx
 val createsplitlocktx : out_channel -> hashval -> int64 -> payaddr -> payaddr -> addr -> hashval -> int -> int64 -> int64 -> unit
 
-val signbatchtxsc : out_channel -> hashval -> stx list -> out_channel -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
-val signtx2 : out_channel -> hashval -> stx -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> stx * bool * bool
-val signtxc : out_channel -> hashval -> stx -> out_channel -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
-val signtx : out_channel -> hashval -> string -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
+val signbatchtxsc : out_channel -> hashval -> stx list -> out_channel -> (int list * p2shaddr) list -> (hashval * hashval) list -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
+val signtx2 : out_channel -> hashval -> stx -> (int list * p2shaddr) list -> (hashval * hashval) list -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> stx * bool * bool
+val signtxc : out_channel -> hashval -> stx -> out_channel -> (int list * p2shaddr) list -> (hashval * hashval) list -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
 val savetxtopool : int64 -> int64 -> hashval -> string -> unit
-val signtx : out_channel -> hashval -> string -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
+val signtx : out_channel -> hashval -> string -> (int list * p2shaddr) list -> (hashval * hashval) list -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
+val simplesigntx : out_channel -> string -> (int list * p2shaddr) list -> (hashval * hashval) list -> (big_int * bool * (big_int * big_int) * p2pkhaddr) list option -> unit
 val validatebatchtxs : out_channel -> int64 -> int64 -> hashval option -> hashval option -> hashval -> stx list -> unit
 val validatetx2 : out_channel -> int64 -> int64 -> hashval option -> hashval option -> hashval -> int -> stx -> unit
 val validatetx : out_channel -> int64 -> int64 -> hashval option -> hashval option -> hashval -> string -> unit
@@ -91,3 +91,10 @@ val reportbounties : out_channel -> out_channel -> hashval -> unit
 val reportpubs : out_channel -> out_channel -> hashval -> unit
 
 val collectable_bounties : out_channel -> hashval -> (addr * asset * asset) list
+
+val createhtlc2 : md160 -> md160 -> int32 -> bool -> hashval -> p2shaddr * int list * hashval
+val createhtlc : md160 -> md160 -> int32 -> bool -> hashval -> p2shaddr * int list * hashval
+val createmultisig2 : int -> (string * ((big_int * big_int) * bool)) list -> p2shaddr * int list
+val createmultisig : int -> jsonval -> p2shaddr * int list
+
+

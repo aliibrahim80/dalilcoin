@@ -1,5 +1,5 @@
 (* Copyright (c) 2015 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -78,6 +78,13 @@ let string_hexstring s =
     Buffer.add_char strb (hexchar (Int32.of_int (x land 15)));
   done;
   Buffer.contents strb
+
+let string_bytelist s =
+  let l = ref [] in
+  for i = (String.length s) - 1 downto 0 do
+    l := Char.code (s.[i])::!l
+  done;
+  !l
 
 let hexsubstring_int32 h i =
   Int32.logor (Int32.shift_left (hexchar_inv h.[i]) 28)

@@ -1,5 +1,5 @@
 (* Copyright (c) 2015 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -7,6 +7,7 @@ open Big_int
 
 val string_hexstring : string -> string
 val hexstring_string : string -> string
+val string_bytelist : string -> int list
 val hexsubstring_int32 : string -> int -> int32
 val int32_hexstring : Buffer.t -> int32 -> unit
 val big_int_sub_int32 : big_int -> int -> int32

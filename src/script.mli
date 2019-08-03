@@ -1,15 +1,20 @@
 (* Copyright (c) 2015 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
 open Big_int
 open Json
+open Sha256
 open Hash
 open Secp256k1
 open Signat
 
+val md160_bytelist : md160 -> int list
+val md256_bytelist : md256 -> int list
+val bytelist_string : int list -> string
 val hash160_bytelist : int list -> p2shaddr
+val sha256_bytelist : int list -> md256
 
 val next_bytes : int -> int list -> int list * int list
 val bytelist_to_pt : int list -> pt
@@ -34,3 +39,6 @@ val seo_gensignat : (int -> int -> 'a -> 'a) -> gensignat -> 'a -> 'a
 val sei_gensignat : (int -> 'a -> int * 'a) -> 'a -> gensignat * 'a
 
 val json_gensignat : gensignat -> jsonval
+
+val inum_be : int list -> big_int
+val inum_le : int list -> big_int

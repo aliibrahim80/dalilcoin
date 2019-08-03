@@ -1218,13 +1218,13 @@ let createtx inpj outpj =
 			      let beta2 = daliladdrstr_addr beta in
 			      let v = cants_of_fraenks x in
 			      try
-				let lockj = List.assoc "lock" al in
+				let lockj = List.assoc "lockheight" al in
 				match lockj with
 				| JsonNum(lockstr) ->
 				    let lock = Int64.of_string lockstr in
 				    begin
 				      try
-					let obladdrj = List.assoc "obligationaddr" al in
+					let obladdrj = List.assoc "lockaddr" al in
 					match obladdrj with
 					| JsonStr(obladdr) ->
 					    let gamma2 = daliladdrstr_addr obladdr in
@@ -1293,26 +1293,130 @@ let createsplitlocktx oc ledgerroot blkhght alpha beta gamma aid i lkh fee =
 	end
   | _ -> Printf.fprintf oc "Asset %s is not currency.\n" (hashval_hexstring aid); flush stdout
 
-let rec simple_checksig_script bl =
-  let (dl,bs) = pop_bytes bl in
-  match bs with
-  | [0xac] ->
-      begin
+let simple_checksig_script bl stk =
+  let sigssofar =
+    List.map
+      (fun dl ->
+	match dl with
+	| (00::rs) when List.length rs = 64 ->
+	    let (r,s) = next_bytes 32 rs in
+	    (dl,inum_be r,inum_be s)
+	| _ -> raise Not_found)
+      (List.rev stk)
+  in
+  let rec simple_checksig_script_2 br =
+    let (dl,bs) = pop_bytes br in
+    match bs with
+    | [0xac] ->
+	begin
+	  match bytelist_to_pt dl with
+	  | None -> raise Not_found
+	  | Some(x,y) ->
+	      match dl with
+	      | (c::_) when c = 4 ->
+		  let h = hashval_md160 (pubkey_hashval (x,y) false) in
+		  (sigssofar,false,x,y,h)
+	      | _ ->
+		  let h = hashval_md160 (pubkey_hashval (x,y) true) in
+		  (sigssofar,true,x,y,h)
+	end
+    | (177::117::br) -> (** CLTV;DROP -- skip for signing purposes **)
+	simple_checksig_script_2 br
+    | (178::117::br) -> (** CSV;DROP -- skip for signing purposes **)
+	simple_checksig_script_2 br
+    | _ -> raise Not_found
+  in
+  simple_checksig_script_2 bl
+
+let simple_multisig_script bl stk =
+  let rec simple_multisig_script_2 m br pkl =
+    match br with
+    | [n;174] when n >= 81 && n <= 96 ->
+	if n - 80 = List.length pkl then
+	  let sigssofar =
+	    List.map
+	      (fun dl ->
+		match dl with
+		| (00::rs) when List.length rs = 64 ->
+		    let (r,s) = next_bytes 32 rs in
+		    (dl,inum_be r,inum_be s)
+		| _ -> raise Not_found)
+	      (List.rev stk)
+	  in
+	  (sigssofar,bl,m,n-80,List.rev pkl)
+	else
+	  raise Not_found
+    | _ ->
+	let (dl,bs) = pop_bytes br in
 	match bytelist_to_pt dl with
 	| None -> raise Not_found
 	| Some(x,y) ->
 	    match dl with
 	    | (c::_) when c = 4 ->
 		let h = hashval_md160 (pubkey_hashval (x,y) false) in
-		(false,x,y,h)
+		simple_multisig_script_2 m bs ((false,x,y,h)::pkl)
 	    | _ ->
 		let h = hashval_md160 (pubkey_hashval (x,y) true) in
-		(true,x,y,h)
+		simple_multisig_script_2 m bs ((true,x,y,h)::pkl)
+  in
+  match bl with
+  | (n::br) when n >= 81 && n <= 96 ->
+      simple_multisig_script_2 (n-80) br []
+  | _ -> raise Not_found
+
+let invert_md256_bytelist_bug bl =
+  try
+    let (bl1,br1) = next_bytes 12 bl in
+    let (bl2,br2) = next_bytes 4 br1 in
+    let (bl3,_) = next_bytes 4 br2 in
+    if bl2 = bl3 then
+      bl1 @ br2
+    else
+      raise Not_found
+  with _ -> raise Not_found
+
+let simple_htlc_script bl stk =
+  if not (stk = []) then raise Not_found; (** assume there is no partial signature yet, for simplicity **)
+  match bl with
+  | (0x63::0x82::0x01::0x20::0x88::0xa8::0x24::br) -> (*** 36 bytes, due to md256_bytelist bug ***)
+      begin
+	try
+	  let (secrhbl,br) = next_bytes 36 br in (*** 36 bytes, due to md256_bytelist bug ***)
+	  let secrhbl = invert_md256_bytelist_bug secrhbl in
+	  match br with
+	  | (0x88::0x76::0xa9::0x14::br) ->
+	      begin
+		try
+		  let (alphabl,br) = next_bytes 20 br in
+		  match br with
+		  | (0x67::0x04::br) ->
+		      begin
+			try
+			  let (locktmbl,br) = next_bytes 4 br in
+			  match br with
+			  | (lkop::0x75::0x76::0xa9::0x14::br) when lkop = 0xb1 || lkop = 0xb2 ->
+			      begin
+				try
+				  let (betabl,br) = next_bytes 20 br in
+				  if br = [0x68;0x88;0xac] then
+				    (Ripemd160.hexstring_md (string_hexstring (bytelist_string alphabl)),
+				     Ripemd160.hexstring_md (string_hexstring (bytelist_string betabl)),
+				     int64_of_big_int (inum_le locktmbl),
+				     lkop = 0xb2,
+				     hexstring_hashval (string_hexstring (bytelist_string secrhbl)))
+				  else
+				    raise Not_found
+				with _ -> raise Not_found
+			      end
+			  | _ -> raise Not_found
+			with _ -> raise Not_found
+		      end
+		  | _ -> raise Not_found
+		with _ -> raise Not_found
+	      end
+	  | _ -> raise Not_found
+	with _ -> raise Not_found
       end
-  | (177::117::br) -> (** CLTV;DROP -- skip for signing purposes **)
-      simple_checksig_script br
-  | (178::117::br) -> (** CSV;DROP -- skip for signing purposes **)
-      simple_checksig_script br
   | _ -> raise Not_found
 
 (*** first see if private key for beta is in the wallet; if not check if an endorsement is in the wallet; if not fail ***)
@@ -1358,20 +1462,112 @@ let signtx_p2pkh kl beta taue =
 	      let s = EndP2pkhToP2pkhSignat(Some(x,y),fcomp,Some(x2,y2),b2,esg,s1) in
 	      s
 
-let signtx_p2sh kl beta taue =
-  let (_,_,bl) = List.find (fun (alpha,_,_) -> alpha = beta) !walletp2shs in
+let rec script_stack bl stk =
+  let (dl,bs) = pop_bytes bl in
+  if bs = [] then
+    (dl::stk)
+  else
+    script_stack bs (dl::stk)
+
+let signtx_p2sh_partialsig_2 secrl kl beta taue psig bl stk =
   try
-    let (b,x,y,h) = simple_checksig_script bl in
-    let v = signtx_p2pkh kl h taue in
-    match v with
-    | P2pkhSignat(_,_,(r,s)) ->
-	let sscr = (*** signature script PUSH (0,r,s) PUSH bl ***)
-	  push_bytes (0::blnum_be r 32 @ blnum_be s 32) @ push_bytes bl
-	in
-	P2shSignat(sscr)
-    | _ -> raise (Failure "problem signing p2sh case")
+    let (sigssofar,b,x,y,h) = simple_checksig_script bl stk in
+    if not (sigssofar = []) then
+      (P2shSignat(psig),true)
+    else
+      let v = signtx_p2pkh kl h taue in
+      match v with
+      | P2pkhSignat(_,_,(r,s)) ->
+	  let sscr = (*** signature script PUSH (0,r,s) PUSH bl ***)
+	    push_bytes (0::blnum_be r 32 @ blnum_be s 32) @ psig
+	  in
+	  (P2shSignat(sscr),true)
+      | _ -> raise (Failure "problem signing p2sh case")
   with Not_found ->
-    raise (Failure "unhandled signtx_p2sh case")
+    try
+      let (sigssofar,redscr,m,n,pkl) = simple_multisig_script bl stk in
+      let sigs2 = ref [] in
+      let sc = ref 0 in
+      if List.length sigssofar < m then
+	begin
+	  List.iter
+	    (fun (b,x,y,h) ->
+	      if !sc < m then
+		begin
+		  try
+		    let (rs,r,s) = List.find (fun (_,r,s) -> verify_signed_big_int taue (Some(x,y)) (r,s)) sigssofar in
+		    sigs2 := (rs,r,s)::!sigs2;
+		    incr sc
+		  with Not_found ->
+		    try
+		      let v = signtx_p2pkh kl h taue in
+		      match v with
+		      | P2pkhSignat(_,_,(r,s)) ->
+			  let zl = 0::blnum_be r 32 @ blnum_be s 32 in
+			  sigs2 := (zl,r,s)::!sigs2;
+			  incr sc
+		      | _ -> raise Not_found
+		    with Not_found -> ()
+		end)
+	    pkl;
+	  let psig2 = ref (push_bytes redscr) in
+	  List.iter (fun (rs,_,_) -> psig2 := push_bytes rs @ !psig2) !sigs2;
+	  (P2shSignat(!psig2),!sc = m)
+	end
+      else
+	raise Not_found
+    with Not_found ->
+      try
+	let (alpha,beta,locktm,rel,secrh) = simple_htlc_script bl stk in (* two cases: we know the secret and the key for alpha, or the key for beta (allowing signing before locktm is reached) *)
+	try
+	  let (secr,_) = List.find (fun (secr1,secr1h) -> secrh = secr1h) secrl in
+	  let v = signtx_p2pkh kl alpha taue in
+	  match v with
+	  | P2pkhSignat(Some(x,y),b,(r,s)) ->
+	      let pubkeybytes = string_bytelist (hexstring_string (pubkey_hexstring (x,y) b)) in
+	      let secrbytes = string_bytelist (hexstring_string (hashval_hexstring secr)) in
+	      let sscr = (*** signature script PUSH (0,r,s) PUSH pubkey PUSH secret PUSH 1 (for IF) PUSH bl ***)
+		push_bytes (0::blnum_be r 32 @ blnum_be s 32) @ push_bytes pubkeybytes @ push_bytes secrbytes @ 0x51::push_bytes bl
+	      in
+	      (P2shSignat(sscr),true)
+	  | _ -> raise Not_found
+	with Not_found ->
+	  let v = signtx_p2pkh kl beta taue in
+	  match v with
+	  | P2pkhSignat(Some(x,y),b,(r,s)) ->
+	      let pubkeybytes = string_bytelist (hexstring_string (pubkey_hexstring (x,y) b)) in
+	      let sscr = (*** signature script PUSH (0,r,s) PUSH pubkey PUSH 0 (for ELSE) PUSH bl ***)
+		push_bytes (0::blnum_be r 32 @ blnum_be s 32) @ push_bytes pubkeybytes @ 0::push_bytes bl
+	      in
+	      (P2shSignat(sscr),true)
+	  | _ -> raise Not_found
+      with Not_found ->
+	raise (Failure "unhandled signtx_p2sh case")	    
+
+let signtx_p2sh_partialsig secrl kl beta taue psig =
+  let stk = script_stack psig [] in
+  match stk with
+  | (bl::stkr) ->
+      let beta2 = Script.hash160_bytelist bl in
+      if beta2 = beta then
+	begin
+	  signtx_p2sh_partialsig_2 secrl kl beta taue psig bl stkr
+	end
+      else
+	raise (Failure "partial signature does not have correct redeem script")
+  | [] ->
+      raise (Failure "partial signature has no redeem script")
+
+let signtx_p2sh_redeemscr secrl kl beta taue bl =
+  signtx_p2sh_partialsig secrl kl beta taue (push_bytes bl)
+
+let signtx_p2sh rdmscrl secrl kl beta taue =
+  try
+    let (bl,_) = List.find (fun (_,alpha) -> alpha = beta) rdmscrl in
+    signtx_p2sh_redeemscr secrl kl beta taue bl
+  with Not_found ->
+    let (_,_,bl) = List.find (fun (alpha,_,_) -> alpha = beta) !walletp2shs in
+    signtx_p2sh_redeemscr secrl kl beta taue bl
 
 let getsig s rl =
   match s with
@@ -1380,7 +1576,8 @@ let getsig s rl =
       if i < 65535 && i >= 0 then
 	match List.nth rl i with
 	| (gam,Some(s)) -> (s,fun _ -> rl)
-	| (gam,None) -> raise BadOrMissingSignature
+	| (gam,None) ->
+	    raise BadOrMissingSignature
       else
 	raise BadOrMissingSignature
 
@@ -1390,17 +1587,17 @@ let rec assoc_pos b l p =
   | (_::r) -> assoc_pos b r (p+1)
   | [] -> raise Not_found
 
-let rec signtx_ins kl taue inpl al outpl sl rl (rsl:gensignat_or_ref option list) ci propowns =
+let rec signtx_ins rdmscrl secrl kl taue inpl al outpl sl rl (rsl:gensignat_or_ref option list) ci propowns =
   match inpl,al with
   | (alpha,k)::inpr,(a::ar) ->
       begin
 	if not (assetid a = k) then raise (Failure "Asset mismatch when trying to sign inputs");
 	match a with
-	| (_,_,_,Marker) -> signtx_ins kl taue inpr ar outpl sl rl rsl ci propowns
+	| (_,_,_,Marker) -> signtx_ins rdmscrl secrl kl taue inpr ar outpl sl rl rsl ci propowns
 	| (_,bday,obl,Bounty(_)) ->
 	    begin
 	      if List.mem alpha propowns then (*** no signature required, bounty is being collected by owner of prop/negprop ***)
-		signtx_ins kl taue inpr ar outpl sl rl rsl ci propowns
+		signtx_ins rdmscrl secrl kl taue inpr ar outpl sl rl rsl ci propowns
 	      else
 		match obl with
 		| None -> (*** Bounty cannot be spent, but can only be collected ***)
@@ -1408,13 +1605,13 @@ let rec signtx_ins kl taue inpl al outpl sl rl (rsl:gensignat_or_ref option list
 		| Some(gamma,lkh,_) -> (*** gamma must sign to spend bounty where prop (or neg prop) owner is not part of tx ***)
 		    begin
 		      match sl with
-		      | [] -> signtx_ins kl taue inpl al outpl [None] rl rsl ci propowns
+		      | [] -> signtx_ins rdmscrl secrl kl taue inpl al outpl [None] rl rsl ci propowns
 		      | (None::sr) -> (*** missing signature ***)
 			  begin
 			    try
 			      match assoc_pos gamma rl 0 with
 			      | (Some(s),p) ->
-				  signtx_ins kl taue inpr ar outpl sr rl (Some(GenSignatRef(p))::rsl) ci propowns
+				  signtx_ins rdmscrl secrl kl taue inpr ar outpl sr rl (Some(GenSignatRef(p))::rsl) ci propowns
 			      | (None,p) -> raise Not_found
 			    with Not_found ->
 			      let (p,b4,b3,b2,b1,b0) = gamma in
@@ -1424,9 +1621,9 @@ let rec signtx_ins kl taue inpl al outpl sl rl (rsl:gensignat_or_ref option list
 				begin
 				  try
 				    let s = signtx_p2pkh kl (b4,b3,b2,b1,b0) taue in
-				    signtx_ins kl taue inpr ar outpl sr ((gamma,Some(s))::rl) (Some(GenSignatReal(s))::rsl) ci propowns
+				    signtx_ins rdmscrl secrl kl taue inpr ar outpl sr ((gamma,Some(s))::rl) (Some(GenSignatReal(s))::rsl) ci propowns
 				  with _ ->
-				    signtx_ins kl taue inpr ar outpl sr ((gamma,None)::rl) (None::rsl) false propowns
+				    signtx_ins rdmscrl secrl kl taue inpr ar outpl sr ((gamma,None)::rl) (None::rsl) false propowns
 				end
 			  end
 		      | (Some(s)::sr) ->
@@ -1439,9 +1636,9 @@ let rec signtx_ins kl taue inpl al outpl sl rl (rsl:gensignat_or_ref option list
 				match obl with
 				| None -> 
 				    let (p,a4,a3,a2,a1,a0) = alpha in
-				    signtx_ins kl taue inpr ar outpl sr (rl1 (p=1,a4,a3,a2,a1,a0)) (Some(GenSignatReal(s1))::rsl) ci propowns
+				    signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (rl1 (p=1,a4,a3,a2,a1,a0)) (Some(GenSignatReal(s1))::rsl) ci propowns
 				| Some(gam,_,_) ->
-				    signtx_ins kl taue inpr ar outpl sr (rl1 gam) (Some(GenSignatReal(s1))::rsl) ci propowns
+				    signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (rl1 gam) (Some(GenSignatReal(s1))::rsl) ci propowns
 			      else
 				raise (Failure "bad signature already part of stx")
 			    end
@@ -1451,7 +1648,7 @@ let rec signtx_ins kl taue inpl al outpl sl rl (rsl:gensignat_or_ref option list
 	    end
 	| (_,bday,obl,_) ->
 	    match sl with
-	    | [] -> signtx_ins kl taue inpl al outpl [None] rl rsl ci propowns
+	    | [] -> signtx_ins rdmscrl secrl kl taue inpl al outpl [None] rl rsl ci propowns
 	    | (None::sr) -> (*** missing signature ***)
 		begin
 		  (*** check if one of the existing signatures can be used for this ***)
@@ -1465,7 +1662,7 @@ let rec signtx_ins kl taue inpl al outpl sl rl (rsl:gensignat_or_ref option list
 		    in
 		    match assoc_pos beta rl 0 with
 		    | (Some(s),p) ->
-			signtx_ins kl taue inpr ar outpl sr rl (Some(GenSignatRef(p))::rsl) ci propowns
+			signtx_ins rdmscrl secrl kl taue inpr ar outpl sr rl (Some(GenSignatRef(p))::rsl) ci propowns
 		    | (None,p) -> raise Not_found
 		  with Not_found ->
 		    (*** otherwise, try to sign for this input ***)
@@ -1475,18 +1672,18 @@ let rec signtx_ins kl taue inpl al outpl sl rl (rsl:gensignat_or_ref option list
 			if p then
 			  begin
 			    try
-			      let s = signtx_p2sh kl (b4,b3,b2,b1,b0) taue in
-			      signtx_ins kl taue inpr ar outpl sr ((beta,Some(s))::rl) (Some(GenSignatReal(s))::rsl) ci propowns
+			      let (s,compl) = signtx_p2sh rdmscrl secrl kl (b4,b3,b2,b1,b0) taue in
+			      signtx_ins rdmscrl secrl kl taue inpr ar outpl sr ((beta,Some(s))::rl) (Some(GenSignatReal(s))::rsl) ci propowns
 			    with _ ->
-			      signtx_ins kl taue inpr ar outpl sr ((beta,None)::rl) (None::rsl) false propowns
+			      signtx_ins rdmscrl secrl kl taue inpr ar outpl sr ((beta,None)::rl) (None::rsl) false propowns
 			  end
 			else
 			  begin
 			    try
 			      let s = signtx_p2pkh kl (b4,b3,b2,b1,b0) taue in
-			      signtx_ins kl taue inpr ar outpl sr ((beta,Some(s))::rl) (Some(GenSignatReal(s))::rsl) ci propowns
+			      signtx_ins rdmscrl secrl kl taue inpr ar outpl sr ((beta,Some(s))::rl) (Some(GenSignatReal(s))::rsl) ci propowns
 			    with _ ->
-			      signtx_ins kl taue inpr ar outpl sr ((beta,None)::rl) (None::rsl) false propowns
+			      signtx_ins rdmscrl secrl kl taue inpr ar outpl sr ((beta,None)::rl) (None::rsl) false propowns
 			  end
 		  | None ->
 		      let (p,a4,a3,a2,a1,a0) = alpha in
@@ -1494,17 +1691,17 @@ let rec signtx_ins kl taue inpl al outpl sl rl (rsl:gensignat_or_ref option list
 			begin
 			  try
 			    let s = signtx_p2pkh kl (a4,a3,a2,a1,a0) taue in
-			    signtx_ins kl taue inpr ar outpl sr (((false,a4,a3,a2,a1,a0),Some(s))::rl) (Some(GenSignatReal(s))::rsl) ci propowns
+			    signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (((false,a4,a3,a2,a1,a0),Some(s))::rl) (Some(GenSignatReal(s))::rsl) ci propowns
 			  with _ ->
-			    signtx_ins kl taue inpr ar outpl sr (((false,a4,a3,a2,a1,a0),None)::rl) (None::rsl) false propowns
+			    signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (((false,a4,a3,a2,a1,a0),None)::rl) (None::rsl) false propowns
 			end
 		      else if p = 1 then
 			begin
 			  try
-			    let s = signtx_p2sh kl (a4,a3,a2,a1,a0) taue in
-			    signtx_ins kl taue inpr ar outpl sr (((false,a4,a3,a2,a1,a0),Some(s))::rl) (Some(GenSignatReal(s))::rsl) ci propowns
+			    let (s,compl) = signtx_p2sh rdmscrl secrl kl (a4,a3,a2,a1,a0) taue in
+			    signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (((true,a4,a3,a2,a1,a0),Some(s))::rl) (Some(GenSignatReal(s))::rsl) (ci && compl) propowns
 			  with _ ->
-			    signtx_ins kl taue inpr ar outpl sr (((false,a4,a3,a2,a1,a0),None)::rl) (None::rsl) false propowns
+			    signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (((true,a4,a3,a2,a1,a0),None)::rl) (None::rsl) false propowns
 			end
 		      else
 			raise (Failure "tx attempts to spend a non-Marker and non-Bounty without an explicit obligation from an address other than a pay address")
@@ -1513,32 +1710,71 @@ let rec signtx_ins kl taue inpl al outpl sl rl (rsl:gensignat_or_ref option list
 	    | (Some(s)::sr) ->
 		try
 		  let (s1,rl1) = getsig s rl in
-		  let (b,_,_) = check_spend_obligation_upto_blkh (Some(bday)) alpha taue s1 obl in (*** allow signing now even if it cannot be confirmed until later ***)
+		  let (p,a4,a3,a2,a1,a0) = alpha in
+		  let (b,_,_) =
+		    try
+		      check_spend_obligation_upto_blkh (Some(bday)) alpha taue s1 obl (*** allow signing now even if it cannot be confirmed until later ***)
+		    with BadOrMissingSignature ->
+		      (false,None,None)
+		  in
 		  if b then
 		    begin
 		      match obl with
 		      | None -> 
-			  let (p,a4,a3,a2,a1,a0) = alpha in
-			  signtx_ins kl taue inpr ar outpl sr (rl1 (p=1,a4,a3,a2,a1,a0)) (Some(GenSignatReal(s1))::rsl) ci propowns
+			  signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (rl1 (p=1,a4,a3,a2,a1,a0)) (Some(GenSignatReal(s1))::rsl) ci propowns
 		      | Some(gam,_,_) ->
-			  signtx_ins kl taue inpr ar outpl sr (rl1 gam) (Some(GenSignatReal(s1))::rsl) ci propowns
+			  signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (rl1 gam) (Some(GenSignatReal(s1))::rsl) ci propowns
 		    end
 		  else if check_move_obligation alpha taue s1 obl (assetpre a) outpl then
-		    let (p,a4,a3,a2,a1,a0) = alpha in
-		    signtx_ins kl taue inpr ar outpl sr (rl1 (p=1,a4,a3,a2,a1,a0)) (Some(GenSignatReal(s1))::rsl) ci propowns
+		    signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (rl1 (p=1,a4,a3,a2,a1,a0)) (Some(GenSignatReal(s1))::rsl) ci propowns
 		  else
-		    raise (Failure "bad signature already part of stx")
+		    begin
+		      match s1 with
+		      | P2shSignat(pscr) -> (*** p2sh, so might be incomplete sig ***)
+			  begin
+			    match obl with
+			    | None -> 
+				let (sgscr,compl) =
+				  try
+				    if p=1 then
+				      signtx_p2sh_partialsig secrl kl (a4,a3,a2,a1,a0) taue pscr
+				    else
+				      (s1,false)
+				  with _ -> (s1,false)
+				in
+				signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (rl1 (p=1,a4,a3,a2,a1,a0)) (Some(GenSignatReal(sgscr))::rsl) (ci && compl) propowns
+			    | Some(gam,_,_) ->
+				let (sgscr,compl) =
+				  try
+				    let (q,c1,c2,c3,c4,c5) = gam in
+				    if q then
+				      signtx_p2sh_partialsig secrl kl (c1,c2,c3,c4,c5) taue pscr
+				    else
+				      (s1,false)
+				  with _ -> (s1,false)
+				in
+				signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (rl1 gam) (Some(GenSignatReal(sgscr))::rsl) (ci && compl) propowns
+			  end
+		      | _ ->
+			  begin
+			    match obl with
+			    | None -> 
+				signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (rl1 (p=1,a4,a3,a2,a1,a0)) (Some(GenSignatReal(s1))::rsl) ci propowns
+			    | Some(gam,_,_) ->
+				signtx_ins rdmscrl secrl kl taue inpr ar outpl sr (rl1 gam) (Some(GenSignatReal(s1))::rsl) ci propowns
+			  end
+		    end
 		with BadOrMissingSignature ->
 		  raise (Failure "bad signature already part of stx")
       end
   | [],[] -> if sl = [] then (List.rev rsl,ci) else raise (Failure "extra unused signature")
   | _,_ -> raise (Failure "problem signing inputs")
 
-let rec signtx_outs kl taue outpl sl rl rsl co =
+let rec signtx_outs rdmscrl secrl kl taue outpl sl rl rsl co =
   let publication_signtx_out alpha outpr =
       begin
 	match sl with
-	| [] -> signtx_outs kl taue outpl [None] rl rsl co
+	| [] -> signtx_outs rdmscrl secrl kl taue outpl [None] rl rsl co
 	| (None::sr) -> (*** missing signature ***)
 	    begin
 	      let (p,a4,a3,a2,a1,a0) = alpha in
@@ -1548,9 +1784,9 @@ let rec signtx_outs kl taue outpl sl rl rsl co =
 		begin
 		  try
 		    let s = signtx_p2pkh kl (a4,a3,a2,a1,a0) taue in
-		    signtx_outs kl taue outpr sr ((alpha,Some(s))::rl) (Some(GenSignatReal(s))::rsl) co
+		    signtx_outs rdmscrl secrl kl taue outpr sr ((alpha,Some(s))::rl) (Some(GenSignatReal(s))::rsl) co
 		  with _ ->
-		    signtx_outs kl taue outpr sr ((alpha,None)::rl) (None::rsl) false
+		    signtx_outs rdmscrl secrl kl taue outpr sr ((alpha,None)::rl) (None::rsl) false
 		end
 	    end
 	| (Some(s)::sr) ->
@@ -1558,7 +1794,7 @@ let rec signtx_outs kl taue outpl sl rl rsl co =
 	      let (s1,rl1) = getsig s rl in
 	      let (b,_,_) = check_spend_obligation_upto_blkh None (payaddr_addr alpha) taue s1 None in
 	      if b then
-		signtx_outs kl taue outpr sr (rl1 alpha) (Some(GenSignatReal(s1))::rsl) co
+		signtx_outs rdmscrl secrl kl taue outpr sr (rl1 alpha) (Some(GenSignatReal(s1))::rsl) co
 	      else
 		raise (Failure "bad signature already part of stx")
 	    end
@@ -1571,10 +1807,10 @@ let rec signtx_outs kl taue outpl sl rl rsl co =
       publication_signtx_out alpha outpr
   | (_,(_,DocPublication(alpha,n,th,si)))::outpr ->
       publication_signtx_out alpha outpr
-  | _::outpr -> signtx_outs kl taue outpr sl rl rsl co
+  | _::outpr -> signtx_outs rdmscrl secrl kl taue outpr sl rl rsl co
   | [] -> (List.rev rsl,co)
 
-let signtx2 oc lr stau kl =
+let signtx2 oc lr stau rdmscrl secrl kl =
   let ((tauin,tauout) as tau,(tausgin,tausgout)) = stau in
   let unsupportederror alpha h = Printf.printf "Could not find asset %s at address %s in ledger %s\n" (hashval_hexstring h) (addr_daliladdrstr alpha) (hashval_hexstring lr) in
   let al = List.map (fun (aid,a) -> a) (ctree_lookup_input_assets true true false tauin (CHash(lr)) unsupportederror) in
@@ -1589,16 +1825,16 @@ let signtx2 oc lr stau kl =
   let tauh = hashtx tau in
   let tauh2 = if !Config.testnet then hashtag tauh 288l else tauh in
   let taue = hashval_big_int tauh2 in
-  let (tausgin1,ci) = signtx_ins kl taue tauin al tauout tausgin [] [] true (get_propowns tauin al) in
-  let (tausgout1,co) = signtx_outs kl taue tauout tausgout [] [] true in
+  let (tausgin1,ci) = signtx_ins rdmscrl secrl kl taue tauin al tauout tausgin [] [] true (get_propowns tauin al) in
+  let (tausgout1,co) = signtx_outs rdmscrl secrl kl taue tauout tausgout [] [] true in
   ((tau,(tausgin1,tausgout1)),ci,co)
 
-let signbatchtxsc oc lr staul oc2 kl =
+let signbatchtxsc oc lr staul oc2 rdmscrl secrl kl =
   let i = ref 0 in
   List.iter
     (fun stau ->
       incr i;
-      let (stau2,ci,co) = signtx2 oc lr stau kl in
+      let (stau2,ci,co) = signtx2 oc lr stau rdmscrl secrl kl in
       seocf (seo_stx seoc stau2 (oc2,None));
       if ci && co then
 	Printf.fprintf oc "Tx %d Completely signed.\n" !i
@@ -1606,18 +1842,105 @@ let signbatchtxsc oc lr staul oc2 kl =
 	Printf.fprintf oc "Tx %d Partially signed.\n" !i)
     staul
 
-let signtxc oc lr stau oc2 kl =
-  let (stau2,ci,co) = signtx2 oc lr stau kl in
+let signtxc oc lr stau oc2 rdmscrl secrl kl =
+  let (stau2,ci,co) = signtx2 oc lr stau rdmscrl secrl kl in
   seocf (seo_stx seoc stau2 (oc2,None));
   if ci && co then
     Printf.fprintf oc "Completely signed.\n"
   else
     Printf.fprintf oc "Partially signed.\n"
 
-let signtx oc lr taustr kl =
+let signtx oc lr taustr rdmscrl secrl kl =
   let s = hexstring_string taustr in
   let (stau,_) = sei_stx seis (s,String.length s,None,0,0) in (*** may be partially signed ***)
-  let (stau2,ci,co) = signtx2 oc lr stau kl in
+  let (stau2,ci,co) = signtx2 oc lr stau rdmscrl secrl kl in
+  let s = Buffer.create 100 in
+  seosbf (seo_stx seosb stau2 (s,None));
+  let hs = string_hexstring (Buffer.contents s) in
+  Printf.fprintf oc "%s\n" hs;
+  if ci && co then
+    Printf.fprintf oc "Completely signed.\n"
+  else
+    Printf.fprintf oc "Partially signed.\n"
+
+let rec simplesigntx_ins rdmscrl secrl kl taue inpl sl rl (rsl:gensignat_or_ref option list) ci =
+  match inpl with
+  | (alpha,k)::inpr ->
+      begin
+	match sl with
+	| [] -> simplesigntx_ins rdmscrl secrl kl taue inpl [None] rl rsl ci
+	| (None::sr) -> (*** missing signature ***)
+	    begin
+	      (*** check if one of the existing signatures can be used for this ***)
+	      try
+		let beta =
+		  let (p,a4,a3,a2,a1,a0) = alpha in
+		  (p=1,a4,a3,a2,a1,a0)
+		in
+		match assoc_pos beta rl 0 with
+		| (Some(s),p) ->
+		    simplesigntx_ins rdmscrl secrl kl taue inpr sr rl (Some(GenSignatRef(p))::rsl) ci
+		| (None,p) -> raise Not_found
+	      with Not_found ->
+		(*** otherwise, try to sign for this input ***)
+		let (p,a4,a3,a2,a1,a0) = alpha in
+		if p = 0 then
+		  begin
+		    try
+		      let s = signtx_p2pkh kl (a4,a3,a2,a1,a0) taue in
+		      simplesigntx_ins rdmscrl secrl kl taue inpr sr (((false,a4,a3,a2,a1,a0),Some(s))::rl) (Some(GenSignatReal(s))::rsl) ci
+		    with _ ->
+		      simplesigntx_ins rdmscrl secrl kl taue inpr sr (((false,a4,a3,a2,a1,a0),None)::rl) (None::rsl) false
+		  end
+		else if p = 1 then
+		  begin
+		    try
+		      let (s,compl) = signtx_p2sh rdmscrl secrl kl (a4,a3,a2,a1,a0) taue in
+		      simplesigntx_ins rdmscrl secrl kl taue inpr sr (((true,a4,a3,a2,a1,a0),Some(s))::rl) (Some(GenSignatReal(s))::rsl) (ci && compl)
+		    with _ ->
+		      simplesigntx_ins rdmscrl secrl kl taue inpr sr (((true,a4,a3,a2,a1,a0),None)::rl) (None::rsl) false
+		  end
+		else
+		  raise (Failure "tx attempts to spend from an address other than a pay address")
+	    end
+	| (Some(s)::sr) ->
+	    try
+	      let (s1,rl1) = getsig s rl in
+	      let (p,a4,a3,a2,a1,a0) = alpha in
+	      begin
+		match s1 with
+		| P2shSignat(pscr) -> (*** p2sh, so might be incomplete sig ***)
+		    begin
+		      let (sgscr,compl) =
+			try
+			  if p=1 then
+			    signtx_p2sh_partialsig secrl kl (a4,a3,a2,a1,a0) taue pscr
+			  else
+			    (s1,false)
+			with _ -> (s1,false)
+		      in
+		      simplesigntx_ins rdmscrl secrl kl taue inpr sr (rl1 (p=1,a4,a3,a2,a1,a0)) (Some(GenSignatReal(sgscr))::rsl) (ci && compl)
+		    end
+		| _ ->
+		    simplesigntx_ins rdmscrl secrl kl taue inpr sr (rl1 (p=1,a4,a3,a2,a1,a0)) (Some(GenSignatReal(s1))::rsl) ci
+	      end
+	    with BadOrMissingSignature ->
+	      raise (Failure "bad signature already part of stx")
+      end
+  | [] -> if sl = [] then (List.rev rsl,ci) else raise (Failure "extra unused signature")
+
+let simplesigntx2 oc stau rdmscrl secrl kl =
+  let ((tauin,tauout) as tau,(tausgin,tausgout)) = stau in
+  let tauh = hashtx tau in
+  let tauh2 = if !Config.testnet then hashtag tauh 288l else tauh in
+  let taue = hashval_big_int tauh2 in
+  let (tausgin1,ci) = simplesigntx_ins rdmscrl secrl kl taue tauin tausgin [] [] true in
+  ((tau,(tausgin1,[])),ci,true)
+
+let simplesigntx oc taustr rdmscrl secrl kl =
+  let s = hexstring_string taustr in
+  let (stau,_) = sei_stx seis (s,String.length s,None,0,0) in (*** may be partially signed ***)
+  let (stau2,ci,co) = simplesigntx2 oc stau rdmscrl secrl kl in
   let s = Buffer.create 100 in
   seosbf (seo_stx seosb stau2 (s,None));
   let hs = string_hexstring (Buffer.contents s) in
@@ -3011,3 +3334,72 @@ let reportpubs oc f lr =
       (ctre_right (ctre_right (get_ctree_element lr))) []
   with Not_found ->
     Printf.fprintf oc "There are no publications in the ledger.\n"
+
+let createhtlc2 alpha beta tmlock rel secrh =
+  let scrl =
+    [0x63; (** OP_IF **)
+     0x82; (** OP_SIZE **)
+     0x01;0x20; (** PUSH 0x20 (32) **)
+     0x88; (** OP_EQUALVERIFY to make sure the secret is 32 bytes **)
+     0xa8; (** OP_SHA256 (with repeated 4 byte bug) **)
+     0x24] (** PUSH 36 bytes (the hash of the secret) onto the stack (4 bytes repeated due to dalilcoin script bug) **)
+    @ md256_bytelist secrh
+    @ [0x88; (** OP_EQUALVERIFY to ensure the secret hashes to the expected hash **)
+       0x76; (** OP_DUP -- duplicate the given pubkey for alpha **)
+       0xa9; (** OP_HASH160 -- hash the given pubkey **)
+       0x14] (** PUSH 20 bytes (should be hash of pubkey for alpha) onto the stack **)
+    @ md160_bytelist alpha
+    @ [0x67; (** OP_ELSE **)
+       0x04] (** PUSH 8 bytes onto the stack (lock time) **)
+    @ blnum_le (big_int_of_int32 tmlock) 4
+    @ [if rel then 0xb2 else 0xb1] (** CSV or CLTV to check if this branch is valid yet **)
+    @ [0x75; (** OP_DROP, drop the locktime from the stack **)
+       0x76; (** OP_DUP -- duplicate the given pubkey for beta **)
+       0xa9; (** OP_HASH160 -- hash the given pubkey **)
+       0x14] (** PUSH 20 bytes (should be hash of pubkey for beta) onto the stack **)
+    @ md160_bytelist beta
+    @ [0x68; (** OP_ENDIF **)
+       0x88; (** OP_EQUALVERIFY -- to ensure the given pubkey hashes to the right value **)
+       0xac] (** OP_CHECKSIG **)
+  in
+  let alpha = Script.hash160_bytelist scrl in
+  (alpha,scrl,secrh)
+
+let createhtlc alpha beta tmlock rel secr =
+  let secrh = sha256_bytelist (string_bytelist (hexstring_string (hashval_hexstring secr))) in
+  createhtlc2 alpha beta tmlock rel secrh
+
+let createmultisig2 m pubkeys =
+  let n = List.length pubkeys in
+  if n <= 1 || n > 16 then raise (Failure "n must be > 1 and <= 16");
+  if m > n then raise (Failure "m cannot be greater than n");
+  let scrl = ref [174] in
+  let pushscrnum i =
+    if i < 0 then
+      raise (Failure "unexpected occurrence")
+    else if i = 0 then
+      scrl := 0::!scrl
+    else if i <= 16 then
+      scrl := (80 + i)::!scrl
+    else
+      raise (Failure "unexpected occurrence")
+  in
+  pushscrnum n;
+  List.iter
+    (fun (s,_) ->
+      let il = string_bytelist (hexstring_string s) in
+      scrl := List.length il::il @ !scrl)
+    (List.rev pubkeys);
+  pushscrnum m;
+  let alpha = Script.hash160_bytelist !scrl in
+  (alpha,!scrl)
+
+let createmultisig m jpks =
+  match jpks with
+  | JsonArr(jpkl) ->
+      let pubkeys = List.map (fun j -> match j with JsonStr(s) -> (s,hexstring_pubkey s) | _ -> raise (Failure "expected an array of pubkeys")) jpkl in
+      createmultisig2 m pubkeys
+  | _ -> raise (Failure "expected an array of pubkeys")
+
+
+  

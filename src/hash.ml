@@ -1,5 +1,5 @@
 (* Copyright (c) 2015 The Qeditas developers *)
-(* Copyright (c) 2017-2018 The Dalilcoin developers *)
+(* Copyright (c) 2017-2019 The Dalilcoin developers *)
 (* Distributed under the MIT software license, see the accompanying
    file COPYING or http://www.opensource.org/licenses/mit-license.php. *)
 
@@ -781,3 +781,4 @@ let hashval_from_json j =
   match j with
   | JsonStr(h) -> hexstring_hashval h
   | _ -> raise (Failure("not a hashval"))
+

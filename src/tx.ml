@@ -520,7 +520,7 @@ let json_addr_preasset (alpha,(obl,u)) =
 	       ("preasset",json_preasset u)])
   | Some(gamma,lh,r) ->
       JsonObj([("address",JsonStr(addr_daliladdrstr alpha));
-	       ("obligation",JsonObj([("lockaddress",JsonStr(addr_daliladdrstr (payaddr_addr gamma)));
+	       ("obligation",JsonObj([("lockaddr",JsonStr(addr_daliladdrstr (payaddr_addr gamma)));
 				      ("lockheight",JsonNum(Int64.to_string lh));
 				      ("reward",JsonBool(r))]));
 	       ("preasset",json_preasset u)])
