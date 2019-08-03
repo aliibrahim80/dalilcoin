@@ -3214,7 +3214,7 @@ let export_ctree_subelts c h bl =
 
 let export_ctree_subtop c h p =
   let bl = ref [] in
-  for i = 0 downto 8 do
+  for i = 0 to 8 do
     if (p lsr i) land 1 = 1 then
       bl := true::!bl
     else
@@ -3230,7 +3230,7 @@ let export_ctree_subtop_subsubtop c h p1 p2 =
     else
       bl := false::!bl
   done;
-  for i = 0 downto 8 do
+  for i = 0 to 8 do
     if (p1 lsr i) land 1 = 1 then
       bl := true::!bl
     else
