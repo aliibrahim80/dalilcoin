@@ -11,7 +11,7 @@ be able to claim the bounty.
 ## Three kinds of publications
 
 Dalilcoin supports three kinds of publications: theories, signatures
-and documents.  Theories declare certain primitive to have certain
+and documents.  Theories declare certain primitives to have certain
 types and declare certain axioms to hold in the theory.  Every
 signature and document is relative to a theory (possibly the empty
 theory which need not be published).  A signature declares certain
@@ -34,24 +34,25 @@ especially since checking a new signature or document requires access
 to all theories and signatures published before.  In order to
 discourage publishing too many theories and signatures, txs that
 publish a theory or signature must burn a significant amount of
-fraenks in order to make the publication. Specifically, 0.021 fraenks
-must be burned for each byte consumed by the serialization of a theory
-or signature. Since there will never be more than 21 million fraenks,
-no more than 1GB of theories and signatures (combined) may be
-published. It is likely that less than 10 million fraenks will ever
-exist, leading to an even greater restriction.
+fraenks. Specifically, 0.021 fraenks must be burned for each byte
+consumed by the serialization of a theory or signature. Since there
+will never be more than 21 million fraenks, no more than 1GB of
+theories and signatures (combined) may be published. It is likely that
+less than 10 million fraenks will ever exist, leading to an even
+greater restriction.
 
 ## Publication stages
 
 In terms of Dalilcoin assets, publications are assets that fall into
 one of the three preasset cases of TheoryPublication, SignaPublication
-or DocPublication.  In order to support creating the txs that create
-such assets, there are commands `readdraft`, `addnonce`,
-`addpublisher`, `commitdraft` and `publishdraft`. Each of these
-commands operate on text files specifying the content of a draft
-publication. The command `commitdraft` is used when a draft is ready
-to be published with no further changes and `publishdraft` is used to
-publish after the commitment has matured (after a day on average).
+or DocPublication (see the `assets` module).  In order to support
+creating the txs that create such assets, there are commands
+`readdraft`, `addnonce`, `addpublisher`, `commitdraft` and
+`publishdraft`. Each of these commands operate on text files
+specifying the content of a draft publication. The command
+`commitdraft` is used when a draft is ready to be published with no
+further changes and `publishdraft` is used to publish after the
+commitment has matured (after a day on average).
 
 ### Writing a draft
 
@@ -63,13 +64,13 @@ either be
 
 * Signature Empty
 
-* Signature <theoryid>
+* Signature *theoryid*
 
 * Document Empty
 
-* Document <theoryid>
+* Document *theoryid*
 
-The <theoryid> is a 32 byte hash value given in hex and identifies a
+The *theoryid* is a 32 byte hash value given in hex and identifies a
 previously published theory. Alternatively, "Empty" indicates that the
 signature or document is in the empty theory. The empty theory
 corresponds to intuitionistic higher-order logic with no
@@ -79,13 +80,13 @@ The rest of the file is a list of items.
 
 #### Items for a theory file include:
 
-* Base <string>
+* Base *string*
 
-* Prim <string> : <type>
+* Prim *string* : *type*
 
-* Def <string> : <type> := <term>
+* Def *string* : *type* := *term*
 
-* Axiom <string> : <term>
+* Axiom *string* : *term*
 
 Types can refer to a base type i for each i=0,1,2,...  and each Base
 item gives a local name to the next type.  Likewise, terms have a
@@ -98,17 +99,17 @@ declare that certain propositions are proven by in theory in advance.
 
 #### Items for a signature file include:
 
-* Include <signatureid> [ <string> * ] [ <string> * ]
+* Include *signatureid* [ *string* * ] [ *string* * ]
 
-* Base <string>
+* Base *string*
 
-* Let <string> : <type> := <term>
+* Let *string* : *type* := *term*
 
-* Def <string> : <type> := <term>
+* Def *string* : *type* := *term*
 
-* Param <objectid> <string> : <type>
+* Param *objectid* *string* : *type*
 
-* Known <string> : <term>
+* Known *string* : *term*
 
 An Include item indicates that the signature with the given id should
 be included before checking the rest of the signature, along with any
@@ -141,9 +142,9 @@ theory.
 
 All the items allowed in the signature file and
 
-* Thm <string> : <term> := <proof>
+* Thm *string* : *term* := *proof*
 
-* Conj <string> : <term>
+* Conj *string* : *term*
 
 A Thm item is used to prove new propositions within the theory.  A
 Conj item declares a proposition to be a conjecture.  Such a
@@ -173,15 +174,15 @@ corresponding propositions. In addition, documents often make new
 definitions and prove new theorems. In theory and document files there
 may be additional items of the form:
 
-* NewOwner <string> <payaddr>
+* NewOwner *string* *payaddr*
 
-* NewRights <string> <payaddr> <fraenks>
+* NewRights *string* *payaddr* *fraenks*
 
-* NewRights <string> <payaddr> None
+* NewRights *string* *payaddr* None
 
 A *payaddr* is either a p2pkh or p2sh address.
 
-In each such item the <string> refers to the local name of the
+In each such item the *string* refers to the local name of the
 definition, theorem or axiom. The local name is unrelated to where the
 ownership assets will be stored in the ledger. The ownership assets
 are stored at term addresses that are uniquely determined by the
@@ -210,7 +211,7 @@ propositions will be given owners and suggest adding NewOwner and
 NewRights items for these.
 
 ```
-readdraft <draftfile>
+readdraft *draftfile*
 ```
 
 Ownership assets can be inputs and outputs of txs and so the rights
@@ -220,7 +221,7 @@ be transferred by such txs.
 If a conjecture is declared in a document, a Bounty item can be given.
 This bounty will be funded by the tx that publishes the document.
 
-* Bounty <string> <fraenks>
+* Bounty *string* *fraenks*
 
 Bounties can also be added to proposition addresses later in order to
 encourage work on resolving the conjecture.
@@ -315,17 +316,17 @@ They are specified in text as follows:
 
 This is the type of propositions.
 
-* TpArr <type> <type>
+* TpArr *type* *type*
 
 This is the usual arrow type from a domain type to a codomain type.
 
-* TpAll A <type>
+* TpAll A *type*
 
 This forms the polymorphic type by binding the type variable A.
 
-* <string>
+* *string*
 
-Here <string> must be the name of a type variable in context or the
+Here *string* must be the name of a type variable in context or the
 name of a base type.
 
 ### Terms
@@ -334,48 +335,48 @@ Terms are simply typed lambda terms. All terms must be given in
 beta-eta normal form in drafts. Here are the forms of terms given in
 the text format for drafts:
 
-* Ap <term> <term>
+* Ap *term* *term*
 
 Apply a term to a term. The first term must have a function type and
 the second term must have the domain type of the function type.
 
-* Lam <string> <type> <term>
+* Lam *string* *type* *term*
 
 This forms the lambda-abstraction binding the named variable in the
 term, where the variable is assigned the given type in the body.
 
-* Imp <term> <term>
+* Imp *term* *term*
 
 Both terms should be propositions (terms of type Prop) and the
 resulting term is the implication.
 
-* All <name> <type> <term>
+* All *string* *type* *term*
 
 The term must be a proposition and the result is the universally
 quantified proposition given by quantifying over the given variable
 (ranging over the given type).
 
-* TTpAp <term> <type>
+* TTpAp *term* *type*
 
 This applies a polymorphic term to the given type.
 
-* TTpLam <string> <term>
+* TTpLam *string* *term*
 
 This lambda binds a type variable in a term in order to make a
 polymorphic definition.
 
-* TTpAll <string> <term>
+* TTpAll *string* *term*
 
 This universally quantifies over a type variable to form a polymorphic
 proposition.
 
-* Prim <int>
+* Prim *int*
 
 This refers to a specific primitive constant term by giving an
-integer. Prim <int> usually only occurs in a "Let" declarations to
+integer. Prim *int* usually only occurs in a "Let" declarations to
 give more readable names to the primitives.
 
-* <string>
+* *string*
 
 Here the string is either an typed object named already (either as a
 Let, Param or as a definition) or is the name of a local variable.
@@ -386,42 +387,42 @@ Proofs are Curry-Howard style proof terms, and so are also a kind of
 lambda term. Here are the forms of proofs given in the text format in
 drafts:
 
-* PrAp <proof> <proof>
+* PrAp *proof* *proof*
 
 Apply a proof to another proof. The first proof must prove an
 implication and the second proof must prove the antecedent of the
 implication.
 
-* TmAp <proof> <term>
+* TmAp *proof* *term*
 
 Apply a proof to a term. The proof must prove a universally quantified
 proposition and the term must have the type of the quantified
 variable.
 
-* TpAp <proof> <type>
+* TpAp *proof* *type*
 
 Apply a proof to a type. The proof must prove a polymorphic
 proposition.
 
-* PrLa <string> <prop> <proof>
+* PrLa *string* *term* *proof*
 
 Form a lambda abstraction to prove an implication where the body of
 the lambda is a proof of the conclusion where the string locally
 refers to the antecedent as a hypothesis.
 
-* TmLa <string> <type> <proof>
+* TmLa *string* *type* *proof*
 
 Form a lambda abstraction to prove a universal proposition
 (quantifying over the given type) where the body of the lambda is a
 proof of the body of the universal quantifier and the string gives a
 local name for the variable of the given type.
 
-* TpLa <string> <proof>
+* TpLa *string* *proof*
 
 Form a lambda abstraction proving a polymorphic proposition
 quantifying by abstracting over the given type variable.
 
-* <string>
+* *string*
 
 The string must refer to something known (either an imported known or
 a previously proven proposition) or to a local hypothesis.
