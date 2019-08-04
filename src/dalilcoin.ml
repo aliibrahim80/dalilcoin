@@ -2616,6 +2616,10 @@ let initialize_commands () =
       List.iter (fun (h,k) -> Printf.fprintf oc "%Ld. %s\n" h (hashval_hexstring k)) !missingheaders;
       Printf.fprintf oc "%d missing deltas.\n" (List.length !missingdeltas);
       List.iter (fun (h,k) -> Printf.fprintf oc "%Ld. %s\n" h (hashval_hexstring k)) !missingdeltas);
+  ac "getledgerroot" "getledgerroot" "Print the current ledger root."
+    (fun oc al ->
+      let lr = get_ledgerroot (get_bestblock_print_warnings oc) in
+      Printf.fprintf oc "Ledger root: %s\n" (hashval_hexstring lr));
   ac "getinfo" "getinfo" "Print a summary of the current dalilcoin node state including:\nnumber of connections, current best block, current difficulty, current balance."
     (fun oc al ->
       remove_dead_conns();
@@ -2631,6 +2635,7 @@ let initialize_commands () =
 		let (tar,tmstmp,ledgerroot,_,_) = Hashtbl.find validheadervals (lbk,ltx) in
 		let gtm = Unix.gmtime (Int64.to_float tmstmp) in
 		Printf.fprintf oc "Best block %s at height %Ld\n" (hashval_hexstring h) blkh;
+		Printf.fprintf oc "Ledger root: %s\n" (hashval_hexstring ledgerroot);
 		Printf.fprintf oc "Time: %Ld (UTC %02d %02d %04d %02d:%02d:%02d)\n" tmstmp gtm.Unix.tm_mday (1+gtm.Unix.tm_mon) (1900+gtm.Unix.tm_year) gtm.Unix.tm_hour gtm.Unix.tm_min gtm.Unix.tm_sec;
 		Printf.fprintf oc "Target: %s\n" (string_of_big_int tar);
 		Printf.fprintf oc "Difficulty: %s\n" (string_of_big_int (difficulty tar));
