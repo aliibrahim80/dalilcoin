@@ -2,16 +2,16 @@
 
 Dalilcoin has the infrastructure to support bidirectional payment
 channels (Poon Dryja 2016), namely, multisig and hash time lock
-constracts (htlc).  Details are below.
+contracts (htlc).  Details are below.
 
 ## Multisig
 
-Multisig addresses are p2sh addresses spendable by m signatures from n
-public keys.  For payment channels, only 2-of-2 multisig is used and
-these multisig addresses are created using `createchannel` (described
-below). General multisig addresses can be created by `createmultisig`
-or `addmultisig` (which adds the p2sh address and redeem script to the
-wallet).
+Multisig addresses are p2sh addresses spendable by m signatures
+corresponding to m-of-n public keys.  For payment channels, only
+2-of-2 multisig addresses are used and these multisig addresses are
+created using `createchannel` (described below). General multisig
+addresses can be created by `createmultisig` or `addmultisig` (which
+adds the p2sh address and redeem script to the wallet).
 
 To create a multisig address, we need the n pubkeys. The easiest way
 to obtain a pubkey is to use `getaddressinfo` for an address in the user's wallet.
@@ -20,19 +20,22 @@ use an address in each wallet:
 
 * User 1:
 
-```getaddressinfo DioyDNnmm42tf5H5u8UyEhSiAC6oEa6nbC
+```
+getaddressinfo DioyDNnmm42tf5H5u8UyEhSiAC6oEa6nbC
 {"address":"p2pkh","pubkey":"03ffcaf23fd3dafe8fa4af133d29c7abda46443330c5c8382379c2113e473524ba"}
 ```
 
 * User 2:
 
-```getaddressinfo DnesC5PG9R2gpfZLw7JjGrQK5jzN2vSELt
+```
+getaddressinfo DnesC5PG9R2gpfZLw7JjGrQK5jzN2vSELt
 {"address":"p2pkh","pubkey":"02d345d8ff566e74d4c83232d49b2376e653d43ffb4b245bd1f69ca60d850c5f53"}
 ```
 
 * User 3:
 
-```getaddressinfo DajzxEvV64gYzK29N4VsXZy9dFLNtKuwVh
+```
+getaddressinfo DajzxEvV64gYzK29N4VsXZy9dFLNtKuwVh
 {"address":"p2pkh","pubkey":"020f82abeff1195f22e1fea514be2b622a994fe65bfc05a31cc1c9344b8b9fdd91"}
 ```
 
@@ -44,7 +47,9 @@ sign Dalilcoin txs.)
 After obtaining the 3 pubkeys any node can create a 2-of-3 multisig
 address using the pubkeys. This is done as follows:
 
-```createmultisig 2 '["03ffcaf23fd3dafe8fa4af133d29c7abda46443330c5c8382379c2113e473524ba","02d345d8ff566e74d4c83232d49b2376e653d43ffb4b245bd1f69ca60d850c5f53","020f82abeff1195f22e1fea514be2b622a994fe65bfc05a31cc1c9344b8b9fdd91"]'
+```
+createmultisig 2 '["03ffcaf23fd3dafe8fa4af133d29c7abda46443330c5c8382379c2113e473524ba","02d345d8ff566e74d4c83232d49b2376e653d43ffb4b245bd1f69ca60d850c5f53","020f82abeff1195f22e1fea514be2b622a994fe65bfc05a31cc1c9344b8b9fdd91"]'
+
 P2sh address: dNLSodJo6SqSU6Bd3BxBE8PbP8z4Fq12Nv
 Redeem script: 522103ffcaf23fd3dafe8fa4af133d29c7abda46443330c5c8382379c2113e473524ba2102d345d8ff566e74d4c83232d49b2376e653d43ffb4b245bd1f69ca60d850c5f5321020f82abeff1195f22e1fea514be2b622a994fe65bfc05a31cc1c9344b8b9fdd9153ae
 ```
@@ -52,14 +57,16 @@ Redeem script: 522103ffcaf23fd3dafe8fa4af133d29c7abda46443330c5c8382379c2113e473
 After creating the p2sh address, we might import it into the wallet
 using `importp2sh` with the redeem script as follows:
 
-```importp2sh 522103ffcaf23fd3dafe8fa4af133d29c7abda46443330c5c8382379c2113e473524ba2102d345d8ff566e74d4c83232d49b2376e653d43ffb4b245bd1f69ca60d850c5f5321020f82abeff1195f22e1fea514be2b622a994fe65bfc05a31cc1c9344b8b9fdd9153ae
+```
+importp2sh 522103ffcaf23fd3dafe8fa4af133d29c7abda46443330c5c8382379c2113e473524ba2102d345d8ff566e74d4c83232d49b2376e653d43ffb4b245bd1f69ca60d850c5f5321020f82abeff1195f22e1fea514be2b622a994fe65bfc05a31cc1c9344b8b9fdd9153ae
 Imported p2sh address: dNLSodJo6SqSU6Bd3BxBE8PbP8z4Fq12Nv
 ```
 
 The two steps can be combined using `addmultisig`. If the address is imported
 into the wallet, the node can recover the redeem script from the address:
 
-```getaddressinfo dNLSodJo6SqSU6Bd3BxBE8PbP8z4Fq12Nv
+```
+getaddressinfo dNLSodJo6SqSU6Bd3BxBE8PbP8z4Fq12Nv
 {"address":"p2sh","script":"522103ffcaf23fd3dafe8fa4af133d29c7abda46443330c5c8382379c2113e473524ba2102d345d8ff566e74d4c83232d49b2376e653d43ffb4b245bd1f69ca60d850c5f5321020f82abeff1195f22e1fea514be2b622a994fe65bfc05a31cc1c9344b8b9fdd9153ae"}
 ```
 
@@ -73,7 +80,8 @@ After funding the address, if the address is in the wallet
 Here we explicitly give the ledger root for the Block 1296
 since the example asset has already been spent as of Block 1337.
 
-```printassets df3dd32739ae04f41fbaa95ef4d01b1b2796900c87b4abcc57c7085eb47614c0
+```
+printassets df3dd32739ae04f41fbaa95ef4d01b1b2796900c87b4abcc57c7085eb47614c0
 ...
 dNLSodJo6SqSU6Bd3BxBE8PbP8z4Fq12Nv:
 67ba36dc568d98df19e6054db2de7b2c4e658c34c7de69475a098005f2330d0a: (id ab48141c22e280f07d02f888c119962bdca43011838775a997228a04b0ecd6be) [1295] Currency 0.02 fraenks (2000000000 cants)
@@ -82,7 +90,8 @@ dNLSodJo6SqSU6Bd3BxBE8PbP8z4Fq12Nv:
 
 Suppose we then wish to spend this asset. We can create the tx spending it as follows:
 
-```createtx '[{"dNLSodJo6SqSU6Bd3BxBE8PbP8z4Fq12Nv":"ab48141c22e280f07d02f888c119962bdca43011838775a997228a04b0ecd6be"}]' '[{"addr":"Dkyz9Q8X9Dxba2HLtfi1GyzBGAoBEw4nmN","val":0.0199}]'
+```
+createtx '[{"dNLSodJo6SqSU6Bd3BxBE8PbP8z4Fq12Nv":"ab48141c22e280f07d02f888c119962bdca43011838775a997228a04b0ecd6be"}]' '[{"addr":"Dkyz9Q8X9Dxba2HLtfi1GyzBGAoBEw4nmN","val":0.0199}]'
 
 0b73c62d959082aac065f316276eea96f1a359435c45a2e010110784ef13c0470cceb05ce1268589183cac4bbd1451248065b7f695da85f91e2736ae994116dc96f2f372904437da3e00000000b0e3ec0704
 ```
@@ -96,7 +105,9 @@ script nor any of the privkeys are in the wallet. We can sign with the
 first privkey by giving *privkey1* and the redeem script explicitly to
 `signtx`.
 
-```signtx 0b73c62d959082aac065f316276eea96f1a359435c45a2e010110784ef13c0470cceb05ce1268589183cac4bbd1451248065b7f695da85f91e2736ae994116dc96f2f372904437da3e00000000b0e3ec0704 '["<privkey1>"]' '["522103ffcaf23fd3dafe8fa4af133d29c7abda46443330c5c8382379c2113e473524ba2102d345d8ff566e74d4c83232d49b2376e653d43ffb4b245bd1f69ca60d850c5f5321020f82abeff1195f22e1fea514be2b622a994fe65bfc05a31cc1c9344b8b9fdd9153ae"]'
+```
+signtx 0b73c62d959082aac065f316276eea96f1a359435c45a2e010110784ef13c0470cceb05ce1268589183cac4bbd1451248065b7f695da85f91e2736ae994116dc96f2f372904437da3e00000000b0e3ec0704 '["<privkey1>"]' '["522103ffcaf23fd3dafe8fa4af133d29c7abda46443330c5c8382379c2113e473524ba2102d345d8ff566e74d4c83232d49b2376e653d43ffb4b245bd1f69ca60d850c5f5321020f82abeff1195f22e1fea514be2b622a994fe65bfc05a31cc1c9344b8b9fdd9153ae"]'
+
 0b73c62d959082aac065f316276eea96f1a359435c45a2e010110784ef13c0470cceb05ce1268589183cac4bbd1451248065b7f695da85f91e2736ae994116dc96f2f372904437da3e00000000b0e3ec07b40605a87932c3f41eaf5fceed97a56cca4a11e20d681cf34a83c8496b7c3d7ef14b9ce97f27ef4e98e552c050bd9f7d0fff637e98f4d9f6b6cefabef2f10d37caa449f9a3729714fb73c4cf34add49003ff2b97ff73ba76ff8f49bf9ed833e5f1d5da8d129d09b338729c23f30a8fe8f3684d92ba430a9c5e14fb7fab6ee952472e5326f5cd23ed9a9f4afde7fea524b746b7cfd974c3c20cbf4e0d29f0a1e0d5efe367fc2a32bcffd2147daf14ab32f353f35bf9171ccd3178729a4b177fee1e79aa2b00
 Partially signed.
 ```
@@ -105,7 +116,9 @@ The partially signed tx can then be given to the controller of the third key
 who can complete the signature. The redeem script is already part of the
 partial signature and need not be given again.
 
-```signtx 0b73c62d959082aac065f316276eea96f1a359435c45a2e010110784ef13c0470cceb05ce1268589183cac4bbd1451248065b7f695da85f91e2736ae994116dc96f2f372904437da3e00000000b0e3ec07b40605a87932c3f41eaf5fceed97a56cca4a11e20d681cf34a83c8496b7c3d7ef14b9ce97f27ef4e98e552c050bd9f7d0fff637e98f4d9f6b6cefabef2f10d37caa449f9a3729714fb73c4cf34add49003ff2b97ff73ba76ff8f49bf9ed833e5f1d5da8d129d09b338729c23f30a8fe8f3684d92ba430a9c5e14fb7fab6ee952472e5326f5cd23ed9a9f4afde7fea524b746b7cfd974c3c20cbf4e0d29f0a1e0d5efe367fc2a32bcffd2147daf14ab32f353f35bf9171ccd3178729a4b177fee1e79aa2b00 '["<privkey3>"]' [] [] df3dd32739ae04f41fbaa95ef4d01b1b2796900c87b4abcc57c7085eb47614c0
+```
+signtx 0b73c62d959082aac065f316276eea96f1a359435c45a2e010110784ef13c0470cceb05ce1268589183cac4bbd1451248065b7f695da85f91e2736ae994116dc96f2f372904437da3e00000000b0e3ec07b40605a87932c3f41eaf5fceed97a56cca4a11e20d681cf34a83c8496b7c3d7ef14b9ce97f27ef4e98e552c050bd9f7d0fff637e98f4d9f6b6cefabef2f10d37caa449f9a3729714fb73c4cf34add49003ff2b97ff73ba76ff8f49bf9ed833e5f1d5da8d129d09b338729c23f30a8fe8f3684d92ba430a9c5e14fb7fab6ee952472e5326f5cd23ed9a9f4afde7fea524b746b7cfd974c3c20cbf4e0d29f0a1e0d5efe367fc2a32bcffd2147daf14ab32f353f35bf9171ccd3178729a4b177fee1e79aa2b00 '["<privkey3>"]' [] [] df3dd32739ae04f41fbaa95ef4d01b1b2796900c87b4abcc57c7085eb47614c0
+
 0b73c62d959082aac065f316276eea96f1a359435c45a2e010110784ef13c0470cceb05ce1268589183cac4bbd1451248065b7f695da85f91e2736ae994116dc96f2f372904437da3e00000000b0e3ec07b40605a87932c3f41eaf5fceed97a56cca4a11e20d681cf34a83c8496b7c3d7ef14b9ce97f27ef4e98e552c050bd9f7d0fff637e98f4d9f6b6cefabef2f10d37caa449f9a3729714fb73c41f14a0fba2e4cfca2cbc90a7e7ca6b4796773ab460dfea37593ba6ae77f741951f692e8c3bfc7a42e9220db31cd950aa6df21ae9925c9a31e77aab4ac11e76da5eb5c7b3b34547ce5e783bd3b452430efcaf5cfecfe9dafd3f26fd7a62cf94c7576b374a7426cce2c8718ecc2b3ca2cfa33549ea0e29707a51ecffadbaa54b1db94c99d4378fb46b7e2af59ffb9792dc1add3e67d30d0b33fc3a35a4c0878257bf8f9ff1abc8f0fe4b53f4bd52accacc4fcd6fe55f7034c7e0c9692e5dfcb97be4a9ae00
 Completely signed.
 ```
@@ -135,7 +148,8 @@ of 8 blocks.  In this case we explicitly give the secret
 secret must be 32 bytes given in hex. If the secret is omitted then a
 random 32 bytes will be generated and used.
 
-```createhtlc DioyDNnmm42tf5H5u8UyEhSiAC6oEa6nbC DnesC5PG9R2gpfZLw7JjGrQK5jzN2vSELt 8 relative 23fd3dafe8faffcaf4af133d29c7abda46443330c5c8382379c2113e473524ba
+```
+createhtlc DioyDNnmm42tf5H5u8UyEhSiAC6oEa6nbC DnesC5PG9R2gpfZLw7JjGrQK5jzN2vSELt 8 relative 23fd3dafe8faffcaf4af133d29c7abda46443330c5c8382379c2113e473524ba
 
 P2sh address: dSVykGFhdXaqnmqxLbB1bFoBh6J316v3tA
 Redeem script: 6382012088a824bfed797c96c9e08a8e88baa788db4efa88db4efaf30ca1f7fd326bae941e029daeff45cc8876a9149d36c2ee3c3c2764abf3c62aa9c6c78c588df750670408000000b27576a914c75e7e60fe39a3ce68865161a02a9645d07482ac6888ac
@@ -177,7 +191,8 @@ created at address dSVykGFhdXaqnmqxLbB1bFoBh6J316v3tA by a tx in Block
 the secret. For the sake of the example the output was spent to the
 same address, but leaving 0.001 as a tx fee.
 
-```createtx '[{"dSVykGFhdXaqnmqxLbB1bFoBh6J316v3tA":"1e2d960567df83faa8c4de1625eb121606586d5fbc42c9cf54c604646484a272"}]' '[{"addr":"dSVykGFhdXaqnmqxLbB1bFoBh6J316v3tA","val":0.009}]'
+```
+createtx '[{"dSVykGFhdXaqnmqxLbB1bFoBh6J316v3tA":"1e2d960567df83faa8c4de1625eb121606586d5fbc42c9cf54c604646484a272"}]' '[{"addr":"dSVykGFhdXaqnmqxLbB1bFoBh6J316v3tA","val":0.009}]'
 
 7be4639600eb8c509e51fda405a55755728b5eccf068b12c38fb1ed44725f6b6285997b030c06afbe2154a7ea632262023231495b3473e6609b0ce08e519d54f5a507a5525b7e8c50c00000000a8214d0700
 ```
@@ -187,14 +202,18 @@ the private key for the second address DnesC5PG9R2gpfZLw7JjGrQK5jzN2vSELt.
 This corresponds to using the ELSE branch. Signing was actually
 successful immediately (without waiting the 8 blocks):
 
-```signtx 7be4639600eb8c509e51fda405a55755728b5eccf068b12c38fb1ed44725f6b6285997b030c06afbe2154a7ea632262023231495b3473e6609b0ce08e519d54f5a507a5525b7e8c50c00000000a8214d0700 '["<privkey2>"]' '["6382012088a824bfed797c96c9e08a8e88baa788db4efa88db4efaf30ca1f7fd326bae941e029daeff45cc8876a9149d36c2ee3c3c2764abf3c62aa9c6c78c588df750670408000000b27576a914c75e7e60fe39a3ce68865161a02a9645d07482ac6888ac"]'
+```
+signtx 7be4639600eb8c509e51fda405a55755728b5eccf068b12c38fb1ed44725f6b6285997b030c06afbe2154a7ea632262023231495b3473e6609b0ce08e519d54f5a507a5525b7e8c50c00000000a8214d0700 '["<privkey2>"]' '["6382012088a824bfed797c96c9e08a8e88baa788db4efa88db4efaf30ca1f7fd326bae941e029daeff45cc8876a9149d36c2ee3c3c2764abf3c62aa9c6c78c588df750670408000000b27576a914c75e7e60fe39a3ce68865161a02a9645d07482ac6888ac"]'
+
 7be4639600eb8c509e51fda405a55755728b5eccf068b12c38fb1ed44725f6b6285997b030c06afbe2154a7ea632262023231495b3473e6609b0ce08e519d54f5a507a5525b7e8c50c00000000a8214d07b00605f8df637997338fdb944f54a77fabef49d6af789165eada91a19a1d7afef050a695d72fe5bad6b0e5aa495b97675e5b27e38c092ba6fce938f7d3fde85926964f3e384ac9d5215e671c52e0f4a2d8ff5b754b973a729932a96f1e69d7fc54ea3ff72f25b935ba7dcea61b1666f8752a40a665c70a0e0812316a92bfdbe7e56b393978c58e11eb3e8d78bb53fd88b73bd53f9f61e8fbfd65ae754dd9a3c0ceaeff17658ed86e6a8a9d6d0a77cf93e749b2abe71b5799daf871c6581bdf877a962042800001caae6b3735c5e35efd82f59f73b473b486a38605add27251e87405b3468b9815
 Completely signed.
 ```
 
 However `validatetx` indicated that the tx is not yet valid:
 
-```validatetx 7be4639600eb8c509e51fda405a55755728b5eccf068b12c38fb1ed44725f6b6285997b030c06afbe2154a7ea632262023231495b3473e6609b0ce08e519d54f5a507a5525b7e8c50c00000000a8214d07b00605f8df637997338fdb944f54a77fabef49d6af789165eada91a19a1d7afef050a695d72fe5bad6b0e5aa495b97675e5b27e38c092ba6fce938f7d3fde85926964f3e384ac9d5215e671c52e0f4a2d8ff5b754b973a729932a96f1e69d7fc54ea3ff72f25b935ba7dcea61b1666f8752a40a665c70a0e0812316a92bfdbe7e56b393978c58e11eb3e8d78bb53fd88b73bd53f9f61e8fbfd65ae754dd9a3c0ceaeff17658ed86e6a8a9d6d0a77cf93e749b2abe71b5799daf871c6581bdf877a962042800001caae6b3735c5e35efd82f59f73b473b486a38605add27251e87405b3468b9815
+```
+validatetx 7be4639600eb8c509e51fda405a55755728b5eccf068b12c38fb1ed44725f6b6285997b030c06afbe2154a7ea632262023231495b3473e6609b0ce08e519d54f5a507a5525b7e8c50c00000000a8214d07b00605f8df637997338fdb944f54a77fabef49d6af789165eada91a19a1d7afef050a695d72fe5bad6b0e5aa495b97675e5b27e38c092ba6fce938f7d3fde85926964f3e384ac9d5215e671c52e0f4a2d8ff5b754b973a729932a96f1e69d7fc54ea3ff72f25b935ba7dcea61b1666f8752a40a665c70a0e0812316a92bfdbe7e56b393978c58e11eb3e8d78bb53fd88b73bd53f9f61e8fbfd65ae754dd9a3c0ceaeff17658ed86e6a8a9d6d0a77cf93e749b2abe71b5799daf871c6581bdf877a962042800001caae6b3735c5e35efd82f59f73b473b486a38605add27251e87405b3468b9815
+
 Tx is not valid until block height 1328
 Tx is valid and has id a884a4b27eba9d05098f103d52cd14db53a659f168652778257a61c9590f2339
 Tx is supported by the current ledger and has fee 0.001 fraenks (above minrelayfee 0.0000312 fraenks)
@@ -208,7 +227,9 @@ the secret. In this case the secret is given in a json array of secrets after
 the json array of redeem scripts. Currently there is no wallet support for
 storing secrets and so these must be given to `signtx` explicitly.
 
-```signtx 7be4639600eb8c509e51fda405a55755728b5eccf068b12c38fb1ed44725f6b6285997b030c06afbe2154a7ea632262023231495b3473e6609b0ce08e519d54f5a507a5525b7e8c50c00000000a8214d0700 '["<privkey1>"]' '["6382012088a824bfed797c96c9e08a8e88baa788db4efa88db4efaf30ca1f7fd326bae941e029daeff45cc8876a9149d36c2ee3c3c2764abf3c62aa9c6c78c588df750670408000000b27576a914c75e7e60fe39a3ce68865161a02a9645d07482ac6888ac"]' '["23fd3dafe8faffcaf4af133d29c7abda46443330c5c8382379c2113e473524ba"]'
+```
+signtx 7be4639600eb8c509e51fda405a55755728b5eccf068b12c38fb1ed44725f6b6285997b030c06afbe2154a7ea632262023231495b3473e6609b0ce08e519d54f5a507a5525b7e8c50c00000000a8214d0700 '["<privkey1>"]' '["6382012088a824bfed797c96c9e08a8e88baa788db4efa88db4efaf30ca1f7fd326bae941e029daeff45cc8876a9149d36c2ee3c3c2764abf3c62aa9c6c78c588df750670408000000b27576a914c75e7e60fe39a3ce68865161a02a9645d07482ac6888ac"]' '["23fd3dafe8faffcaf4af133d29c7abda46443330c5c8382379c2113e473524ba"]'
+
 7be4639600eb8c509e51fda405a55755728b5eccf068b12c38fb1ed44725f6b6285997b030c06afbe2154a7ea632262023231495b3473e6609b0ce08e519d54f5a507a5525b7e8c50c00000000a8214d07b00605b89123e4d02bd91aeccbfa7c6aa9222ba24c3bbe7dd1f0d7ff0b75ecd87076fc7a777267ecf66761be72d12faf5afee140f3cd3f8b055df63a79ab3f9f3f3c2af1bf75f425f1fe1d1a72e07fe5f27f4ed7eeff31e9d7137ba63cbe5abb51a2336116478e73645ee1117d1ead495237c891fd7bbe46afffbf72faaf27f64c797cb576a34467c22c8e1ce7c8bcc223fa3c5a93a4eec04ccb8e151c102462d4247fb7cfcbd77272f08a1d23d67d1af176a7fa116f77aa7f3ec3d0f7fbcb5ceb9ab247819d5dff2fca1cb1ddd4143bdb14ee9e27cf936457cf37ae32b5f1e38cb136be0ff52c4184000102945dd76e6a8ac7bdfa05eb3fe768e7680d470d0b5aa5e5a2d0e90a668d16312b00
 Completely signed.
 ```
@@ -257,7 +278,9 @@ with more than 0.4 fraenks.
 A payment channel with Alice controling 0.6 fraenks
 and Bob controlling 0.4 fraenks can be initialized as follows:
 
-```createchannel 031e722e4d5829ca85c2c916863df0b104c21d586bb2cf8a28d0f7060fc5978266 03c04d0d26c5a3dd58f3ee09a14025d8b1c9fdd152346d3427add82500204c66fa 3389718876e1dcb69664327195d0e475a681d9a30925a76de9b044b974148056 aa9d9467022fd5521564948e91e6a90e3c1bcb57f00ed29ced747161df29d190 0.6 0.4
+```
+createchannel 031e722e4d5829ca85c2c916863df0b104c21d586bb2cf8a28d0f7060fc5978266 03c04d0d26c5a3dd58f3ee09a14025d8b1c9fdd152346d3427add82500204c66fa 3389718876e1dcb69664327195d0e475a681d9a30925a76de9b044b974148056 aa9d9467022fd5521564948e91e6a90e3c1bcb57f00ed29ced747161df29d190 0.6 0.4
+
 Funding tx: 710d93f177bd471f31950c75abd9f510c7bf95449e498c43b40be7b6b5249389ab8426af330dcc1e4d28396d4b8725caa5a300b4ca565bc83128b6574dd967ea539214e5198adf51be6a27e599c04bb5540519a563a479aa03cfc6f215bc8334673b5d5cd8774a34a47142d8ac1c0b8814bf8206a17bda36b3310dd14e0200004003fe1116c038216c568e05448a5f4183d03d6d9bd9988668270100002001ea051220ae6132feaef7e823a692a16e35bb1ee2f8b792c800002080a3c19b0b98adb69063506caf9ab2cfd4a72429ca3314bfa37c000010e011a60e0404
 Fund 2-of-2 address: dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH
 Redeem script: 5221031e722e4d5829ca85c2c916863df0b104c21d586bb2cf8a28d0f7060fc59782662103c04d0d26c5a3dd58f3ee09a14025d8b1c9fdd152346d3427add82500204c66fa52ae
@@ -278,12 +301,14 @@ Alice first creates the htlc: `createhtlc <Bob> <Alice> 28 relative`.
 This address will be spendable by Bob if Bob has the secret
 and will be spendable by Alice 28 blocks after confirmation.
 
-```createhtlc Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur 28 relative
+```
+createhtlc Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur 28 relative
 
 P2sh address: das7ySGhRBNGSVsAepmAuWV6gGkAUfUG5V
 Redeem script: 6382012088a8248ad7d92719348ef501cd5aedd92067d1d92067d1ca6ea3c1fbb4f62a60c058c380e7563f8876a9145b6d21c7a0d85e35659fa94f49529467287e47f967041c000000b27576a914ae6132feaef7e823a692a16e35bb1ee2f8b792c86888ac
 Secret: dd522ff9de8d2e7ae0ec1b97ce0bd3d2052e24e927263c8bd157be1c20190cc5
-Hash of secret: 8ad7d92719348ef501cd5aedd92067d1ca6ea3c1fbb4f62a60c058c380e7563f```
+Hash of secret: 8ad7d92719348ef501cd5aedd92067d1ca6ea3c1fbb4f62a60c058c380e7563f
+```
 
 Here the secret is Alice's first secret.
 
@@ -306,7 +331,8 @@ assets) and always have commitment txs spend the 2 assets and create 2
 new assets at the same address (ensuring that the commitment txs will
 never result in more than 32 assets being held at an address).
 
-```createtx '[{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"50032a7327ff2aff36a020ba1acaec358cad3ac1f3659f88818aee191623369d"},{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8"}]' '[{"addr":"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH","val":0.5999,"lockheight":0,"lockaddr":"das7ySGhRBNGSVsAepmAuWV6gGkAUfUG5V"},{"addr":"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH","val":0.3999,"lockheight":0,"lockaddr":"Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61"}]'
+```
+createtx '[{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"50032a7327ff2aff36a020ba1acaec358cad3ac1f3659f88818aee191623369d"},{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8"}]' '[{"addr":"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH","val":0.5999,"lockheight":0,"lockaddr":"das7ySGhRBNGSVsAepmAuWV6gGkAUfUG5V"},{"addr":"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH","val":0.3999,"lockheight":0,"lockaddr":"Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61"}]'
 
 e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd5099e2ffb440c5474cfb018b1e91c2784cdcab18048f12b6810baa76d331bd310ed242da0b30c0fb405918711b7bf2c36ccee2407d728acc175eddffee892417039be7142d8ac1c0b8814bf8206a17bda36b3310dd14ebede8316a0384efac818a6f68366c17e27560a020a00000000000000000000000df7aec180e384b059391610297e050d42f7b46d66631aa29d6cab2de41814dbaba6ec33f529498af20cc5ef281f0000000000000000000000129e2cf30101
 ```
@@ -314,7 +340,9 @@ e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd509
 Alpha sends this unsigned commitment tx along with the hash of her secret to Bob.
 Bob can verify it is correct using the command `verifycommitmenttx`
 
-```verifycommitmenttx DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH 50032a7327ff2aff36a020ba1acaec358cad3ac1f3659f88818aee191623369d b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8 0.5999 0.3999 8ad7d92719348ef501cd5aedd92067d1ca6ea3c1fbb4f62a60c058c380e7563f e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd5099e2ffb440c5474cfb018b1e91c2784cdcab18048f12b6810baa76d331bd310ed242da0b30c0fb405918711b7bf2c36ccee2407d728acc175eddffee892417039be7142d8ac1c0b8814bf8206a17bda36b3310dd14ebede8316a0384efac818a6f68366c17e27560a020a00000000000000000000000df7aec180e384b059391610297e050d42f7b46d66631aa29d6cab2de41814dbaba6ec33f529498af20cc5ef281f0000000000000000000000129e2cf30101
+```
+verifycommitmenttx DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH 50032a7327ff2aff36a020ba1acaec358cad3ac1f3659f88818aee191623369d b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8 0.5999 0.3999 8ad7d92719348ef501cd5aedd92067d1ca6ea3c1fbb4f62a60c058c380e7563f e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd5099e2ffb440c5474cfb018b1e91c2784cdcab18048f12b6810baa76d331bd310ed242da0b30c0fb405918711b7bf2c36ccee2407d728acc175eddffee892417039be7142d8ac1c0b8814bf8206a17bda36b3310dd14ebede8316a0384efac818a6f68366c17e27560a020a00000000000000000000000df7aec180e384b059391610297e050d42f7b46d66631aa29d6cab2de41814dbaba6ec33f529498af20cc5ef281f0000000000000000000000129e2cf30101
+
 Valid commitment tx for DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur
 ```
 
@@ -323,7 +351,9 @@ Bob cannot use `signtx` for this purpose since the assets being spent are not in
 However, the command `simplesigntx` can be used to sign it, since it makes certain simplifying
 assumptions about assets that are not in the ledger.
 
-```simplesigntx e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd5099e2ffb440c5474cfb018b1e91c2784cdcab18048f12b6810baa76d331bd310ed242da0b30c0fb405918711b7bf2c36ccee2407d728acc175eddffee892417039be7142d8ac1c0b8814bf8206a17bda36b3310dd14ebede8316a0384efac818a6f68366c17e27560a020a00000000000000000000000df7aec180e384b059391610297e050d42f7b46d66631aa29d6cab2de41814dbaba6ec33f529498af20cc5ef281f0000000000000000000000129e2cf30101 '["<BobPrivKey>"]' '["5221031e722e4d5829ca85c2c916863df0b104c21d586bb2cf8a28d0f7060fc59782662103c04d0d26c5a3dd58f3ee09a14025d8b1c9fdd152346d3427add82500204c66fa52ae"]'
+```
+simplesigntx e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd5099e2ffb440c5474cfb018b1e91c2784cdcab18048f12b6810baa76d331bd310ed242da0b30c0fb405918711b7bf2c36ccee2407d728acc175eddffee892417039be7142d8ac1c0b8814bf8206a17bda36b3310dd14ebede8316a0384efac818a6f68366c17e27560a020a00000000000000000000000df7aec180e384b059391610297e050d42f7b46d66631aa29d6cab2de41814dbaba6ec33f529498af20cc5ef281f0000000000000000000000129e2cf30101 '["<BobPrivKey>"]' '["5221031e722e4d5829ca85c2c916863df0b104c21d586bb2cf8a28d0f7060fc59782662103c04d0d26c5a3dd58f3ee09a14025d8b1c9fdd152346d3427add82500204c66fa52ae"]'
+
 e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd5099e2ffb440c5474cfb018b1e91c2784cdcab18048f12b6810baa76d331bd310ed242da0b30c0fb405918711b7bf2c36ccee2407d728acc175eddffee892417039be7142d8ac1c0b8814bf8206a17bda36b3310dd14ebede8316a0384efac818a6f68366c17e27560a020a00000000000000000000000df7aec180e384b059391610297e050d42f7b46d66631aa29d6cab2de41814dbaba6ec33f529498af20cc5ef281f0000000000000000000000129e2cf301ad41016a74ca54a3eca9693b0ebdcff9b07aca5bd9f61f9b9cbb4ff14eaf17064bb0a5e4f17f0f4a6cf853e57ac52c35024f18b3f341f1254b0bc4badc26da8747eb57b598d1b3c7def0491e951a72a047b92e9b624da9bcb0f0e4160df7841f9ba0f08e58d7ca7eae1825f4fb061f16bf2cd86cc881c09b3634597c7477acf3dd270c0db424f6d8c9fb47974ab32dcd93adb197040892a959fd525d1d00
 ```
 
@@ -337,7 +367,8 @@ The procedure is then repeated interchanging the roles of Alice and Bob.
 
 Bob creates an htlc and initial commitment tx.
 
-```createhtlc DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 28 relative
+```
+createhtlc DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 28 relative
 
 P2sh address: dNf9xoeUQxBGwuEohHuvCvjPycjB6k3jgf
 Redeem script: 6382012088a824f21a8a0ac0fb5939be60e1abc3bcc81cc3bcc81c3149e57c6a1f3c8010522abe79dbd7808876a914ae6132feaef7e823a692a16e35bb1ee2f8b792c867041c000000b27576a9145b6d21c7a0d85e35659fa94f49529467287e47f96888ac
@@ -356,7 +387,8 @@ Once both parties have partially signed commitment txs, they both sign the fundi
 and send it to be confirmed. In this example, the funding tx was confirmed
 at height 1335, creating two fund assets.
 
-```printassets
+```
+printassets
 ...
 dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH:
 29e3d2d1113887fefce150d9eecdc885fbb5ffe78f99e9bca3802b8d89fefd19: (id b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8) [1335] Currency 0.4 fraenks (40000000000 cants)
@@ -374,6 +406,9 @@ of the channel is:
 * Alice: 0.5999
 
 * Bob: 0.3999
+
+Note: If only one party is funding the channel, then assume that party
+is Alice and use the command `createchannelonefunder`.
 
 ## Updating a payment channel
 
@@ -399,7 +434,8 @@ and gives back to Alice.
 
 First Alice creates a new htlc with a new secret.
 
-```createhtlc Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur 28 relative
+```
+createhtlc Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur 28 relative
 
 P2sh address: dWuXU9sF4FsmLMvEhWE5gqsDbmeFFCJL4y
 Redeem script: 6382012088a8241ef19d58acbcbc0e20a18b6c60801413608014137992334b7a9d7baa6f829483b481fdd78876a9145b6d21c7a0d85e35659fa94f49529467287e47f967041c000000b27576a914ae6132feaef7e823a692a16e35bb1ee2f8b792c86888ac
@@ -411,7 +447,8 @@ Alice creates a new commitment tx which would create two new assets
 held at the fund address with 0.2999 controlled by Alice's htlc
 address and 0.6999 controlled by Bob's p2pkh address.
 
-```createtx '[{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"50032a7327ff2aff36a020ba1acaec358cad3ac1f3659f88818aee191623369d"},{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8"}]' '[{"addr":"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH","val":0.2999,"lockheight":0,"lockaddr":"dWuXU9sF4FsmLMvEhWE5gqsDbmeFFCJL4y"},{"addr":"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH","val":0.6999,"lockheight":0,"lockaddr":"Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61"}]'
+```
+createtx '[{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"50032a7327ff2aff36a020ba1acaec358cad3ac1f3659f88818aee191623369d"},{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8"}]' '[{"addr":"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH","val":0.2999,"lockheight":0,"lockaddr":"dWuXU9sF4FsmLMvEhWE5gqsDbmeFFCJL4y"},{"addr":"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH","val":0.6999,"lockheight":0,"lockaddr":"Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61"}]'
 
 e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd5099e2ffb440c5474cfb018b1e91c2784cdcab18048f12b6810baa76d331bd310ed242da0b30c0fb405918711b7bf2c36ccee2407d728acc175eddffee892417039be7142d8ac1c0b8814bf8206a17bda36b3310dd14efe1b9d95502aaa91ab986e436885eebe889af40b09000000000000000000000006fb8b1580e384b059391610297e050d42f7b46d66631aa29d6cab2de41814dbaba6ec33f529498af20cc5ef281f00000000000000000000002096744b0101
 ```
@@ -419,7 +456,9 @@ e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd509
 Alice passes this unsigned tx to Bob and the hash of the new
 secret. Bob verifies the commitment tx:
 
-```verifycommitmenttx DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH 50032a7327ff2aff36a020ba1acaec358cad3ac1f3659f88818aee191623369d b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8 0.2999 0.6999 1ef19d58acbcbc0e20a18b6c608014137992334b7a9d7baa6f829483b481fdd7 e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd5099e2ffb440c5474cfb018b1e91c2784cdcab18048f12b6810baa76d331bd310ed242da0b30c0fb405918711b7bf2c36ccee2407d728acc175eddffee892417039be7142d8ac1c0b8814bf8206a17bda36b3310dd14efe1b9d95502aaa91ab986e436885eebe889af40b09000000000000000000000006fb8b1580e384b059391610297e050d42f7b46d66631aa29d6cab2de41814dbaba6ec33f529498af20cc5ef281f00000000000000000000002096744b0101
+```
+verifycommitmenttx DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH 50032a7327ff2aff36a020ba1acaec358cad3ac1f3659f88818aee191623369d b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8 0.2999 0.6999 1ef19d58acbcbc0e20a18b6c608014137992334b7a9d7baa6f829483b481fdd7 e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd5099e2ffb440c5474cfb018b1e91c2784cdcab18048f12b6810baa76d331bd310ed242da0b30c0fb405918711b7bf2c36ccee2407d728acc175eddffee892417039be7142d8ac1c0b8814bf8206a17bda36b3310dd14efe1b9d95502aaa91ab986e436885eebe889af40b09000000000000000000000006fb8b1580e384b059391610297e050d42f7b46d66631aa29d6cab2de41814dbaba6ec33f529498af20cc5ef281f00000000000000000000002096744b0101
+
 Valid commitment tx for DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur
 ```
 
@@ -429,7 +468,8 @@ Alice.  Bob can either use `simplesigntx` or `signtx` for this.
 2. Bob creates a new commitment tx which is given to Alice, Alice
 signs and gives back to Bob.
 
-```createhtlc DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 28 relative
+```
+createhtlc DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 28 relative
 
 P2sh address: dM7FUJ6XcYmdTND3gBsQ847CkUAQ6FTSbn
 Redeem script: 6382012088a824ba42fcfdcaf007c0c17f485fd5f1879fd5f1879f1bdc16264fd1f04a0a495454c43daa728876a914ae6132feaef7e823a692a16e35bb1ee2f8b792c867041c000000b27576a9145b6d21c7a0d85e35659fa94f49529467287e47f96888ac
@@ -441,7 +481,8 @@ Bob creates a new commitment tx which would create two new assets held
 at the fund address with 0.2999 controlled by Alice's p2pkh address
 and 0.6999 controlled by Bob's new htlc address.
 
-```createtx '[{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"50032a7327ff2aff36a020ba1acaec358cad3ac1f3659f88818aee191623369d"},{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8"}]' '[{"addr":"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH","val":0.2999,"lockheight":0,"lockaddr":"DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur"},{"addr":"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH","val":0.6999,"lockheight":0,"lockaddr":"dM7FUJ6XcYmdTND3gBsQ847CkUAQ6FTSbn"}]'
+```
+createtx '[{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"50032a7327ff2aff36a020ba1acaec358cad3ac1f3659f88818aee191623369d"},{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8"}]' '[{"addr":"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH","val":0.2999,"lockheight":0,"lockaddr":"DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur"},{"addr":"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH","val":0.6999,"lockheight":0,"lockaddr":"dM7FUJ6XcYmdTND3gBsQ847CkUAQ6FTSbn"}]'
 
 e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd5099e2ffb440c5474cfb018b1e91c2784cdcab18048f12b6810baa76d331bd310ed242da0b30c0fb405918711b7bf2c36ccee2407d728acc175eddffee892417039be7142d8ac1c0b8814bf8206a17bda36b3310dd14ee61a26e3ef7a8f3e622a19ea56b3eb218e7f2b890c000000000000000000000006fb8b1580e384b059391610297e050d42f7b46d66631aa29d9cea4a17e769fb313c74f4bab2d6ff516fb7cc4f0d00000000000000000000002096744b0101
 ```
@@ -449,7 +490,8 @@ e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd509
 Bob passes this new unsigned commitment tx along with the hash of the new secret to 
 Alice. Alice verifies the new commitment:
 
-```verifycommitmenttx DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH 50032a7327ff2aff36a020ba1acaec358cad3ac1f3659f88818aee191623369d b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8 0.2999 0.6999 ba42fcfdcaf007c0c17f485fd5f1879f1bdc16264fd1f04a0a495454c43daa72 e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd5099e2ffb440c5474cfb018b1e91c2784cdcab18048f12b6810baa76d331bd310ed242da0b30c0fb405918711b7bf2c36ccee2407d728acc175eddffee892417039be7142d8ac1c0b8814bf8206a17bda36b3310dd14ee61a26e3ef7a8f3e622a19ea56b3eb218e7f2b890c000000000000000000000006fb8b1580e384b059391610297e050d42f7b46d66631aa29d9cea4a17e769fb313c74f4bab2d6ff516fb7cc4f0d00000000000000000000002096744b0101
+```
+verifycommitmenttx DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH 50032a7327ff2aff36a020ba1acaec358cad3ac1f3659f88818aee191623369d b480ce323cd016441e46dcfeb2d830bb931c5ca3b006d7b57ffba34b06c1e5f8 0.2999 0.6999 ba42fcfdcaf007c0c17f485fd5f1879f1bdc16264fd1f04a0a495454c43daa72 e384b059391610297e050d42f7b46d66631aa29d841a50993bf957f9b70105d1d55066af616cd5099e2ffb440c5474cfb018b1e91c2784cdcab18048f12b6810baa76d331bd310ed242da0b30c0fb405918711b7bf2c36ccee2407d728acc175eddffee892417039be7142d8ac1c0b8814bf8206a17bda36b3310dd14ee61a26e3ef7a8f3e622a19ea56b3eb218e7f2b890c000000000000000000000006fb8b1580e384b059391610297e050d42f7b46d66631aa29d9cea4a17e769fb313c74f4bab2d6ff516fb7cc4f0d00000000000000000000002096744b0101
 
 Valid commitment tx for Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61
 ```
@@ -463,7 +505,8 @@ Specifically Alice gives Bob the secret
 dd522ff9de8d2e7ae0ec1b97ce0bd3d2052e24e927263c8bd157be1c20190cc5.
 Bob can verify this is the secret easily as follows:
 
-```hashsecret dd522ff9de8d2e7ae0ec1b97ce0bd3d2052e24e927263c8bd157be1c20190cc5
+```
+hashsecret dd522ff9de8d2e7ae0ec1b97ce0bd3d2052e24e927263c8bd157be1c20190cc5
 
 8ad7d92719348ef501cd5aedd92067d1ca6ea3c1fbb4f62a60c058c380e7563f
 ```
@@ -477,7 +520,8 @@ the previous commitment tx.
 Specifically, Bob sends Alice 682ce3627c72a6ddd8cc9e38b8e0c935bd7727ad3c6bd601f275ccfb198dc797
 which she verifies:
 
-```hashsecret 682ce3627c72a6ddd8cc9e38b8e0c935bd7727ad3c6bd601f275ccfb198dc797
+```
+hashsecret 682ce3627c72a6ddd8cc9e38b8e0c935bd7727ad3c6bd601f275ccfb198dc797
 
 f21a8a0ac0fb5939be60e1abc3bcc81c3149e57c6a1f3c8010522abe79dbd780
 ```
@@ -507,6 +551,10 @@ process (implementing a "Layer 2" over Dalilcoin) would call
 these commands and manage payment channels. In principle this
 "Layer 2" could also combine payment channels into a lightning
 network like the one currently active on the Bitcoin network (Poon Dryja 2016).
+
+Many of the commands above can be given the keyword `json` as a last
+argument and the output will be in json format.  A second process
+could call the commands with this keyword when appropriate.
 
 ## References
 
