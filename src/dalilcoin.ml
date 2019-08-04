@@ -3351,7 +3351,7 @@ let initialize_commands () =
 	    Printf.fprintf oc "\n";
 	  end
       | _ -> raise BadCommandForm);
-  ac "addmultisigaddress" "addmultisigaddress <m> <jsonarrayofpubkeys>" "Create an m-of-n script and address and add it to the wallet"
+  ac "addmultisig" "addmultisig <m> <jsonarrayofpubkeys>" "Create an m-of-n script and address and add it to the wallet"
     (fun oc al ->
       match al with
       | [ms;pubkeyss] ->
