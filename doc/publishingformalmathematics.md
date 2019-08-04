@@ -95,7 +95,8 @@ local name and a global type for the primitive. In the empty theory,
 no primitive constant is well-typed. In a published theory only
 finitely many primitive constants will be well-typed.  Definitions
 give abbreviations for terms written after the definition and axioms
-declare that certain propositions are proven by in theory in advance.
+declare that certain propositions are proven by in the theory in
+advance.
 
 #### Items for a signature file include:
 
@@ -114,8 +115,8 @@ declare that certain propositions are proven by in theory in advance.
 An Include item indicates that the signature with the given id should
 be included before checking the rest of the signature, along with any
 signatures included by that signature. Likewise, when this new
-signature is included all included signatures will be exported. The [
-- ] delimited list of strings give local names to the objects imported
+signature is included all included signatures will be exported. The 
+bracket delimited list of strings give local names to the objects imported
 and known propositions imported.
 
 Base items are used to give local names to base types of the theory,
@@ -192,14 +193,15 @@ terms.
 NewRights indicates conditions under which future documents can use
 the object (as an opaque Param import) or the proposition (as a Known
 import). If 0 fraenks are indicated, then the object or proposition
-will be free for other to use, or even to include in a signature.  If
-a positive number of fraenks are indicated, then rights need to be
+will be free for other to use, or even to include in a signature
+(effectively making them freely available to everyone forever).  If a
+positive number of fraenks are indicated, then rights need to be
 purchased (by paying to the given *payaddr*) to use the object or
 proposition.  Those rights can be purchased in advance (creating
 *rights* assets) or purchased on-the-fly by the tx that publishes the
 document.  If "None" is given, then no one can use the object or
-proposition without redefining the object or reproving the
-proposition.
+proposition without redefining the object or reproving the proposition
+in each document where it is needed.
 
 By default, the new owner of each new object or new proposition will
 be the publisher address of the draft. In addition, by default, no
@@ -211,7 +213,7 @@ propositions will be given owners and suggest adding NewOwner and
 NewRights items for these.
 
 ```
-readdraft *draftfile*
+readdraft <draftfile>
 ```
 
 Ownership assets can be inputs and outputs of txs and so the rights
@@ -221,10 +223,19 @@ be transferred by such txs.
 If a conjecture is declared in a document, a Bounty item can be given.
 This bounty will be funded by the tx that publishes the document.
 
-* Bounty *string* *fraenks*
+* Bounty *string* *fraenks* NoTimeout
+
+* Bounty *string* *fraenks* *lockheight* *payaddr*
 
 Bounties can also be added to proposition addresses later in order to
 encourage work on resolving the conjecture.
+Before the lock height (if one is given), the only way a bounty asset
+can be spent (resulting in a currency asset) is by the owner of the
+term address as either a proposition (meaning the conjecture was proven)
+or as a negated proposition (meaning the negation of the conjecture was proven).
+If a lock height is given, then after the block height passes, the controller
+of the given address has the option of reclaiming the bounty by spending
+it to a currency asset (without needing to resolve the conjecture).
 
 ### Committing to a draft
 
@@ -320,9 +331,10 @@ This is the type of propositions.
 
 This is the usual arrow type from a domain type to a codomain type.
 
-* TpAll A *type*
+* TpAll *string* *type*
 
-This forms the polymorphic type by binding the type variable A.
+This forms the polymorphic type by binding the type variable
+named by the string.
 
 * *string*
 
@@ -378,8 +390,9 @@ give more readable names to the primitives.
 
 * *string*
 
-Here the string is either an typed object named already (either as a
-Let, Param or as a definition) or is the name of a local variable.
+Here the string is either an typed object named already (imported from
+a signature or declared using Let, Param or Def) or is the name of a
+local variable.
 
 ### Proofs
 
