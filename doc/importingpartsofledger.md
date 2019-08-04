@@ -139,3 +139,17 @@ Or a file for a small subsubtree can be generated
 The command `getledgerroot` or `getinfo` can be used to determine the ledger root
 of the most recent validated block.
 
+## Verifying the full ledger
+
+The command `verifyfullledger` can be used to check if the node has
+the full ledger (using the current ledger root as the default if no
+explicit root is given). If the node has the full ledger, the command
+may take more than an hour to complete checking. Otherwise, it will
+report the first missing ctree element, hcons element or asset.  In
+case something is missing, it may also indicate the location of the
+subtree and subsubtree for the missing item. In this case a user could
+fill in the missing data by importing the subtree or subsubtree as
+above. Alternatively the command `requestfullledger` can be used to
+request missing items from peers. This will usually run in the
+background for an indeterminately long time, but in principle should
+eventually fill in all missing items.
