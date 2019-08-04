@@ -1,7 +1,7 @@
 # Payment Channels
 
 Dalilcoin has the infrastructure to support bidirectional payment
-channels (Poon Dryja 2016), namely, multisig and hash time lock
+channels (Poon Dryja 2016), namely, multisig and hashed timelock
 contracts (htlc).  Details are below.
 
 ## Multisig
@@ -117,30 +117,30 @@ who can complete the signature. The redeem script is already part of the
 partial signature and need not be given again.
 
 ```
-signtx 0b73c62d959082aac065f316276eea96f1a359435c45a2e010110784ef13c0470cceb05ce1268589183cac4bbd1451248065b7f695da85f91e2736ae994116dc96f2f372904437da3e00000000b0e3ec07b40605a87932c3f41eaf5fceed97a56cca4a11e20d681cf34a83c8496b7c3d7ef14b9ce97f27ef4e98e552c050bd9f7d0fff637e98f4d9f6b6cefabef2f10d37caa449f9a3729714fb73c4cf34add49003ff2b97ff73ba76ff8f49bf9ed833e5f1d5da8d129d09b338729c23f30a8fe8f3684d92ba430a9c5e14fb7fab6ee952472e5326f5cd23ed9a9f4afde7fea524b746b7cfd974c3c20cbf4e0d29f0a1e0d5efe367fc2a32bcffd2147daf14ab32f353f35bf9171ccd3178729a4b177fee1e79aa2b00 '["<privkey3>"]' [] [] df3dd32739ae04f41fbaa95ef4d01b1b2796900c87b4abcc57c7085eb47614c0
+signtx 0b73c62d959082aac065f316276eea96f1a359435c45a2e010110784ef13c0470cceb05ce1268589183cac4bbd1451248065b7f695da85f91e2736ae994116dc96f2f372904437da3e00000000b0e3ec07b40605a87932c3f41eaf5fceed97a56cca4a11e20d681cf34a83c8496b7c3d7ef14b9ce97f27ef4e98e552c050bd9f7d0fff637e98f4d9f6b6cefabef2f10d37caa449f9a3729714fb73c4cf34add49003ff2b97ff73ba76ff8f49bf9ed833e5f1d5da8d129d09b338729c23f30a8fe8f3684d92ba430a9c5e14fb7fab6ee952472e5326f5cd23ed9a9f4afde7fea524b746b7cfd974c3c20cbf4e0d29f0a1e0d5efe367fc2a32bcffd2147daf14ab32f353f35bf9171ccd3178729a4b177fee1e79aa2b00 '["<privkey3>"]'
 
 0b73c62d959082aac065f316276eea96f1a359435c45a2e010110784ef13c0470cceb05ce1268589183cac4bbd1451248065b7f695da85f91e2736ae994116dc96f2f372904437da3e00000000b0e3ec07b40605a87932c3f41eaf5fceed97a56cca4a11e20d681cf34a83c8496b7c3d7ef14b9ce97f27ef4e98e552c050bd9f7d0fff637e98f4d9f6b6cefabef2f10d37caa449f9a3729714fb73c41f14a0fba2e4cfca2cbc90a7e7ca6b4796773ab460dfea37593ba6ae77f741951f692e8c3bfc7a42e9220db31cd950aa6df21ae9925c9a31e77aab4ac11e76da5eb5c7b3b34547ce5e783bd3b452430efcaf5cfecfe9dafd3f26fd7a62cf94c7576b374a7426cce2c8718ecc2b3ca2cfa33549ea0e29707a51ecffadbaa54b1db94c99d4378fb46b7e2af59ffb9792dc1add3e67d30d0b33fc3a35a4c0878257bf8f9ff1abc8f0fe4b53f4bd52accacc4fcd6fe55f7034c7e0c9692e5dfcb97be4a9ae00
 Completely signed.
 ```
 
-## Hash time lock contracts
+## Hashed timelock contracts
 
-The other kind of p2sh address used in payment channels are hash time
-lock contracts (htlc). As with multisig addresses, more general htlc
-addresses are supported than are required for payment channels.  The
-command `createhtlc` is used to create a htlc address.  By default
+The other kind of p2sh address used in payment channels are hashed
+timelock contracts (htlc). As with multisig addresses, more general
+htlc addresses are supported than are required for payment channels.
+The command `createhtlc` is used to create a htlc address.  By default
 `createhtlc` creates a p2sh address payable after an absolute lock
 time (using the opcode OP_CLTV, an opcode analogous the Bitcoin script
-op code [BIP0065]), but can create an address payable after relative lock time
-(using the opcode OP_CSV, again analogous to the Bitcoin script op
-code [BIP0068, BIP0112, BIP0113]) if the keyword 'relative' is given after the timelock
-argument. As with Bitcoin, absolute lock time refers to the block
-height if it is less than 500000000 and refers to unix time
-otherwise. In contrast to Bitcoin, relative lock time is always
-measured in number of blocks since the asset was confirmed and
-relative lock times must be less than 500000000. Payment channels are
-assumed to use a relative lock time of 28 blocks (1 week at average
-block times).
+op code [BIP0065]), but can create an address payable after relative
+lock time (using the opcode OP_CSV, again analogous to the Bitcoin
+script op code [BIP0068, BIP0112, BIP0113]) if the keyword 'relative'
+is given after the timelock argument. As with Bitcoin, absolute lock
+time refers to the block height if it is less than 500000000 and
+refers to unix time otherwise. In contrast to Bitcoin, relative lock
+time is always measured in number of blocks since the asset was
+confirmed and relative lock times must be less than 500000000. Payment
+channels are assumed to use a relative lock time of 28 blocks (1 week
+at average block times).
 
 We start by considering an example of an htlc with relative lock time
 of 8 blocks.  In this case we explicitly give the secret
@@ -220,7 +220,7 @@ Tx is supported by the current ledger and has fee 0.001 fraenks (above minrelayf
 ```
 
 Likewise, `sendtx` would refuse to send the tx until Block 1327 had been staked,
-and peers would not accept it if it were sent.
+and peers would not accept it if it were sent before Block 1327.
 
 Now we show how to sign using *privkey1*, the key for the IF branch, along with
 the secret. In this case the secret is given in a json array of secrets after
@@ -468,6 +468,8 @@ Alice.  Bob can either use `simplesigntx` or `signtx` for this.
 2. Bob creates a new commitment tx which is given to Alice, Alice
 signs and gives back to Bob.
 
+First Bob creates a new htlc address with a new secret.
+
 ```
 createhtlc DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 28 relative
 
@@ -568,4 +570,4 @@ could call the commands with this keyword when appropriate.
 
 [Poon Dryja 2016] Joseph Poon, Thaddeus Dryja. The Bitcoin Lightning
 Network: Scalable Off-Chain Instant Payments
-
+https://lightning.network/lightning-network-paper.pdf
