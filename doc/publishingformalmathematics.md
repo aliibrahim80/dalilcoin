@@ -442,15 +442,12 @@ a theorem from earlier in the document) or to a local hypothesis.
 
 ## The first publications
 
-As of August 2019 there have been 10 publications:
-one theory, two signatures and seven documents.
-The source draft files can be found in the doc/pubsrc
-subdirectory. We briefly review these documents
-in the order in which they were published
-(with one exception), summarizing their contents
-and explaining how Dalilcoin commands can be
-used to create and check drafts, commit to drafts
-and publish drafts.
+As of August 2019 there have been 10 publications: one theory, two
+signatures and seven documents.  The source draft files can be found
+in the doc/pubsrc subdirectory. We briefly review these documents in
+the order in which they were published, summarizing their contents and
+explaining how Dalilcoin commands can be used to create and check
+drafts, commit to drafts and publish drafts.
 
 The one theory was directly ported from the foundation file
 distributed with
@@ -483,7 +480,7 @@ Base set
 ```
 
 Before the primitives and axioms are given basic definitions like like
-**not**, **and**, **or**, **eq** (equality) and **ex** (existential
+**not**, **and**, **or**, **iff** (if and only if), **eq** (equality) and **ex** (existential
 quantifiers) are defined.
 
 The first axiom says that two propositions *A* and *B* are equal if
@@ -548,11 +545,12 @@ Ids of Axioms:
 ...
 ```
 
-When a theory is published, owners are given to the propositions in the theory.
-The `readtheory` command also informs the author about this in advance,
-in case the author wishes to include NewOwner and NewRights items.
-There are actual two kinds of ownership: ownership of the "pure" proposition
-(shared throughout all theories) and ownership within the new theory.
+When a theory is published, owners are given to the propositions in
+the theory.  The `readtheory` command also informs the author about
+this in advance, in case the author wishes to include NewOwner and
+NewRights items.  There are actually two kinds of ownership: ownership
+of the "pure" proposition (shared throughout all theories) and
+ownership within the new theory.
 
 ```
 readdraft tgtsd
@@ -649,12 +647,14 @@ Thm andI : All A Prop All B Prop Imp A Imp B Ap Ap and A B
  := TmLa A Prop TmLa B Prop PrLa a A PrLa b B TmLa P Prop PrLa H Imp A Imp B P PrAp PrAp H a b
 ```
 
-Intuitively **andI** gives a way to combine a proof of a proposition *A*
-and a proof of a proposition *B* to obtain a proof of the conjunction of *A* and *B*.
+Intuitively **andI** gives a way to combine a proof of a proposition
+*A* and a proof of a proposition *B* to obtain a proof of the
+conjunction of *A* and *B*.
 
-After the basic logical operations and their properties, some properties of
-binary relations over a type variable are defined
-and a number of properties of pers are proven.
+After the basic logical operations and their properties, some
+properties of binary relations over a type variable are defined and a
+number of properties of partial equivalence relations (pers) are
+proven.
 
 ```
 Def symmetric : TpAll A TpArr TpArr A TpArr A Prop Prop
@@ -695,7 +695,7 @@ Thm EpsR2 : TTpAll A All P TpArr A Prop Imp Ap TTpAp ex A Lam x A Ap P x Ap P Ap
  := TpLa A TmLa P TpArr A Prop PrLa u Ap TTpAp ex A P PrAp TmAp u Ap P Ap TTpAp Eps A Lam x A Ap P x TmLa x A PrLa v Ap P x PrAp TmAp TmAp TpAp EpsR A P x v
 ```
 
-Perhaps the most interesting result is excluded middle:
+Excluded middle is proven using choice:
 
 ```
 Thm classic : All P Prop Ap Ap or P Ap not P
@@ -1041,7 +1041,7 @@ Theory. While some of this was also taken from QeditasEgal
 formalizations, the contents were significantly extended to include
 functors, natural transformations, adjunctions and monads.
 From this point on the Dalilcoin publications begin to differ
-signifantly from the QeditasEgal formalizations.
+significantly from the QeditasEgal formalizations.
 
 As usual, the first line indicates the file specifies a document in the usual theory.
 
@@ -1067,7 +1067,7 @@ Base set
 
 Next we list previously proven propositions as known
 that were not in the signature but will be used in the document.
-These are all propositions for working with several disjunctions.
+These are all propositions for working with several conjunctions.
 
 ```
 Known and3I : All P1 Prop All P2 Prop All P3 Prop Imp P1 Imp P2 Imp P3 Ap Ap and Ap Ap and P1 P2 P3
@@ -1224,9 +1224,7 @@ given appropriate *X*, *Y*, *f* and *g* as input.
 
 * **pullback_p** recognizes specific pullbacks and **pullback_constr_p** recognizes general constructions of pullbacks.
 
-* **pullback_p** recognizes specific pullbacks and **pullback_constr_p** recognizes general constructions of pullbacks.
-
-* **pushout_p** and *pushout_constr_p** are dual.
+* **pushout_p** and **pushout_constr_p** are dual.
 
 * **exponent_p** recognizes exponents and **product_exponent_constr_p** recognizes general constructions of products and exponents together (since exponents depend on products).
 
@@ -1437,11 +1435,11 @@ Let UnivOf : TpArr set set
 ```
 
 We then repeat the definitions of **terminal_p**, **initial_p**, etc.,
-originally defined in the categoryandfunctordefs1
-document.
-Note that these definitions were not included in the signature
-due to the high burn cost. Every document using them must include
-them (unless someone else includes them in a future signature).
+originally defined in the categoryandfunctordefs1 document.  Note that
+these definitions were not included in the signature due to the high
+burn cost that would have been required. Every document using them
+must include them (unless someone else includes them in a future
+signature).
 
 We then make a few definitions that will allow us to
 easily specify many concrete metacategories.
@@ -1464,16 +1462,18 @@ holds if *R* *X* *Y* *f* holds
 and *f* is the canonical representative of metafunctions
 relative to the input set *U* *X*.
 
-Our proposed metacategories in this document (and the remaining documents)
-will use a variety of types *A* for objects,
-but will always use the type of metafunctions from sets to sets as arrows.
-We will also always have a function *U* taking an object to an underlying set.
-The relation *R* will give the restriction on function including
-properties the function should have (e.g., being a homomorphism of some kind).
-Since **CFHom** requires the metafunction to be canonical, there
-will be at most one representative of each intended function.
-It will always be necessary to check that *R* respects the
-**MetaFuncEquiv** equivalence relation, but in all our examples this will be clear.
+Our proposed metacategories in this document (and the remaining
+documents) will use a variety of types *A* for objects, but will
+always use the type of metafunctions from sets to sets as arrows.  We
+will also always have a function *U* taking an object to an underlying
+set.  The relation *R* will give the restrictions on function
+including properties the function should have (e.g., being a
+homomorphism of some kind) for them to qualify as arrows of the
+metacategory.  Since **CFHom** requires the metafunction to be
+canonical, there will be at most one representative of each intended
+function.  It will always be necessary to check that *R* respects the
+**MetaFuncEquiv** equivalence relation, but in all our examples this
+will be clear.
 
 #### Metacategory of sets
 
@@ -1585,7 +1585,7 @@ In this case our type of objects will be ((set to set to set) to set).
 
 * Let *comp* *X* *Y* *Z* *g* *f* be the result of applying **CF** (*U* *X*) to the composition of the metafunctions *g* and *f*.
 
-We then conjecture this specifies a metafunction and
+We then conjecture this specifies a metacategory and
 all the usual constructions can be done.
 
 In addition we add three more conjectures:
@@ -1600,19 +1600,23 @@ and the identity (essentially) on arrows.
 #### Metacategory of topological spaces and cts functions
 
 Using the same technique as before to represent objects as pairs of
-sets, the category Top of topological spaces is defined by taking *A*
+sets, the metacategory Top of topological spaces is defined by taking *A*
 and *U* as above and taking the second component of the pair as being
-a collection of open subsets of the first component. The restriction
-*R* on functions requires the functions to map from *U* *X* to *U* *Y*
-and to be continuous.
+a collection of open subsets of the first component.  The *Obj*
+predicate requires the second component (the set of open sets) to
+satisfy the usual conditions relative to the first component (*U*
+*X*): every open set must be a subset of *U* *X*, the union of every
+collection of open sets must be open and intersection of every pair of
+open sets must be open.  The restriction *R* on functions requires the
+functions to map from *U* *X* to *U* *Y* and to be continuous.
 
-We then conjecture this forms a category and all the usual
+We then conjecture this forms a metacategory and all the usual
 constructions can be done.  We again conjecture left and right
-adjoints of the forgetful functor to Set.
+metaadjoints of the forgetful metafunctor to Set.
 
 #### Metacategory of pointed topological spaces and cts functions
 
-Finally, we form a category PtdTop by changing *A* to be ((set to set
+Finally, we form a metacategory PtdTop by changing *A* to be ((set to set
 to set to set) to set) in order to represent objects as triples of
 sets.  These triples of sets correspond to an underlying set (given by
 *U*), a collection of open subsets, and a distinguished point.  Arrows
@@ -1670,7 +1674,7 @@ Def MetaFuncQ : TpAll A TpAll B TpArr TpArr A Prop TpArr TpArr A B Prop
 
 A number of theorems are proven, leading to two proofs of conjectures from the previous document.
 
-* Set does form a category:
+* Set does form a metacategory:
 
 ```
 Thm MetaCatSet : Ap Ap Ap Ap TTpAp TTpAp MetaCat set TpArr set set Lam x264 set True SetHom Lam x262 set Ap Ap CF x262 Lam x263 set x263 Lam x256 set Lam x257 set Lam x258 set Lam x259 TpArr set set Lam x260 TpArr set set Ap Ap CF x256 Lam x261 set Ap x259 Ap x260 x261
@@ -1764,7 +1768,7 @@ conjecture.
 The last document published in July 2019 defined four more categories
 and making more conjectures as usual. Every category has
 some variant of a ring structure as objects, and tuples of
-(set -> set -> set) are used to represent the components.
+(set to set to set) are used to represent the components.
 The four categories are:
 
 * Rng: Rings (without multiplicative identity)
@@ -1807,7 +1811,7 @@ and for most categories we include the following conjectures:
 
 * EX: Exponents exist.
 
-* S: There is a suboject classifier.
+* S: There is a subobject classifier.
 
 * N: There is a natural number object.
 
