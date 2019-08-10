@@ -5,10 +5,13 @@ Dalilcoin stores the current assets in a large Merkle tree called a
 each leaf corresponds to a sequence of 162 bits.  The first two bits
 determine the kind of address:
 
-00: p2pkh (pay to public key hash)
-01: p2sh (pay to script hash)
-10: term (where information about terms and propositions are stored)
-11: publication (where publications with formal mathematics are stored)
+* 00: p2pkh (pay to public key hash)
+
+* 01: p2sh (pay to script hash)
+
+* 10: term (where information about terms and propositions are stored)
+
+* 11: publication (where publications with formal mathematics are stored)
 
 The remaining 160 bits are determined what is traditionally considered
 an address in cryptocurrencies like Bitcoin or Litecoin.
