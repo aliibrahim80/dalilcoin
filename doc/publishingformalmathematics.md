@@ -1741,14 +1741,14 @@ The tx was confirmed in Block 1275
 
 ### Document categoryconjs2
 
-In this document we define three categories
+In this document we define three metacategories
 and make the usual conjectures.
 
-* Mon: Category of monoids and homomorphisms.
+* Mon: Monoids and homomorphisms
 
-* Grp: Category of groups and homomorphisms.
+* Grp: Groups and homomorphisms
 
-* AbGrp: Category of abelian groups and homomorphisms.
+* AbGrp: Abelian groups and homomorphisms
 
 In each of these cases, the type *A* of objects
 is a tuple of operations (set to set to set).
@@ -1769,15 +1769,15 @@ The last document published in July 2019 defined four more categories
 and making more conjectures as usual. Every category has
 some variant of a ring structure as objects, and tuples of
 (set to set to set) are used to represent the components.
-The four categories are:
+The four metacategories are:
 
-* Rng: Rings (without multiplicative identity)
+* Rng: Rings (without multiplicative identity) and homomorphisms
 
-* CRng: Commutative rings (without multiplicative identity)
+* CRng: Commutative rings (without multiplicative identity) and homomorphisms
 
-* RngWId: Rings (with multiplicative identity)
+* RngWId: Rings (with multiplicative identity) and homomorphisms
 
-* CRngWId: Commutative rings (with multiplicative identity)
+* CRngWId: Commutative rings (with multiplicative identity) and homomorphisms
 
 60 bounties worth 50 fraenks each were published with the document for
 a total of 3000 fraenks.  These can be collected by resolving each
@@ -1788,10 +1788,10 @@ conjecture.
 We end with a table summarizing the 9615 fraenks worth of bounties
 published with the initial documents in July 2019.
 
-Each conjecture corresponds to a category
+Each conjecture corresponds to a metacategory
 and for most categories we include the following conjectures:
 
-* C: The structure is a category.
+* C: The structure is a metacategory.
 
 * T: There is a terminal object.
 
@@ -1815,7 +1815,7 @@ and for most categories we include the following conjectures:
 
 * N: There is a natural number object.
 
-* F: The forgetful functor is a functor.
+* F: The forgetful functor is a metafunctor.
 
 * LA: There is a left adjoint to the forgetful functor.
 
