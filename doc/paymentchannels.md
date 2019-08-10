@@ -1,7 +1,7 @@
 # Payment Channels
 
 Dalilcoin has the infrastructure to support bidirectional payment
-channels (Poon Dryja 2016), namely, multisig and hashed timelock
+channels ([Poon Dryja 2016]), namely, multisig and hashed timelock
 contracts (htlc).  Details are below.
 
 ## Multisig
@@ -544,6 +544,77 @@ funds from the asset controlled by the htlc address.
 Alternatively, the two parties can always sign a new tx spending both
 the fund assets with the latest balances directly to p2pkh addresses
 controlled by the two parties.
+
+In this example suppose Alice tries to take back the 0.3 fraenks by
+signing and publishing the original commitment tx.  In this case the
+tx 69b0d70e3131d9e7396a1317315dd92f16205ae24ea2c0288a888bf8535fe6d4
+was confirmed in Block 1344. Afterwards, the assets held at the fund
+address dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH were:
+
+```
+dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH:
+1a3daf5e44b7e66184f0a122ba37f7cd4a704dc9b46f7df300f19c33bea46bc0: (id e6cf7e1745c9a09b3d418d0cea49a6e70403e3bc5367d6ec7467068bff94752b) [1344] Currency 0.3999 fraenks (39990000000 cants)
+33d5dd4200172f674d69b38ef2c26f8139a5a04d5fa820bc2e696b39faec5414: (id 9e2eef7b27a0387f09cd5152f316798d514acbb6700c2643dfc96fc7d352e5fd) [1344] Currency 0.5999 fraenks (59990000000 cants)
+```
+
+The asset with 0.3999 is controlled by Bob:
+
+```
+query 1a3daf5e44b7e66184f0a122ba37f7cd4a704dc9b46f7df300f19c33bea46bc0
+
+{"response":"known","dbdata":[{"type":"asset","assethash":"1a3daf5e44b7e66184f0a122ba37f7cd4a704dc9b46f7df300f19c33bea46bc0","assetid":"e6cf7e1745c9a09b3d418d0cea49a6e70403e3bc5367d6ec7467068bff94752b","bday":1344,"obligation":{"type":"obligation","lockaddress":"Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61","lockheight":0,"reward":false},"preasset":{"type":"preasset","preassettype":"currency","val":{"cants":39990000000,"fraenks":"0.3999"}}}]}
+```
+
+The asset with 0.5999 is controlled by Alice's first htlc address, the
+one Bob for which the secret
+dd522ff9de8d2e7ae0ec1b97ce0bd3d2052e24e927263c8bd157be1c20190cc5.
+
+```
+query 33d5dd4200172f674d69b38ef2c26f8139a5a04d5fa820bc2e696b39faec5414
+
+{"response":"known","dbdata":[{"type":"asset","assethash":"33d5dd4200172f674d69b38ef2c26f8139a5a04d5fa820bc2e696b39faec5414","assetid":"9e2eef7b27a0387f09cd5152f316798d514acbb6700c2643dfc96fc7d352e5fd","bday":1344,"obligation":{"type":"obligation","lockaddress":"das7ySGhRBNGSVsAepmAuWV6gGkAUfUG5V","lockheight":0,"reward":false},"preasset":{"type":"preasset","preassettype":"currency","val":{"cants":59990000000,"fraenks":"0.5999"}}}]}
+```
+
+As a result Bob can spend both assets. He needs to spend the second
+asset within 28 blocks since Alice would be able to spend it after 28
+blocks.
+
+```
+createtx '[{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"e6cf7e1745c9a09b3d418d0cea49a6e70403e3bc5367d6ec7467068bff94752b"},{"dTeUT6q7o9JM9Z15qTLn41N37iKu9qGydH":"9e2eef7b27a0387f09cd5152f316798d514acbb6700c2643dfc96fc7d352e5fd"}]' '[{"addr":"Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61","val":0.9997}]'
+
+e384b059391610297e050d42f7b46d66631aa29d347ff6bb284a06ddec096a64504f323d271818e79d3ab366a73b3358fca7ac5b192784cdcab18048f12b6810baa76d331bd310eda4a7cbfbde0928ce5f427394d4bc455e6394d2b22d1c83c9d077f2dbf1b45479bf6cb5851c83627bd5947da63e2549519ea1f81de5030000c085512b092000
+```
+
+To sign the tx, Bob needs the redeem script for Alice's first htlc
+address.  Bob can easily regenerate this using the secret. (In fact,
+the redeem script can be recovered with only the hash of the secret
+and this is done internally by the `verifycommitmenttx` command. If a
+user wanted the redeem script without the secret, the code could be
+modified to print the redeem script when running
+`verifycommitmenttx`.)
+
+```
+createhtlc Dcp7kSjoi2K6P51WcBLsxkev3bfw3vFN61 DkNjYGHA4YW4BuRYt7PtysjAjXM5tsbuur 28 relative dd522ff9de8d2e7ae0ec1b97ce0bd3d2052e24e927263c8bd157be1c20190cc5
+
+P2sh address: das7ySGhRBNGSVsAepmAuWV6gGkAUfUG5V
+Redeem script: 6382012088a8248ad7d92719348ef501cd5aedd92067d1d92067d1ca6ea3c1fbb4f62a60c058c380e7563f8876a9145b6d21c7a0d85e35659fa94f49529467287e47f967041c000000b27576a914ae6132feaef7e823a692a16e35bb1ee2f8b792c86888ac
+Secret: dd522ff9de8d2e7ae0ec1b97ce0bd3d2052e24e927263c8bd157be1c20190cc5
+Hash of secret: 8ad7d92719348ef501cd5aedd92067d1ca6ea3c1fbb4f62a60c058c380e7563f
+```
+
+Bob signs and sends the tx, taking all the funds.
+
+```
+signtx e384b059391610297e050d42f7b46d66631aa29d347ff6bb284a06ddec096a64504f323d271818e79d3ab366a73b3358fca7ac5b192784cdcab18048f12b6810baa76d331bd310eda4a7cbfbde0928ce5f427394d4bc455e6394d2b22d1c83c9d077f2dbf1b45479bf6cb5851c83627bd5947da63e2549519ea1f81de5030000c085512b092000 '["<BobPrivKey>"]' '["6382012088a8248ad7d92719348ef501cd5aedd92067d1d92067d1ca6ea3c1fbb4f62a60c058c380e7563f8876a9145b6d21c7a0d85e35659fa94f49529467287e47f967041c000000b27576a914ae6132feaef7e823a692a16e35bb1ee2f8b792c86888ac"]' '["dd522ff9de8d2e7ae0ec1b97ce0bd3d2052e24e927263c8bd157be1c20190cc5"]'
+
+e384b059391610297e050d42f7b46d66631aa29d347ff6bb284a06ddec096a64504f323d271818e79d3ab366a73b3358fca7ac5b192784cdcab18048f12b6810baa76d331bd310eda4a7cbfbde0928ce5f427394d4bc455e6394d2b22d1c83c9d077f2dbf1b45479bf6cb5851c83627bd5947da63e2549519ea1f81de5030000c085512b09a051df8c0904a004bbf584a68d462aba3f3916bb042834c17d1eab7bb4d8a4a1093819e71e815a951fae5344ec507e3c229ba0d3bd465f80eec22959c2784fe21d6831758d0a0d59aa72ef6c1cb0bfdb5e60b5dd4fea396917e8b0fbfc1000fe86cb324327aa1016300a93a4bab4c1d95449bb424dbcc0f206ea9c5b8b47515152fa1a1420dcf6ea0d1a644f7420d5aaedb7fa450f33fd6989cb6522ce1e9562f8b9e617efd5195ca47e8dbb3dbe9d9afaafd9e3a45b2e1cb8bcee45d7bff937dccb7aa3fbbace83226e0bb47ac881c09b3634597c7477acf3dd270c0db424f6d8c9fb47974ab32dcd93adb197040892a959fd20bb4b7d99df7b63977ac1b3df78d9f9c2e9d20bba2499fea4499e8ba35ff5cd11644686c5a3322d3b56704090885193547c3dfbc98c341dd70fd85c6bfbec20cf46cf0ef26c74e56e4707df4fdbbe4ab0c0b10e077cdeea4fc4765353dcda36e471d0d8bdd62cfb39f5d3a452299f45e9f768feb3043902040850765dbba929ba0e2bd3bfebfbe8479a961cda6dcddd1ec5e3bf2d19395ac4ac00
+
+sendtx e384b059391610297e050d42f7b46d66631aa29d347ff6bb284a06ddec096a64504f323d271818e79d3ab366a73b3358fca7ac5b192784cdcab18048f12b6810baa76d331bd310eda4a7cbfbde0928ce5f427394d4bc455e6394d2b22d1c83c9d077f2dbf1b45479bf6cb5851c83627bd5947da63e2549519ea1f81de5030000c085512b09a051df8c0904a004bbf584a68d462aba3f3916bb042834c17d1eab7bb4d8a4a1093819e71e815a951fae5344ec507e3c229ba0d3bd465f80eec22959c2784fe21d6831758d0a0d59aa72ef6c1cb0bfdb5e60b5dd4fea396917e8b0fbfc1000fe86cb324327aa1016300a93a4bab4c1d95449bb424dbcc0f206ea9c5b8b47515152fa1a1420dcf6ea0d1a644f7420d5aaedb7fa450f33fd6989cb6522ce1e9562f8b9e617efd5195ca47e8dbb3dbe9d9afaafd9e3a45b2e1cb8bcee45d7bff937dccb7aa3fbbace83226e0bb47ac881c09b3634597c7477acf3dd270c0db424f6d8c9fb47974ab32dcd93adb197040892a959fd20bb4b7d99df7b63977ac1b3df78d9f9c2e9d20bba2499fea4499e8ba35ff5cd11644686c5a3322d3b56704090885193547c3dfbc98c341dd70fd85c6bfbec20cf46cf0ef26c74e56e4707df4fdbbe4ab0c0b10e077cdeea4fc4765353dcda36e471d0d8bdd62cfb39f5d3a452299f45e9f768feb3043902040850765dbba929ba0e2bd3bfebfbe8479a961cda6dcddd1ec5e3bf2d19395ac4ac00
+
+07e74c6e0d8340afb5ba3b99d7d9d03160e512935fd17b0d5acac12107f7ba15
+```
+
+This tx was confirmed in Block 1347.
 
 ## Layer 2
 
