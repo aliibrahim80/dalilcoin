@@ -1,0 +1,52 @@
+Theory
+Base set
+Def False : Prop
+ := All P Prop P
+Def not : TpArr Prop Prop
+ := Lam A Prop Imp A False
+Def and : TpArr Prop TpArr Prop Prop
+ := Lam A Prop Lam B Prop All P Prop Imp Imp A Imp B P P
+Def or : TpArr Prop TpArr Prop Prop
+ := Lam A Prop Lam B Prop All P Prop Imp Imp A P Imp Imp B P P
+Def iff : TpArr Prop TpArr Prop Prop
+ := Lam A Prop Lam B Prop Ap Ap and Imp A B Imp B A
+Def eq : TpAll A TpArr A TpArr A Prop
+ := TTpLam A Lam x A Lam y A All Q TpArr A Prop Imp Ap Q x Ap Q y
+Def ex : TpAll A TpArr TpArr A Prop Prop
+ := TTpLam A Lam Q TpArr A Prop All P Prop Imp All x A Imp Ap Q x P P
+Axiom prop_ext : All A Prop All B Prop Imp Ap Ap iff A B Ap Ap TTpAp eq Prop A B
+Axiom func_ext : TTpAll A TTpAll B All f TpArr A B All g TpArr A B Imp All x A Ap Ap TTpAp eq B Ap f x Ap g x Ap Ap TTpAp eq TpArr A B f g
+Prim Eps : TpAll A TpArr TpArr A Prop A
+Axiom EpsR : TTpAll A All P TpArr A Prop All x A Imp Ap P x Ap P Ap TTpAp Eps A Lam x A Ap P x
+Prim In : TpArr set TpArr set Prop
+Def Subq : TpArr set TpArr set Prop
+ := Lam X set Lam Y set All x set Imp Ap Ap In x X Ap Ap In x Y
+Axiom set_ext : All X set All Y set Imp Ap Ap Subq X Y Imp Ap Ap Subq Y X Ap Ap TTpAp eq set X Y
+Axiom In_ind : All P TpArr set Prop Imp All X set Imp All x set Imp Ap Ap In x X Ap P x Ap P X All X set Ap P X
+Prim Empty : set
+Axiom EmptyAx : Ap not Ap TTpAp ex set Lam x set Ap Ap In x Empty
+Prim Union : TpArr set set
+Axiom UnionEq : All X set All x set Ap Ap iff Ap Ap In x Ap Union X Ap TTpAp ex set Lam Y set Ap Ap and Ap Ap In x Y Ap Ap In Y X
+Prim Power : TpArr set set
+Axiom PowerEq : All X set All Y set Ap Ap iff Ap Ap In Y Ap Power X Ap Ap Subq Y X
+Prim Repl : TpArr set TpArr TpArr set set set
+Axiom ReplEq : All X set All F TpArr set set All y set Ap Ap iff Ap Ap In y Ap Ap Repl X Lam x set Ap F x Ap TTpAp ex set Lam x set Ap Ap and Ap Ap In x X Ap Ap TTpAp eq set y Ap F x
+Def TransSet : TpArr set Prop
+ := Lam U set All X set Imp Ap Ap In X U Ap Ap Subq X U
+Def Union_closed : TpArr set Prop
+ := Lam U set All X set Imp Ap Ap In X U Ap Ap In Ap Union X U
+Def Power_closed : TpArr set Prop
+ := Lam U set All X set Imp Ap Ap In X U Ap Ap In Ap Power X U
+Def Repl_closed : TpArr set Prop
+ := Lam U set All X set Imp Ap Ap In X U All F TpArr set set Imp All x set Imp Ap Ap In x X Ap Ap In Ap F x U Ap Ap In Ap Ap Repl X Lam x set Ap F x U
+Def ZF_closed : TpArr set Prop
+ := Lam U set Ap Ap and Ap Ap and Ap Union_closed U Ap Power_closed U Ap Repl_closed U
+Prim UnivOf : TpArr set set
+Axiom UnivOf_In : All N set Ap Ap In N Ap UnivOf N
+Axiom UnivOf_TransSet : All N set Ap TransSet Ap UnivOf N
+Axiom UnivOf_ZF_closed : All N set Ap ZF_closed Ap UnivOf N
+Axiom UnivOf_Min : All N set All U set Imp Ap Ap In N U Imp Ap TransSet U Imp Ap ZF_closed U Ap Ap Subq Ap UnivOf N U
+
+Nonce 21d9d6871999da6903b83acf7c26b6ecb92b2b4b9b39c170661ebe67dada7dcc
+
+Publisher Df9i59wmWtXriTJ7aoottJJ8xBTnS7FNnX

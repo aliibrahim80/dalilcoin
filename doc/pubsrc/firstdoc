@@ -1,0 +1,470 @@
+Document 82c7571f411491f3a88406467944703766cd46c98aeeeb6b17b2cc095f1954de
+Base set
+Def False : Prop
+ := All P Prop P
+Thm FalseE : All P Prop Imp False P
+ := TmLa P Prop PrLa H False TmAp H P
+Def True : Prop
+ := All P Prop Imp P P
+Thm TrueI : True
+ := TmLa P Prop PrLa p P p
+Def not : TpArr Prop Prop
+ := Lam A Prop Imp A False
+Thm notI : All A Prop Imp Imp A False Ap not A
+ := TmLa A Prop PrLa H Imp A False PrLa a A PrAp H a
+Thm notE : All A Prop Imp Ap not A Imp A False
+ := TmLa A Prop PrLa H Ap not A PrLa a A PrAp H a
+Def and : TpArr Prop TpArr Prop Prop
+ := Lam A Prop Lam B Prop All P Prop Imp Imp A Imp B P P
+Thm andI : All A Prop All B Prop Imp A Imp B Ap Ap and A B
+ := TmLa A Prop TmLa B Prop PrLa a A PrLa b B TmLa P Prop PrLa H Imp A Imp B P PrAp PrAp H a b
+Thm andEL : All A Prop All B Prop Imp Ap Ap and A B A
+ := TmLa A Prop TmLa B Prop PrLa H Ap Ap and A B PrAp TmAp H A PrLa a A PrLa b B a
+Thm andER : All A Prop All B Prop Imp Ap Ap and A B B
+ := TmLa A Prop TmLa B Prop PrLa H Ap Ap and A B PrAp TmAp H B PrLa a A PrLa b B b
+Def or : TpArr Prop TpArr Prop Prop
+ := Lam A Prop Lam B Prop All P Prop Imp Imp A P Imp Imp B P P
+Thm orIL : All A Prop All B Prop Imp A Ap Ap or A B
+ := TmLa A Prop TmLa B Prop PrLa a A TmLa P Prop PrLa H1 Imp A P PrLa H2 Imp B P PrAp H1 a
+Thm orIR : All A Prop All B Prop Imp B Ap Ap or A B
+ := TmLa A Prop TmLa B Prop PrLa b B TmLa P Prop PrLa H1 Imp A P PrLa H2 Imp B P PrAp H2 b
+Thm orE : All A Prop All B Prop All C Prop Imp Imp A C Imp Imp B C Imp Ap Ap or A B C
+ := TmLa A Prop TmLa B Prop TmLa C Prop PrLa H1 Imp A C PrLa H2 Imp B C PrLa H3 Ap Ap or A B PrAp PrAp TmAp H3 C H1 H2
+Def iff : TpArr Prop TpArr Prop Prop
+ := Lam A Prop Lam B Prop Ap Ap and Imp A B Imp B A
+Thm iffEL : All A Prop All B Prop Imp Ap Ap iff A B Imp A B
+ := TmLa A Prop TmLa B Prop TmAp TmAp andEL Imp A B Imp B A
+Thm iffER : All A Prop All B Prop Imp Ap Ap iff A B Imp B A
+ := TmLa A Prop TmLa B Prop TmAp TmAp andER Imp A B Imp B A
+Thm iffI : All A Prop All B Prop Imp Imp A B Imp Imp B A Ap Ap iff A B
+ := TmLa A Prop TmLa B Prop TmAp TmAp andI Imp A B Imp B A
+Thm and3I : All P1 Prop All P2 Prop All P3 Prop Imp P1 Imp P2 Imp P3 Ap Ap and Ap Ap and P1 P2 P3
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop PrLa H1 P1 PrLa H2 P2 PrLa H3 P3 PrAp PrAp TmAp TmAp andI Ap Ap and P1 P2 P3 PrAp PrAp TmAp TmAp andI P1 P2 H1 H2 H3
+Thm and3E : All P1 Prop All P2 Prop All P3 Prop Imp Ap Ap and Ap Ap and P1 P2 P3 All p Prop Imp Imp P1 Imp P2 Imp P3 p p
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop PrLa u Ap Ap and Ap Ap and P1 P2 P3 TmLa p Prop PrLa H Imp P1 Imp P2 Imp P3 p PrAp TmAp u p PrLa u Ap Ap and P1 P2 PrLa u3 P3 PrAp TmAp u p PrLa u1 P1 PrLa u2 P2 PrAp PrAp PrAp H u1 u2 u3
+Thm or3I1 : All P1 Prop All P2 Prop All P3 Prop Imp P1 Ap Ap or Ap Ap or P1 P2 P3
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop PrLa u P1 PrAp TmAp TmAp orIL Ap Ap or P1 P2 P3 PrAp TmAp TmAp orIL P1 P2 u
+Thm or3I2 : All P1 Prop All P2 Prop All P3 Prop Imp P2 Ap Ap or Ap Ap or P1 P2 P3
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop PrLa u P2 PrAp TmAp TmAp orIL Ap Ap or P1 P2 P3 PrAp TmAp TmAp orIR P1 P2 u
+Thm or3I3 : All P1 Prop All P2 Prop All P3 Prop Imp P3 Ap Ap or Ap Ap or P1 P2 P3
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmAp TmAp orIR Ap Ap or P1 P2 P3
+Thm or3E : All P1 Prop All P2 Prop All P3 Prop Imp Ap Ap or Ap Ap or P1 P2 P3 All p Prop Imp Imp P1 p Imp Imp P2 p Imp Imp P3 p p
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop PrLa u Ap Ap or Ap Ap or P1 P2 P3 TmLa p Prop PrLa H1 Imp P1 p PrLa H2 Imp P2 p PrLa H3 Imp P3 p PrAp PrAp TmAp u p PrLa u Ap Ap or P1 P2 PrAp PrAp TmAp u p H1 H2 H3
+Thm and4I : All P1 Prop All P2 Prop All P3 Prop All P4 Prop Imp P1 Imp P2 Imp P3 Imp P4 Ap Ap and Ap Ap and Ap Ap and P1 P2 P3 P4
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop PrLa H1 P1 PrLa H2 P2 PrLa H3 P3 PrLa H4 P4 PrAp PrAp TmAp TmAp andI Ap Ap and Ap Ap and P1 P2 P3 P4 PrAp PrAp PrAp TmAp TmAp TmAp and3I P1 P2 P3 H1 H2 H3 H4
+Thm and4E : All P1 Prop All P2 Prop All P3 Prop All P4 Prop Imp Ap Ap and Ap Ap and Ap Ap and P1 P2 P3 P4 All p Prop Imp Imp P1 Imp P2 Imp P3 Imp P4 p p
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop PrLa u Ap Ap and Ap Ap and Ap Ap and P1 P2 P3 P4 TmLa p Prop PrLa H Imp P1 Imp P2 Imp P3 Imp P4 p PrAp TmAp u p PrLa u Ap Ap and Ap Ap and P1 P2 P3 PrLa u4 P4 PrAp TmAp PrAp TmAp TmAp TmAp and3E P1 P2 P3 u p PrLa u1 P1 PrLa u2 P2 PrLa u3 P3 PrAp PrAp PrAp PrAp H u1 u2 u3 u4
+Thm or4I1 : All P1 Prop All P2 Prop All P3 Prop All P4 Prop Imp P1 Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop PrLa u P1 PrAp TmAp TmAp orIL Ap Ap or Ap Ap or P1 P2 P3 P4 PrAp TmAp TmAp TmAp or3I1 P1 P2 P3 u
+Thm or4I2 : All P1 Prop All P2 Prop All P3 Prop All P4 Prop Imp P2 Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop PrLa u P2 PrAp TmAp TmAp orIL Ap Ap or Ap Ap or P1 P2 P3 P4 PrAp TmAp TmAp TmAp or3I2 P1 P2 P3 u
+Thm or4I3 : All P1 Prop All P2 Prop All P3 Prop All P4 Prop Imp P3 Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop PrLa u P3 PrAp TmAp TmAp orIL Ap Ap or Ap Ap or P1 P2 P3 P4 PrAp TmAp TmAp TmAp or3I3 P1 P2 P3 u
+Thm or4I4 : All P1 Prop All P2 Prop All P3 Prop All P4 Prop Imp P4 Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop TmAp TmAp orIR Ap Ap or Ap Ap or P1 P2 P3 P4
+Thm or4E : All P1 Prop All P2 Prop All P3 Prop All P4 Prop Imp Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 All p Prop Imp Imp P1 p Imp Imp P2 p Imp Imp P3 p Imp Imp P4 p p
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop PrLa u Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 TmLa p Prop PrLa H1 Imp P1 p PrLa H2 Imp P2 p PrLa H3 Imp P3 p PrLa H4 Imp P4 p PrAp PrAp TmAp u p PrLa u Ap Ap or Ap Ap or P1 P2 P3 PrAp PrAp PrAp TmAp PrAp TmAp TmAp TmAp or3E P1 P2 P3 u p H1 H2 H3 H4
+Thm and5I : All P1 Prop All P2 Prop All P3 Prop All P4 Prop All P5 Prop Imp P1 Imp P2 Imp P3 Imp P4 Imp P5 Ap Ap and Ap Ap and Ap Ap and Ap Ap and P1 P2 P3 P4 P5
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop TmLa P5 Prop PrLa H1 P1 PrLa H2 P2 PrLa H3 P3 PrLa H4 P4 PrLa H5 P5 PrAp PrAp TmAp TmAp andI Ap Ap and Ap Ap and Ap Ap and P1 P2 P3 P4 P5 PrAp PrAp PrAp PrAp TmAp TmAp TmAp TmAp and4I P1 P2 P3 P4 H1 H2 H3 H4 H5
+Thm and5E : All P1 Prop All P2 Prop All P3 Prop All P4 Prop All P5 Prop Imp Ap Ap and Ap Ap and Ap Ap and Ap Ap and P1 P2 P3 P4 P5 All p Prop Imp Imp P1 Imp P2 Imp P3 Imp P4 Imp P5 p p
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop TmLa P5 Prop PrLa u Ap Ap and Ap Ap and Ap Ap and Ap Ap and P1 P2 P3 P4 P5 TmLa p Prop PrLa H Imp P1 Imp P2 Imp P3 Imp P4 Imp P5 p PrAp TmAp u p PrLa u Ap Ap and Ap Ap and Ap Ap and P1 P2 P3 P4 PrLa u5 P5 PrAp TmAp PrAp TmAp TmAp TmAp TmAp and4E P1 P2 P3 P4 u p PrLa u1 P1 PrLa u2 P2 PrLa u3 P3 PrLa u4 P4 PrAp PrAp PrAp PrAp PrAp H u1 u2 u3 u4 u5
+Thm or5I1 : All P1 Prop All P2 Prop All P3 Prop All P4 Prop All P5 Prop Imp P1 Ap Ap or Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 P5
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop TmLa P5 Prop PrLa u P1 PrAp TmAp TmAp orIL Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 P5 PrAp TmAp TmAp TmAp TmAp or4I1 P1 P2 P3 P4 u
+Thm or5I2 : All P1 Prop All P2 Prop All P3 Prop All P4 Prop All P5 Prop Imp P2 Ap Ap or Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 P5
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop TmLa P5 Prop PrLa u P2 PrAp TmAp TmAp orIL Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 P5 PrAp TmAp TmAp TmAp TmAp or4I2 P1 P2 P3 P4 u
+Thm or5I3 : All P1 Prop All P2 Prop All P3 Prop All P4 Prop All P5 Prop Imp P3 Ap Ap or Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 P5
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop TmLa P5 Prop PrLa u P3 PrAp TmAp TmAp orIL Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 P5 PrAp TmAp TmAp TmAp TmAp or4I3 P1 P2 P3 P4 u
+Thm or5I4 : All P1 Prop All P2 Prop All P3 Prop All P4 Prop All P5 Prop Imp P4 Ap Ap or Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 P5
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop TmLa P5 Prop PrLa u P4 PrAp TmAp TmAp orIL Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 P5 PrAp TmAp TmAp TmAp TmAp or4I4 P1 P2 P3 P4 u
+Thm or5I5 : All P1 Prop All P2 Prop All P3 Prop All P4 Prop All P5 Prop Imp P5 Ap Ap or Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 P5
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop TmLa P5 Prop TmAp TmAp orIR Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 P5
+Thm or5E : All P1 Prop All P2 Prop All P3 Prop All P4 Prop All P5 Prop Imp Ap Ap or Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 P5 All p Prop Imp Imp P1 p Imp Imp P2 p Imp Imp P3 p Imp Imp P4 p Imp Imp P5 p p
+ := TmLa P1 Prop TmLa P2 Prop TmLa P3 Prop TmLa P4 Prop TmLa P5 Prop PrLa u Ap Ap or Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 P5 TmLa p Prop PrLa H1 Imp P1 p PrLa H2 Imp P2 p PrLa H3 Imp P3 p PrLa H4 Imp P4 p PrLa H5 Imp P5 p PrAp PrAp TmAp u p PrLa u Ap Ap or Ap Ap or Ap Ap or P1 P2 P3 P4 PrAp PrAp PrAp PrAp TmAp PrAp TmAp TmAp TmAp TmAp or4E P1 P2 P3 P4 u p H1 H2 H3 H4 H5
+Def eq : TpAll A TpArr A TpArr A Prop
+ := TTpLam A Lam x A Lam y A All Q TpArr A Prop Imp Ap Q x Ap Q y
+Def neq : TpAll A TpArr A TpArr A Prop
+ := TTpLam A Lam x A Lam y A Ap not Ap Ap TTpAp eq A x y
+Thm eqE : TTpAll A All x A All y A All q TpArr A Prop Imp Ap q x Imp Ap Ap TTpAp eq A x y Ap q y
+ := TpLa A TmLa x A TmLa y A TmLa q TpArr A Prop PrLa H1 Ap q x PrLa H2 Ap Ap TTpAp eq A x y PrAp TmAp H2 q H1
+Thm eqI : TTpAll A All x A Ap Ap TTpAp eq A x x
+ := TpLa A TmLa x A TmLa q TpArr A Prop PrLa H Ap q x H
+Thm eq_sym : TTpAll A All x A All y A Imp Ap Ap TTpAp eq A x y Ap Ap TTpAp eq A y x
+ := TpLa A TmLa x A TmLa y A PrLa H Ap Ap TTpAp eq A x y PrAp TmAp H Lam y A Ap Ap TTpAp eq A y x TmAp TpAp eqI A x
+Thm eq_trans : TTpAll A All x A All y A All z A Imp Ap Ap TTpAp eq A x y Imp Ap Ap TTpAp eq A y z Ap Ap TTpAp eq A x z
+ := TpLa A TmLa x A TmLa y A TmLa z A PrLa H1 Ap Ap TTpAp eq A x y PrLa H2 Ap Ap TTpAp eq A y z PrAp TmAp H2 Lam z A Ap Ap TTpAp eq A x z H1
+Thm eq_symtrans1 : TTpAll A All x A All y A All z A Imp Ap Ap TTpAp eq A x y Imp Ap Ap TTpAp eq A z y Ap Ap TTpAp eq A x z
+ := TpLa A TmLa x A TmLa y A TmLa z A PrLa H1 Ap Ap TTpAp eq A x y PrLa H2 Ap Ap TTpAp eq A z y PrAp PrAp TmAp TmAp TmAp TpAp eq_trans A x y z H1 PrAp TmAp TmAp TpAp eq_sym A z y H2
+Thm eq_symtrans2 : TTpAll A All x A All y A All z A Imp Ap Ap TTpAp eq A y x Imp Ap Ap TTpAp eq A y z Ap Ap TTpAp eq A x z
+ := TpLa A TmLa x A TmLa y A TmLa z A PrLa H1 Ap Ap TTpAp eq A y x PrLa H2 Ap Ap TTpAp eq A y z PrAp PrAp TmAp TmAp TmAp TpAp eq_trans A x y z PrAp TmAp TmAp TpAp eq_sym A y x H1 H2
+Thm eq_trans3 : TTpAll A All x0 A All x1 A All x2 A All x3 A Imp Ap Ap TTpAp eq A x0 x1 Imp Ap Ap TTpAp eq A x1 x2 Imp Ap Ap TTpAp eq A x2 x3 Ap Ap TTpAp eq A x0 x3
+ := TpLa A TmLa x0 A TmLa x1 A TmLa x2 A TmLa x3 A PrLa H1 Ap Ap TTpAp eq A x0 x1 PrLa H2 Ap Ap TTpAp eq A x1 x2 PrLa H3 Ap Ap TTpAp eq A x2 x3 PrAp PrAp TmAp TmAp TmAp TpAp eq_trans A x0 x2 x3 PrAp PrAp TmAp TmAp TmAp TpAp eq_trans A x0 x1 x2 H1 H2 H3
+Thm eq_trans4 : TTpAll A All x0 A All x1 A All x2 A All x3 A All x4 A Imp Ap Ap TTpAp eq A x0 x1 Imp Ap Ap TTpAp eq A x1 x2 Imp Ap Ap TTpAp eq A x2 x3 Imp Ap Ap TTpAp eq A x3 x4 Ap Ap TTpAp eq A x0 x4
+ := TpLa A TmLa x0 A TmLa x1 A TmLa x2 A TmLa x3 A TmLa x4 A PrLa H1 Ap Ap TTpAp eq A x0 x1 PrLa H2 Ap Ap TTpAp eq A x1 x2 PrLa H3 Ap Ap TTpAp eq A x2 x3 PrLa H4 Ap Ap TTpAp eq A x3 x4 PrAp PrAp TmAp TmAp TmAp TpAp eq_trans A x0 x3 x4 PrAp PrAp PrAp TmAp TmAp TmAp TmAp TpAp eq_trans3 A x0 x1 x2 x3 H1 H2 H3 H4
+Thm eq_trans5 : TTpAll A All x0 A All x1 A All x2 A All x3 A All x4 A All x5 A Imp Ap Ap TTpAp eq A x0 x1 Imp Ap Ap TTpAp eq A x1 x2 Imp Ap Ap TTpAp eq A x2 x3 Imp Ap Ap TTpAp eq A x3 x4 Imp Ap Ap TTpAp eq A x4 x5 Ap Ap TTpAp eq A x0 x5
+ := TpLa A TmLa x0 A TmLa x1 A TmLa x2 A TmLa x3 A TmLa x4 A TmLa x5 A PrLa H1 Ap Ap TTpAp eq A x0 x1 PrLa H2 Ap Ap TTpAp eq A x1 x2 PrLa H3 Ap Ap TTpAp eq A x2 x3 PrLa H4 Ap Ap TTpAp eq A x3 x4 PrLa H5 Ap Ap TTpAp eq A x4 x5 PrAp PrAp TmAp TmAp TmAp TpAp eq_trans A x0 x4 x5 PrAp PrAp PrAp PrAp TmAp TmAp TmAp TmAp TmAp TpAp eq_trans4 A x0 x1 x2 x3 x4 H1 H2 H3 H4 H5
+Thm f_equal : TTpAll A TTpAll B All x A All y A All f TpArr A B Imp Ap Ap TTpAp eq A x y Ap Ap TTpAp eq B Ap f x Ap f y
+ := TpLa A TpLa B TmLa H1 A TmLa H2 A TmLa H3 TpArr A B PrLa x1 Ap Ap TTpAp eq A H1 H2 PrAp TmAp x1 Lam z A Ap Ap TTpAp eq B Ap H3 H1 Ap H3 z TmAp TpAp eqI B Ap H3 H1
+Def ex : TpAll A TpArr TpArr A Prop Prop
+ := TTpLam A Lam Q TpArr A Prop All P Prop Imp All x A Imp Ap Q x P P
+Thm exE : TTpAll A All P TpArr A Prop All Q Prop Imp All x1 A Imp Ap P x1 Q Imp Ap TTpAp ex A Lam x A Ap P x Q
+ := TpLa A TmLa P TpArr A Prop TmLa Q Prop PrLa H1 All x A Imp Ap P x Q PrLa H2 Ap TTpAp ex A P PrAp TmAp H2 Q H1
+Thm exI : TTpAll A All P TpArr A Prop All x A Imp Ap P x Ap TTpAp ex A Lam x A Ap P x
+ := TpLa A TmLa P TpArr A Prop TmLa x A PrLa H1 Ap P x TmLa Q Prop PrLa H2 All x1 A Imp Ap P x1 Q PrAp TmAp H2 x H1
+Thm exandI : TTpAll A All P TpArr A Prop All Q TpArr A Prop All x A Imp Ap P x Imp Ap Q x Ap TTpAp ex A Lam x A Ap Ap and Ap P x Ap Q x
+ := TpLa A TmLa P TpArr A Prop TmLa Q TpArr A Prop TmLa x A PrLa H1 Ap P x PrLa H2 Ap Q x PrAp TmAp TmAp TpAp exI A Lam x A Ap Ap and Ap P x Ap Q x x PrAp PrAp TmAp TmAp andI Ap P x Ap Q x H1 H2
+Thm exandE : TTpAll A All P TpArr A Prop All Q TpArr A Prop Imp Ap TTpAp ex A Lam x2 A Ap Ap and Ap P x2 Ap Q x2 All p Prop Imp All x1 A Imp Ap P x1 Imp Ap Q x1 p p
+ := TpLa A TmLa P TpArr A Prop TmLa Q TpArr A Prop PrLa u Ap TTpAp ex A Lam x A Ap Ap and Ap P x Ap Q x TmLa p Prop PrLa H All x A Imp Ap P x Imp Ap Q x p PrAp TmAp u p TmLa x A PrLa u Ap Ap and Ap P x Ap Q x PrAp TmAp u p TmAp H x
+Known prop_ext : All A Prop All B Prop Imp Ap Ap iff A B Ap Ap TTpAp eq Prop A B
+Thm prop_ext2 : All A Prop All B Prop Imp Imp A B Imp Imp B A Ap Ap TTpAp eq Prop A B
+ := TmLa A Prop TmLa B Prop PrLa H1 Imp A B PrLa H2 Imp B A PrAp TmAp TmAp prop_ext A B PrAp PrAp TmAp TmAp iffI A B H1 H2
+Known func_ext : TTpAll A TTpAll B All f TpArr A B All g TpArr A B Imp All x A Ap Ap TTpAp eq B Ap f x Ap g x Ap Ap TTpAp eq TpArr A B f g
+Thm pred_ext : TTpAll A All P TpArr A Prop All Q TpArr A Prop Imp All x4 A Imp Ap P x4 Ap Q x4 Imp All x3 A Imp Ap Q x3 Ap P x3 Ap Ap TTpAp eq TpArr A Prop P Q
+ := TpLa A TmLa P TpArr A Prop TmLa Q TpArr A Prop PrLa HPQ All x2 A Imp Ap P x2 Ap Q x2 PrLa HQP All x1 A Imp Ap Q x1 Ap P x1 PrAp TmAp TmAp TpAp TpAp func_ext A Prop P Q TmLa x A PrAp PrAp TmAp TmAp prop_ext2 Ap P x Ap Q x TmAp HPQ x TmAp HQP x
+Def symmetric : TpAll A TpArr TpArr A TpArr A Prop Prop
+ := TTpLam A Lam R TpArr A TpArr A Prop All x A All y A Imp Ap Ap R x y Ap Ap R y x
+Def transitive : TpAll A TpArr TpArr A TpArr A Prop Prop
+ := TTpLam A Lam R TpArr A TpArr A Prop All x A All y A All z A Imp Ap Ap R x y Imp Ap Ap R y z Ap Ap R x z
+Def per : TpAll A TpArr TpArr A TpArr A Prop Prop
+ := TTpLam A Lam R TpArr A TpArr A Prop Ap Ap and Ap TTpAp symmetric A R Ap TTpAp transitive A R
+Thm per_sym : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R Ap TTpAp symmetric A R
+ := TpLa A TmLa H1 TpArr A TpArr A Prop PrLa x1 Ap Ap and Ap TTpAp symmetric A H1 Ap TTpAp transitive A H1 PrAp TmAp TmAp andEL Ap TTpAp symmetric A H1 Ap TTpAp transitive A H1 x1
+Thm per_tra : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R Ap TTpAp transitive A R
+ := TpLa A TmLa H1 TpArr A TpArr A Prop PrLa x1 Ap Ap and Ap TTpAp symmetric A H1 Ap TTpAp transitive A H1 PrAp TmAp TmAp andER Ap TTpAp symmetric A H1 Ap TTpAp transitive A H1 x1
+Thm per_stra1 : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R All x A All y A All z A Imp Ap Ap R y x Imp Ap Ap R y z Ap Ap R x z
+ := TpLa A TmLa H1 TpArr A TpArr A Prop PrLa x1 Ap Ap and Ap TTpAp symmetric A H1 Ap TTpAp transitive A H1 TmLa H2 A TmLa H3 A TmLa H4 A PrLa x2 Ap Ap H1 H3 H2 PrLa x3 Ap Ap H1 H3 H4 PrAp TmAp x1 Ap Ap H1 H2 H4 PrLa x4 Ap TTpAp symmetric A H1 PrLa x5 Ap TTpAp transitive A H1 PrAp PrAp TmAp TmAp TmAp x5 H2 H3 H4 PrAp TmAp TmAp x4 H3 H2 x2 x3
+Thm per_stra2 : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R All x A All y A All z A Imp Ap Ap R x y Imp Ap Ap R z y Ap Ap R x z
+ := TpLa A TmLa H1 TpArr A TpArr A Prop PrLa x1 Ap Ap and Ap TTpAp symmetric A H1 Ap TTpAp transitive A H1 TmLa H2 A TmLa H3 A TmLa H4 A PrLa x2 Ap Ap H1 H2 H3 PrLa x3 Ap Ap H1 H4 H3 PrAp TmAp x1 Ap Ap H1 H2 H4 PrLa x4 Ap TTpAp symmetric A H1 PrLa x5 Ap TTpAp transitive A H1 PrAp PrAp TmAp TmAp TmAp x5 H2 H3 H4 x2 PrAp TmAp TmAp x4 H4 H3 x3
+Thm per_stra3 : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R All x A All y A All z A Imp Ap Ap R y x Imp Ap Ap R z y Ap Ap R x z
+ := TpLa A TmLa H1 TpArr A TpArr A Prop PrLa x1 Ap Ap and Ap TTpAp symmetric A H1 Ap TTpAp transitive A H1 TmLa H2 A TmLa H3 A TmLa H4 A PrLa x2 Ap Ap H1 H3 H2 PrLa x3 Ap Ap H1 H4 H3 PrAp TmAp x1 Ap Ap H1 H2 H4 PrLa x4 Ap TTpAp symmetric A H1 PrLa x5 Ap TTpAp transitive A H1 PrAp TmAp TmAp x4 H4 H2 PrAp PrAp TmAp TmAp TmAp x5 H4 H3 H2 x3 x2
+Thm per_ref1 : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R All x1 A All x2 A Imp Ap Ap R x1 x2 Ap Ap R x1 x1
+ := TpLa A TmLa H1 TpArr A TpArr A Prop PrLa x1 Ap TTpAp per A H1 PrAp TmAp x1 All x A All y A Imp Ap Ap H1 x y Ap Ap H1 x x PrLa x2 Ap TTpAp symmetric A H1 PrLa x3 Ap TTpAp transitive A H1 TmLa H2 A TmLa H3 A PrLa x4 Ap Ap H1 H2 H3 PrAp PrLa x5 Ap Ap H1 H3 H2 PrAp PrAp TmAp TmAp TmAp x3 H2 H3 H2 x4 x5 PrAp TmAp TmAp x2 H2 H3 x4
+Thm per_ref2 : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R All x1 A All x2 A Imp Ap Ap R x1 x2 Ap Ap R x2 x2
+ := TpLa A TmLa H1 TpArr A TpArr A Prop PrLa x1 Ap TTpAp per A H1 PrAp TmAp x1 All x A All y A Imp Ap Ap H1 x y Ap Ap H1 y y PrLa x2 Ap TTpAp symmetric A H1 PrLa x3 Ap TTpAp transitive A H1 TmLa H2 A TmLa H3 A PrLa x4 Ap Ap H1 H2 H3 PrAp PrLa x5 Ap Ap H1 H3 H2 PrAp PrAp TmAp TmAp TmAp x3 H3 H2 H3 x5 x4 PrAp TmAp TmAp x2 H2 H3 x4
+Let Eps : TpAll A TpArr TpArr A Prop A := Prim 0
+Known EpsR : TTpAll A All P TpArr A Prop All x A Imp Ap P x Ap P Ap TTpAp Eps A Lam x A Ap P x
+Thm EpsR2 : TTpAll A All P TpArr A Prop Imp Ap TTpAp ex A Lam x A Ap P x Ap P Ap TTpAp Eps A Lam x A Ap P x
+ := TpLa A TmLa P TpArr A Prop PrLa u Ap TTpAp ex A P PrAp TmAp u Ap P Ap TTpAp Eps A Lam x A Ap P x TmLa x A PrLa v Ap P x PrAp TmAp TmAp TpAp EpsR A P x v
+Thm classic : All P Prop Ap Ap or P Ap not P
+ := TmLa H1 Prop PrAp PrLa x1 Ap Lam x11 Prop Ap Ap or x11 H1 True PrAp PrLa x2 Ap Ap or Ap TTpAp Eps Prop Lam x Prop Ap Lam x10 Prop Ap Ap or x10 H1 x H1 PrAp PrLa x4 Ap Lam x9 Prop Ap Ap or Ap not x9 H1 False PrAp PrLa x5 Ap Ap or Ap not Ap TTpAp Eps Prop Lam x Prop Ap Lam x8 Prop Ap Ap or Ap not x8 H1 x H1 PrAp PrAp TmAp x2 Ap Ap or H1 Ap not H1 PrLa x7 Ap TTpAp Eps Prop Lam x Prop Ap Lam x7 Prop Ap Ap or x7 H1 x PrAp PrAp TmAp x5 Ap Ap or H1 Ap not H1 PrLa x9 Ap not Ap TTpAp Eps Prop Lam x Prop Ap Lam x6 Prop Ap Ap or Ap not x6 H1 x PrAp TmAp TmAp orIR H1 Ap not H1 PrLa x10 H1 PrAp PrLa x13 Ap Ap TTpAp eq TpArr Prop Prop Lam x5 Prop Ap Ap or x5 H1 Lam x4 Prop Ap Ap or Ap not x4 H1 PrAp x9 PrAp TmAp x13 Lam x3 TpArr Prop Prop Ap TTpAp Eps Prop x3 x7 PrAp PrAp TmAp TmAp TpAp pred_ext Prop Lam x2 Prop Ap Ap or x2 H1 Lam x1 Prop Ap Ap or Ap not x1 H1 TmLa H3 Prop PrLa x12 Ap Ap or H3 H1 PrAp TmAp TmAp orIR Ap not H3 H1 x10 TmLa H2 Prop PrLa x11 Ap Ap or Ap not H2 H1 PrAp TmAp TmAp orIR H2 H1 x10 PrLa x8 H1 PrAp TmAp TmAp orIL H1 Ap not H1 x8 PrLa x6 H1 PrAp TmAp TmAp orIL H1 Ap not H1 x6 PrAp TmAp TmAp TpAp EpsR Prop Lam x Prop Ap Ap or Ap not x H1 False x4 PrAp TmAp TmAp orIL Ap not False H1 PrLa x3 False x3 PrAp TmAp TmAp TpAp EpsR Prop Lam x Prop Ap Ap or x H1 True x1 PrAp TmAp TmAp orIL True H1 TrueI
+Thm NNPP : All p Prop Imp Ap not Ap not p p
+ := TmLa H1 Prop PrLa x1 Ap not Ap not H1 PrAp PrAp TmAp TmAp classic H1 H1 PrLa x3 H1 x3 PrLa x2 Ap not H1 TmAp PrAp x1 x2 H1
+Def If : TpAll A TpArr Prop TpArr A TpArr A A
+ := TTpLam A Lam p Prop Lam x A Lam y A Ap TTpAp Eps A Lam z A Ap Ap or Ap Ap and p Ap Ap TTpAp eq A z x Ap Ap and Ap not p Ap Ap TTpAp eq A z y
+Thm If_correct : TTpAll A All p Prop All x A All y A Ap Ap or Ap Ap and p Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A p x y x Ap Ap and Ap not p Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A p x y y
+ := TpLa A TmLa H1 Prop TmLa H2 A TmLa H3 A PrAp PrAp TmAp TmAp classic H1 Ap Ap or Ap Ap and H1 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H2 Ap Ap and Ap not H1 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H3 PrLa x3 H1 PrAp PrLa x4 Ap Ap or Ap Ap and H1 Ap Ap TTpAp eq A H2 H2 Ap Ap and Ap not H1 Ap Ap TTpAp eq A H2 H3 PrAp TmAp TmAp TpAp EpsR A Lam z A Ap Ap or Ap Ap and H1 Ap Ap TTpAp eq A z H2 Ap Ap and Ap not H1 Ap Ap TTpAp eq A z H3 H2 x4 PrAp TmAp TmAp orIL Ap Ap and H1 Ap Ap TTpAp eq A H2 H2 Ap Ap and Ap not H1 Ap Ap TTpAp eq A H2 H3 PrAp PrAp TmAp TmAp andI H1 Ap Ap TTpAp eq A H2 H2 x3 TmAp TpAp eqI A H2 PrLa x1 Ap not H1 PrAp PrLa x2 Ap Ap or Ap Ap and H1 Ap Ap TTpAp eq A H3 H2 Ap Ap and Ap not H1 Ap Ap TTpAp eq A H3 H3 PrAp TmAp TmAp TpAp EpsR A Lam z A Ap Ap or Ap Ap and H1 Ap Ap TTpAp eq A z H2 Ap Ap and Ap not H1 Ap Ap TTpAp eq A z H3 H3 x2 PrAp TmAp TmAp orIR Ap Ap and H1 Ap Ap TTpAp eq A H3 H2 Ap Ap and Ap not H1 Ap Ap TTpAp eq A H3 H3 PrAp PrAp TmAp TmAp andI Ap not H1 Ap Ap TTpAp eq A H3 H3 x1 TmAp TpAp eqI A H3
+Thm If_0 : TTpAll A All p Prop All x A All y A Imp Ap not p Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A p x y y
+ := TpLa A TmLa H1 Prop TmLa H2 A TmLa H3 A PrLa x1 Ap not H1 PrAp PrAp TmAp TmAp TmAp TmAp TpAp If_correct A H1 H2 H3 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H3 PrLa x3 Ap Ap and H1 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H2 TmAp PrAp x1 PrAp TmAp TmAp andEL H1 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H2 x3 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H3 PrLa x2 Ap Ap and Ap not H1 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H3 PrAp TmAp TmAp andER Ap not H1 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H3 x2
+Thm If_1 : TTpAll A All p Prop All x A All y A Imp p Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A p x y x
+ := TpLa A TmLa H1 Prop TmLa H2 A TmLa H3 A PrLa x1 H1 PrAp PrAp TmAp TmAp TmAp TmAp TpAp If_correct A H1 H2 H3 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H2 PrLa x3 Ap Ap and H1 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H2 PrAp TmAp TmAp andER H1 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H2 x3 PrLa x2 Ap Ap and Ap not H1 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H3 TmAp PrAp PrAp TmAp TmAp andEL Ap not H1 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H3 x2 x1 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H2
+Thm If_or : TTpAll A All p Prop All x A All y A Ap Ap or Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A p x y x Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A p x y y
+ := TpLa A TmLa H1 Prop TmLa H2 A TmLa H3 A PrAp PrAp TmAp TmAp classic H1 Ap Ap or Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H2 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H3 PrLa x2 H1 PrAp TmAp TmAp orIL Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H2 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H3 PrAp TmAp TmAp TmAp TpAp If_1 A H1 H2 H3 x2 PrLa x1 Ap not H1 PrAp TmAp TmAp orIR Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H2 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H3 H3 PrAp TmAp TmAp TmAp TpAp If_0 A H1 H2 H3 x1
+Thm If_eta : TTpAll A All p Prop All x A Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A p x x x
+ := TpLa A TmLa H1 Prop TmLa H2 A PrAp PrAp TmAp TmAp classic H1 Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A H1 H2 H2 H2 PrLa x2 H1 PrAp TmAp TmAp TmAp TpAp If_1 A H1 H2 H2 x2 PrLa x1 Ap not H1 PrAp TmAp TmAp TmAp TpAp If_0 A H1 H2 H2 x1
+Def canonical_elt : TpAll A TpArr TpArr A TpArr A Prop TpArr A A
+ := TTpLam A Lam R TpArr A TpArr A Prop Lam x A Ap TTpAp Eps A Lam y A Ap Ap R x y
+Thm canonical_elt_rel : TTpAll A All R TpArr A TpArr A Prop All x A Imp Ap Ap R x x Ap Ap R x Ap Ap TTpAp canonical_elt A R x
+ := TpLa A TmLa R TpArr A TpArr A Prop TmLa x A PrLa H Ap Ap R x x PrAp TmAp TmAp TpAp EpsR A Ap R x x H
+Thm canonical_elt_eq : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R All x A All y A Imp Ap Ap R x y Ap Ap TTpAp eq A Ap Ap TTpAp canonical_elt A R x Ap Ap TTpAp canonical_elt A R y
+ := TpLa A TmLa H1 TpArr A TpArr A Prop PrLa x1 Ap TTpAp per A H1 TmLa H2 A TmLa H3 A PrLa x2 Ap Ap H1 H2 H3 PrAp PrLa x5 Ap Ap TTpAp eq TpArr A Prop Ap H1 H2 Ap H1 H3 PrAp TmAp x5 Lam x1 TpArr A Prop Ap Ap TTpAp eq A Ap TTpAp Eps A Lam x2 A Ap Ap H1 H2 x2 Ap TTpAp Eps A x1 TmAp TpAp eqI A Ap TTpAp Eps A Lam z A Ap Ap H1 H2 z PrAp PrAp TmAp TmAp TpAp pred_ext A Ap H1 H2 Ap H1 H3 TmLa H5 A PrLa x4 Ap Ap H1 H2 H5 PrAp PrAp TmAp TmAp TmAp PrAp TmAp TpAp per_stra1 A H1 x1 H3 H2 H5 x2 x4 TmLa H4 A PrLa x3 Ap Ap H1 H3 H4 PrAp PrAp TmAp TmAp TmAp PrAp TmAp TpAp per_tra A H1 x1 H2 H3 H4 x2 x3
+Thm canonical_elt_idem : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R All x A Imp Ap Ap R x x Ap Ap TTpAp eq A Ap Ap TTpAp canonical_elt A R x Ap Ap TTpAp canonical_elt A R Ap Ap TTpAp canonical_elt A R x
+ := TpLa A TmLa H1 TpArr A TpArr A Prop PrLa x1 Ap TTpAp per A H1 TmLa H2 A PrLa x2 Ap Ap H1 H2 H2 PrAp TmAp TmAp PrAp TmAp TpAp canonical_elt_eq A H1 x1 H2 Ap Ap TTpAp canonical_elt A H1 H2 PrAp TmAp TmAp TpAp canonical_elt_rel A H1 H2 x2
+Def quotient : TpAll A TpArr TpArr A TpArr A Prop TpArr A Prop
+ := TTpLam A Lam R TpArr A TpArr A Prop Lam x A Ap Ap and Ap Ap R x x Ap Ap TTpAp eq A x Ap Ap TTpAp canonical_elt A R x
+Thm quotient_prop1 : TTpAll A All R TpArr A TpArr A Prop All x A Imp Ap Ap TTpAp quotient A R x Ap Ap R x x
+ := TpLa A TmLa R TpArr A TpArr A Prop TmLa x A PrLa H Ap Ap TTpAp quotient A R x PrAp TmAp TmAp andEL Ap Ap R x x Ap Ap TTpAp eq A x Ap Ap TTpAp canonical_elt A R x H
+Thm quotient_prop2 : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R All x A All y A Imp Ap Ap TTpAp quotient A R x Imp Ap Ap TTpAp quotient A R y Imp Ap Ap R x y Ap Ap TTpAp eq A x y
+ := TpLa A TmLa H1 TpArr A TpArr A Prop PrLa x1 Ap TTpAp per A H1 TmLa H2 A TmLa H3 A PrLa x2 Ap Ap and Ap Ap H1 H2 H2 Ap Ap TTpAp eq A H2 Ap Ap TTpAp canonical_elt A H1 H2 PrLa x3 Ap Ap and Ap Ap H1 H3 H3 Ap Ap TTpAp eq A H3 Ap Ap TTpAp canonical_elt A H1 H3 PrLa x4 Ap Ap H1 H2 H3 PrAp TmAp PrAp TmAp TmAp TpAp eq_sym A H2 Ap Ap TTpAp canonical_elt A H1 H2 PrAp TmAp TmAp andER Ap Ap H1 H2 H2 Ap Ap TTpAp eq A H2 Ap Ap TTpAp canonical_elt A H1 H2 x2 Lam x2 A Ap Ap TTpAp eq A x2 H3 PrAp TmAp PrAp TmAp TmAp TpAp eq_sym A H3 Ap Ap TTpAp canonical_elt A H1 H3 PrAp TmAp TmAp andER Ap Ap H1 H3 H3 Ap Ap TTpAp eq A H3 Ap Ap TTpAp canonical_elt A H1 H3 x3 Lam x1 A Ap Ap TTpAp eq A Ap Ap TTpAp canonical_elt A H1 H2 x1 PrAp TmAp TmAp PrAp TmAp TpAp canonical_elt_eq A H1 x1 H2 H3 x4
+Def MetaFuncEquiv : TpAll A TpAll B TpArr TpArr A Prop TpArr TpArr A B TpArr TpArr A B Prop
+ := TTpLam A TTpLam B Lam P TpArr A Prop Lam f TpArr A B Lam g TpArr A B All x A Imp Ap P x Ap Ap TTpAp eq B Ap f x Ap g x
+Thm MetaFuncEquiv_ref : TTpAll A TTpAll B All P TpArr A Prop All f TpArr A B Ap Ap Ap TTpAp TTpAp MetaFuncEquiv A B P f f
+ := TpLa A TpLa B TmLa P TpArr A Prop TmLa H1 TpArr A B TmLa H2 A PrLa x1 Ap P H2 TmAp TpAp eqI B Ap H1 H2
+Thm MetaFuncEquiv_sym : TTpAll A TTpAll B All P TpArr A Prop Ap TTpAp symmetric TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P
+ := TpLa A TpLa B TmLa P TpArr A Prop TmLa H1 TpArr A B TmLa H2 TpArr A B PrLa x1 All x A Imp Ap P x Ap Ap TTpAp eq B Ap H1 x Ap H2 x TmLa H3 A PrLa x2 Ap P H3 PrAp TmAp TmAp TpAp eq_sym B Ap H1 H3 Ap H2 H3 PrAp TmAp x1 H3 x2
+Thm MetaFuncEquiv_tra : TTpAll A TTpAll B All P TpArr A Prop Ap TTpAp transitive TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P
+ := TpLa A TpLa B TmLa P TpArr A Prop TmLa H1 TpArr A B TmLa H2 TpArr A B TmLa H3 TpArr A B PrLa x1 All x A Imp Ap P x Ap Ap TTpAp eq B Ap H1 x Ap H2 x PrLa x2 All x A Imp Ap P x Ap Ap TTpAp eq B Ap H2 x Ap H3 x TmLa H4 A PrLa x3 Ap P H4 PrAp PrAp TmAp TmAp TmAp TpAp eq_trans B Ap H1 H4 Ap H2 H4 Ap H3 H4 PrAp TmAp x1 H4 x3 PrAp TmAp x2 H4 x3
+Thm MetaFuncEquiv_per : TTpAll A TTpAll B All P TpArr A Prop Ap TTpAp per TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P
+ := TpLa A TpLa B TmLa P TpArr A Prop PrAp PrAp TmAp TmAp andI Ap TTpAp symmetric TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P Ap TTpAp transitive TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P TmAp TpAp TpAp MetaFuncEquiv_sym A B P TmAp TpAp TpAp MetaFuncEquiv_tra A B P
+Def MetaFuncC : TpAll A TpAll B TpArr TpArr A Prop TpArr TpArr A B TpArr A B
+ := TTpLam A TTpLam B Lam P TpArr A Prop Lam f TpArr A B Ap Ap TTpAp canonical_elt TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P f
+Thm MetaFuncC_rel : TTpAll A TTpAll B All P TpArr A Prop All f TpArr A B Ap Ap Ap TTpAp TTpAp MetaFuncEquiv A B P f Ap Ap TTpAp TTpAp MetaFuncC A B P f
+ := TpLa A TpLa B TmLa P TpArr A Prop TmLa H1 TpArr A B PrAp TmAp TmAp TpAp canonical_elt_rel TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P H1 TmAp TmAp TpAp TpAp MetaFuncEquiv_ref A B P H1
+Thm MetaFuncC_eq : TTpAll A TTpAll B All P TpArr A Prop All f TpArr A B All g TpArr A B Imp Ap Ap Ap TTpAp TTpAp MetaFuncEquiv A B P f g Ap Ap TTpAp eq TpArr A B Ap Ap TTpAp TTpAp MetaFuncC A B P f Ap Ap TTpAp TTpAp MetaFuncC A B P g
+ := TpLa A TpLa B TmLa P TpArr A Prop TmLa H1 TpArr A B TmLa H2 TpArr A B PrLa x1 Ap Ap Ap TTpAp TTpAp MetaFuncEquiv A B P H1 H2 PrAp TmAp TmAp PrAp TmAp TpAp canonical_elt_eq TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P TmAp TpAp TpAp MetaFuncEquiv_per A B P H1 H2 x1
+Thm MetaFuncC_idem : TTpAll A TTpAll B All P TpArr A Prop All f TpArr A B Ap Ap TTpAp eq TpArr A B Ap Ap TTpAp TTpAp MetaFuncC A B P f Ap Ap TTpAp TTpAp MetaFuncC A B P Ap Ap TTpAp TTpAp MetaFuncC A B P f
+ := TpLa A TpLa B TmLa P TpArr A Prop TmLa H1 TpArr A B PrAp TmAp PrAp TmAp TpAp canonical_elt_idem TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P TmAp TpAp TpAp MetaFuncEquiv_per A B P H1 TmAp TmAp TpAp TpAp MetaFuncEquiv_ref A B P H1
+Def MetaFuncQ : TpAll A TpAll B TpArr TpArr A Prop TpArr TpArr A B Prop
+ := TTpLam A TTpLam B Lam P TpArr A Prop Ap TTpAp quotient TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P
+Thm MetaFuncQ_prop2 : TTpAll A TTpAll B All P TpArr A Prop All f TpArr A B All g TpArr A B Imp Ap Ap TTpAp TTpAp MetaFuncQ A B P f Imp Ap Ap TTpAp TTpAp MetaFuncQ A B P g Imp Ap Ap Ap TTpAp TTpAp MetaFuncEquiv A B P f g Ap Ap TTpAp eq TpArr A B f g
+ := TpLa A TpLa B TmLa P TpArr A Prop PrAp TmAp TpAp quotient_prop2 TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P TmAp TpAp TpAp MetaFuncEquiv_per A B P
+Let In : TpArr set TpArr set Prop
+ := Prim 1
+Def Subq : TpArr set TpArr set Prop
+ := Lam X set Lam Y set All x set Imp Ap Ap In x X Ap Ap In x Y
+Thm Subq_ref : All X set Ap Ap Subq X X
+ := TmLa X set TmLa x set PrLa H Ap Ap In x X H
+Thm Subq_tra : All X set All Y set All Z set Imp Ap Ap Subq X Y Imp Ap Ap Subq Y Z Ap Ap Subq X Z
+ := TmLa X set TmLa Y set TmLa Z set PrLa H1 Ap Ap Subq X Y PrLa H2 Ap Ap Subq Y Z TmLa x set PrLa H Ap Ap In x X PrAp TmAp H2 x PrAp TmAp H1 x H
+Known set_ext : All X set All Y set Imp Ap Ap Subq X Y Imp Ap Ap Subq Y X Ap Ap TTpAp eq set X Y
+Let Empty : set
+ := Prim 2
+Known EmptyAx : Ap not Ap TTpAp ex set Lam x set Ap Ap In x Empty
+Thm EmptyE : All x set Ap not Ap Ap In x Empty
+ := TmLa x set PrLa H Ap Ap In x Empty PrAp EmptyAx PrAp TmAp TmAp TpAp exI set Lam x set Ap Ap In x Empty x H
+Thm Subq_Empty : All X set Ap Ap Subq Empty X
+ := TmLa X set TmLa x set PrLa H Ap Ap In x Empty TmAp PrAp TmAp EmptyE x H Ap Ap In x X
+Thm Empty_Subq_eq : All X set Imp Ap Ap Subq X Empty Ap Ap TTpAp eq set X Empty
+ := TmLa H1 set PrLa x1 Ap Ap Subq H1 Empty PrAp PrAp TmAp TmAp set_ext H1 Empty x1 TmAp Subq_Empty H1
+Let Union : TpArr set set
+ := Prim 3
+Known UnionEq : All X set All x set Ap Ap iff Ap Ap In x Ap Union X Ap TTpAp ex set Lam Y set Ap Ap and Ap Ap In x Y Ap Ap In Y X
+Thm UnionE : All X set All x set Imp Ap Ap In x Ap Union X Ap TTpAp ex set Lam Y set Ap Ap and Ap Ap In x Y Ap Ap In Y X
+ := TmLa X set TmLa x set PrAp TmAp TmAp iffEL Ap Ap In x Ap Union X Ap TTpAp ex set Lam Y set Ap Ap and Ap Ap In x Y Ap Ap In Y X TmAp TmAp UnionEq X x
+Thm UnionE2 : All X set All x set Imp Ap Ap In x Ap Union X All p Prop Imp All Y set Imp Ap Ap In x Y Imp Ap Ap In Y X p p
+ := TmLa X set TmLa x set PrLa H Ap Ap In x Ap Union X PrAp TmAp TmAp TpAp exandE set Lam Y set Ap Ap In x Y Lam Y set Ap Ap In Y X PrAp TmAp TmAp UnionE X x H
+Thm UnionI : All X set All x set All Y set Imp Ap Ap In x Y Imp Ap Ap In Y X Ap Ap In x Ap Union X
+ := TmLa H1 set TmLa H2 set TmLa H3 set PrLa x1 Ap Ap In H2 H3 PrLa x2 Ap Ap In H3 H1 PrAp TmAp TmAp TmAp UnionEq H1 H2 Ap Ap In H2 Ap Union H1 PrLa x3 Imp Ap Ap In H2 Ap Union H1 Ap TTpAp ex set Lam x2 set Ap Ap and Ap Ap In H2 x2 Ap Ap In x2 H1 PrLa x4 Imp Ap TTpAp ex set Lam x1 set Ap Ap and Ap Ap In H2 x1 Ap Ap In x1 H1 Ap Ap In H2 Ap Union H1 PrAp x4 PrAp TmAp TmAp TpAp exI set Lam Y set Ap Ap and Ap Ap In H2 Y Ap Ap In Y H1 H3 PrAp PrAp TmAp TmAp andI Ap Ap In H2 H3 Ap Ap In H3 H1 x1 x2
+Let Power : TpArr set set
+ := Prim 4
+Known PowerEq : All X set All Y set Ap Ap iff Ap Ap In Y Ap Power X Ap Ap Subq Y X
+Thm PowerE : All X set All Y set Imp Ap Ap In Y Ap Power X Ap Ap Subq Y X
+ := TmLa X set TmLa Y set PrAp TmAp TmAp TmAp PowerEq X Y Imp Ap Ap In Y Ap Power X Ap Ap Subq Y X PrLa H Imp Ap Ap In Y Ap Power X Ap Ap Subq Y X PrLa _ Imp Ap Ap Subq Y X Ap Ap In Y Ap Power X H
+Thm PowerI : All X set All Y set Imp Ap Ap Subq Y X Ap Ap In Y Ap Power X
+ := TmLa X set TmLa Y set PrAp TmAp TmAp TmAp PowerEq X Y Imp Ap Ap Subq Y X Ap Ap In Y Ap Power X PrLa _ Imp Ap Ap In Y Ap Power X Ap Ap Subq Y X PrLa H Imp Ap Ap Subq Y X Ap Ap In Y Ap Power X H
+Thm Empty_In_Power : All X set Ap Ap In Empty Ap Power X
+ := TmLa X set PrAp TmAp TmAp PowerI X Empty TmAp Subq_Empty X
+Thm Self_In_Power : All X set Ap Ap In X Ap Power X
+ := TmLa X set PrAp TmAp TmAp PowerI X X TmAp Subq_ref X
+Let Repl : TpArr set TpArr TpArr set set set
+ := Prim 5
+Known ReplEq : All X set All F TpArr set set All y set Ap Ap iff Ap Ap In y Ap Ap Repl X Lam x set Ap F x Ap TTpAp ex set Lam x set Ap Ap and Ap Ap In x X Ap Ap TTpAp eq set y Ap F x
+Thm ReplE : All X set All F TpArr set set All y set Imp Ap Ap In y Ap Ap Repl X Lam x set Ap F x Ap TTpAp ex set Lam x set Ap Ap and Ap Ap In x X Ap Ap TTpAp eq set y Ap F x
+ := TmLa X set TmLa F TpArr set set TmLa y set PrAp TmAp TmAp iffEL Ap Ap In y Ap Ap Repl X Lam x set Ap F x Ap TTpAp ex set Lam x set Ap Ap and Ap Ap In x X Ap Ap TTpAp eq set y Ap F x TmAp TmAp TmAp ReplEq X F y
+Thm ReplE2 : All X set All F TpArr set set All y set Imp Ap Ap In y Ap Ap Repl X Lam x set Ap F x All p Prop Imp All x set Imp Ap Ap In x X Imp Ap Ap TTpAp eq set y Ap F x p p
+ := TmLa X set TmLa F TpArr set set TmLa y set PrLa H Ap Ap In y Ap Ap Repl X F PrAp TmAp TmAp TpAp exandE set Lam x set Ap Ap In x X Lam x set Ap Ap TTpAp eq set y Ap F x PrAp TmAp TmAp TmAp ReplE X F y H
+Thm ReplI : All X set All F TpArr set set All x set Imp Ap Ap In x X Ap Ap In Ap F x Ap Ap Repl X Lam x set Ap F x
+ := TmLa H1 set TmLa H2 TpArr set set TmLa H3 set PrLa x1 Ap Ap In H3 H1 PrAp PrLa x2 Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap Ap TTpAp eq set Ap H2 H3 Ap H2 z PrAp PrAp TmAp TmAp iffER Ap Ap In Ap H2 H3 Ap Ap Repl H1 Lam x set Ap H2 x Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap Ap TTpAp eq set Ap H2 H3 Ap H2 z TmAp TmAp TmAp ReplEq H1 H2 Ap H2 H3 x2 PrAp PrAp TmAp TmAp TmAp TpAp exandI set Lam z set Ap Ap In z H1 Lam z set Ap Ap TTpAp eq set Ap H2 H3 Ap H2 z H3 x1 TmAp TpAp eqI set Ap H2 H3
+Def Sep : TpArr set TpArr TpArr set Prop set
+ := Lam X set Lam P TpArr set Prop Ap Ap Ap TTpAp If set Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z X Ap P z Ap Ap Repl X Lam x set Ap Lam x1 set Ap Ap Ap TTpAp If set Ap P x1 x1 Ap TTpAp Eps set Lam x2 set Ap Ap and Ap Ap In x2 X Ap P x2 x Empty
+Thm SepI : All X set All P TpArr set Prop All x set Imp Ap Ap In x X Imp Ap P x Ap Ap In x Ap Ap Sep X Lam x set Ap P x
+ := TmLa H1 set TmLa H2 TpArr set Prop TmLa H3 set PrLa x1 Ap Ap In H3 H1 PrLa x2 Ap H2 H3 PrAp PrLa x3 Ap TTpAp ex set Lam x19 set Ap Ap and Ap Ap In x19 H1 Ap H2 x19 PrAp PrLa x4 Ap Ap TTpAp eq set Ap Ap Ap TTpAp If set Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z Ap Ap Repl H1 Lam x set Ap Lam x17 set Ap Ap Ap TTpAp If set Ap H2 x17 x17 Ap TTpAp Eps set Lam x18 set Ap Ap and Ap Ap In x18 H1 Ap H2 x18 x Empty Ap Ap Repl H1 Lam x set Ap Lam x15 set Ap Ap Ap TTpAp If set Ap H2 x15 x15 Ap TTpAp Eps set Lam x16 set Ap Ap and Ap Ap In x16 H1 Ap H2 x16 x PrAp TmAp PrAp TmAp TmAp TpAp eq_sym set Ap Ap Ap TTpAp If set Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z Ap Ap Repl H1 Lam x set Ap Lam x13 set Ap Ap Ap TTpAp If set Ap H2 x13 x13 Ap TTpAp Eps set Lam x14 set Ap Ap and Ap Ap In x14 H1 Ap H2 x14 x Empty Ap Ap Repl H1 Lam x set Ap Lam x11 set Ap Ap Ap TTpAp If set Ap H2 x11 x11 Ap TTpAp Eps set Lam x12 set Ap Ap and Ap Ap In x12 H1 Ap H2 x12 x x4 Lam x10 set Ap Ap In H3 x10 PrAp PrLa x5 Ap Ap TTpAp eq set Ap Lam x8 set Ap Ap Ap TTpAp If set Ap H2 x8 x8 Ap TTpAp Eps set Lam x9 set Ap Ap and Ap Ap In x9 H1 Ap H2 x9 H3 H3 PrAp TmAp x5 Lam x4 set Ap Ap In x4 Ap Ap Repl H1 Lam x5 set Ap Lam x6 set Ap Ap Ap TTpAp If set Ap H2 x6 x6 Ap TTpAp Eps set Lam x7 set Ap Ap and Ap Ap In x7 H1 Ap H2 x7 x5 PrAp TmAp TmAp TmAp ReplI H1 Lam x set Ap Ap Ap TTpAp If set Ap H2 x x Ap TTpAp Eps set Lam x3 set Ap Ap and Ap Ap In x3 H1 Ap H2 x3 H3 x1 PrAp TmAp TmAp TmAp TpAp If_1 set Ap H2 H3 H3 Ap TTpAp Eps set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z x2 PrAp TmAp TmAp TmAp TpAp If_1 set Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z Ap Ap Repl H1 Lam x set Ap Lam x1 set Ap Ap Ap TTpAp If set Ap H2 x1 x1 Ap TTpAp Eps set Lam x2 set Ap Ap and Ap Ap In x2 H1 Ap H2 x2 x Empty x3 PrAp TmAp TmAp TpAp exI set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z H3 PrAp PrAp TmAp TmAp andI Ap Ap In H3 H1 Ap H2 H3 x1 x2
+Thm SepE : All X set All P TpArr set Prop All x set Imp Ap Ap In x Ap Ap Sep X Lam x32 set Ap P x32 Ap Ap and Ap Ap In x X Ap P x
+ := TmLa H1 set TmLa H2 TpArr set Prop TmLa H3 set PrAp PrAp TmAp TmAp classic Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z Imp Ap Ap In H3 Ap Ap Sep H1 Lam x set Ap H2 x Ap Ap and Ap Ap In H3 H1 Ap H2 H3 PrLa x4 Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z PrAp PrLa x5 Ap Ap TTpAp eq set Ap Ap Ap TTpAp If set Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z Ap Ap Repl H1 Lam x set Ap Lam x30 set Ap Ap Ap TTpAp If set Ap H2 x30 x30 Ap TTpAp Eps set Lam x31 set Ap Ap and Ap Ap In x31 H1 Ap H2 x31 x Empty Ap Ap Repl H1 Lam x set Ap Lam x28 set Ap Ap Ap TTpAp If set Ap H2 x28 x28 Ap TTpAp Eps set Lam x29 set Ap Ap and Ap Ap In x29 H1 Ap H2 x29 x PrAp TmAp PrAp TmAp TmAp TpAp eq_sym set Ap Ap Ap TTpAp If set Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z Ap Ap Repl H1 Lam x set Ap Lam x26 set Ap Ap Ap TTpAp If set Ap H2 x26 x26 Ap TTpAp Eps set Lam x27 set Ap Ap and Ap Ap In x27 H1 Ap H2 x27 x Empty Ap Ap Repl H1 Lam x set Ap Lam x24 set Ap Ap Ap TTpAp If set Ap H2 x24 x24 Ap TTpAp Eps set Lam x25 set Ap Ap and Ap Ap In x25 H1 Ap H2 x25 x x5 Lam x23 set Imp Ap Ap In H3 x23 Ap Ap and Ap Ap In H3 H1 Ap H2 H3 PrLa x6 Ap Ap In H3 Ap Ap Repl H1 Lam x set Ap Lam x21 set Ap Ap Ap TTpAp If set Ap H2 x21 x21 Ap TTpAp Eps set Lam x22 set Ap Ap and Ap Ap In x22 H1 Ap H2 x22 x PrAp TmAp PrAp TmAp TmAp TmAp ReplE2 H1 Lam x set Ap Ap Ap TTpAp If set Ap H2 x x Ap TTpAp Eps set Lam x20 set Ap Ap and Ap Ap In x20 H1 Ap H2 x20 H3 x6 Ap Ap and Ap Ap In H3 H1 Ap H2 H3 TmLa H4 set PrLa x7 Ap Ap In H4 H1 PrLa x8 Ap Ap TTpAp eq set H3 Ap Lam x18 set Ap Ap Ap TTpAp If set Ap H2 x18 x18 Ap TTpAp Eps set Lam x19 set Ap Ap and Ap Ap In x19 H1 Ap H2 x19 H4 PrAp PrAp TmAp TmAp classic Ap H2 H4 Ap Ap and Ap Ap In H3 H1 Ap H2 H3 PrLa x11 Ap H2 H4 PrAp PrLa x12 Ap Ap TTpAp eq set H3 H4 PrAp TmAp PrAp TmAp TmAp TpAp eq_sym set H3 H4 x12 Lam x17 set Ap Ap and Ap Ap In x17 H1 Ap H2 x17 PrAp PrAp TmAp TmAp andI Ap Ap In H4 H1 Ap H2 H4 x7 x11 PrAp TmAp PrAp TmAp TmAp TmAp TpAp If_1 set Ap H2 H4 H4 Ap TTpAp Eps set Lam x16 set Ap Ap and Ap Ap In x16 H1 Ap H2 x16 x11 Lam x15 set Ap Ap TTpAp eq set H3 x15 x8 PrLa x9 Ap not Ap H2 H4 PrAp PrLa x10 Ap Ap TTpAp eq set H3 Ap TTpAp Eps set Lam x14 set Ap Ap and Ap Ap In x14 H1 Ap H2 x14 PrAp TmAp PrAp TmAp TmAp TpAp eq_sym set H3 Ap TTpAp Eps set Lam x13 set Ap Ap and Ap Ap In x13 H1 Ap H2 x13 x10 Lam x12 set Ap Ap and Ap Ap In x12 H1 Ap H2 x12 PrAp TmAp TpAp EpsR2 set Lam x11 set Ap Ap and Ap Ap In x11 H1 Ap H2 x11 x4 PrAp TmAp PrAp TmAp TmAp TmAp TpAp If_0 set Ap H2 H4 H4 Ap TTpAp Eps set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z x9 Lam x10 set Ap Ap TTpAp eq set H3 x10 x8 PrAp TmAp TmAp TmAp TpAp If_1 set Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z Ap Ap Repl H1 Lam x set Ap Lam x8 set Ap Ap Ap TTpAp If set Ap H2 x8 x8 Ap TTpAp Eps set Lam x9 set Ap Ap and Ap Ap In x9 H1 Ap H2 x9 x Empty x4 PrLa x1 Ap not Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z PrAp PrLa x2 Ap Ap TTpAp eq set Ap Ap Ap TTpAp If set Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z Ap Ap Repl H1 Lam x set Ap Lam x6 set Ap Ap Ap TTpAp If set Ap H2 x6 x6 Ap TTpAp Eps set Lam x7 set Ap Ap and Ap Ap In x7 H1 Ap H2 x7 x Empty Empty PrAp TmAp PrAp TmAp TmAp TpAp eq_sym set Ap Ap Ap TTpAp If set Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z Ap Ap Repl H1 Lam x set Ap Lam x4 set Ap Ap Ap TTpAp If set Ap H2 x4 x4 Ap TTpAp Eps set Lam x5 set Ap Ap and Ap Ap In x5 H1 Ap H2 x5 x Empty Empty x2 Lam x3 set Imp Ap Ap In H3 x3 Ap Ap and Ap Ap In H3 H1 Ap H2 H3 PrLa x3 Ap Ap In H3 Empty TmAp PrAp TmAp EmptyE H3 x3 Ap Ap and Ap Ap In H3 H1 Ap H2 H3 PrAp TmAp TmAp TmAp TpAp If_0 set Ap TTpAp ex set Lam z set Ap Ap and Ap Ap In z H1 Ap H2 z Ap Ap Repl H1 Lam x set Ap Lam x1 set Ap Ap Ap TTpAp If set Ap H2 x1 x1 Ap TTpAp Eps set Lam x2 set Ap Ap and Ap Ap In x2 H1 Ap H2 x2 x Empty x1
+Thm SepE1 : All X set All P TpArr set Prop All x set Imp Ap Ap In x Ap Ap Sep X Lam x set Ap P x Ap Ap In x X
+ := TmLa X set TmLa P TpArr set Prop TmLa x set PrLa H Ap Ap In x Ap Ap Sep X P PrAp TmAp PrAp TmAp TmAp TmAp SepE X P x H Ap Ap In x X PrLa H Ap Ap In x X PrLa _ Ap P x H
+Thm SepE2 : All X set All P TpArr set Prop All x set Imp Ap Ap In x Ap Ap Sep X Lam x set Ap P x Ap P x
+ := TmLa X set TmLa P TpArr set Prop TmLa x set PrLa H Ap Ap In x Ap Ap Sep X P PrAp TmAp PrAp TmAp TmAp TmAp SepE X P x H Ap P x PrLa _ Ap Ap In x X PrLa H Ap P x H
+Def binintersect : TpArr set TpArr set set
+ := Lam X set Lam Y set Ap Ap Sep X Lam x set Ap Ap In x Y
+Thm binintersectI : All X set All Y set All z set Imp Ap Ap In z X Imp Ap Ap In z Y Ap Ap In z Ap Ap binintersect X Y
+ := TmLa X set TmLa Y set TmLa z set PrLa H1 Ap Ap In z X PrLa H2 Ap Ap In z Y PrAp PrAp TmAp TmAp TmAp SepI X Lam x set Ap Ap In x Y z H1 H2
+Thm binintersectE : All X set All Y set All z set Imp Ap Ap In z Ap Ap binintersect X Y Ap Ap and Ap Ap In z X Ap Ap In z Y
+ := TmLa X set TmLa Y set TmLa z set PrLa H1 Ap Ap In z Ap Ap binintersect X Y PrAp TmAp TmAp TmAp SepE X Lam x set Ap Ap In x Y z H1
+Thm binintersectE1 : All X set All Y set All z set Imp Ap Ap In z Ap Ap binintersect X Y Ap Ap In z X
+ := TmLa X set TmLa Y set TmLa z set PrLa H1 Ap Ap In z Ap Ap binintersect X Y PrAp TmAp TmAp TmAp SepE1 X Lam x set Ap Ap In x Y z H1
+Thm binintersectE2 : All X set All Y set All z set Imp Ap Ap In z Ap Ap binintersect X Y Ap Ap In z Y
+ := TmLa X set TmLa Y set TmLa z set PrLa H1 Ap Ap In z Ap Ap binintersect X Y PrAp TmAp TmAp TmAp SepE2 X Lam x set Ap Ap In x Y z H1
+Def UPair : TpArr set TpArr set set
+ := Lam y set Lam z set Ap Ap Repl Ap Power Ap Power Empty Lam X set Ap Ap Ap TTpAp If set Ap Ap In Empty X y z
+Thm UPairE : All x set All y set All z set Imp Ap Ap In x Ap Ap UPair y z Ap Ap or Ap Ap TTpAp eq set x y Ap Ap TTpAp eq set x z
+ := TmLa H1 set TmLa H2 set TmLa H3 set PrLa x1 Ap Ap In H1 Ap Ap UPair H2 H3 PrAp TmAp PrAp TmAp TmAp TmAp ReplE Ap Power Ap Power Empty Lam X set Ap Ap Ap TTpAp If set Ap Ap In Empty X H2 H3 H1 x1 Ap Ap or Ap Ap TTpAp eq set H1 H2 Ap Ap TTpAp eq set H1 H3 TmLa H4 set PrLa x2 Ap Ap and Ap Ap In H4 Ap Power Ap Power Empty Ap Ap TTpAp eq set H1 Ap Ap Ap TTpAp If set Ap Ap In Empty H4 H2 H3 PrAp PrLa x3 Ap Ap TTpAp eq set H1 Ap Ap Ap TTpAp If set Ap Ap In Empty H4 H2 H3 PrAp PrAp TmAp TmAp TmAp TmAp TpAp If_or set Ap Ap In Empty H4 H2 H3 Ap Ap or Ap Ap TTpAp eq set H1 H2 Ap Ap TTpAp eq set H1 H3 PrLa x5 Ap Ap TTpAp eq set Ap Ap Ap TTpAp If set Ap Ap In Empty H4 H2 H3 H2 PrAp TmAp TmAp orIL Ap Ap TTpAp eq set H1 H2 Ap Ap TTpAp eq set H1 H3 PrAp TmAp x5 Lam x2 set Ap Ap TTpAp eq set H1 x2 x3 PrLa x4 Ap Ap TTpAp eq set Ap Ap Ap TTpAp If set Ap Ap In Empty H4 H2 H3 H3 PrAp TmAp TmAp orIR Ap Ap TTpAp eq set H1 H2 Ap Ap TTpAp eq set H1 H3 PrAp TmAp x4 Lam x1 set Ap Ap TTpAp eq set H1 x1 x3 PrAp TmAp TmAp andER Ap Ap In H4 Ap Power Ap Power Empty Ap Ap TTpAp eq set H1 Ap Ap Ap TTpAp If set Ap Ap In Empty H4 H2 H3 x2
+Thm UPairI1 : All y set All z set Ap Ap In y Ap Ap UPair y z
+ := TmLa H1 set TmLa H2 set PrAp TmAp PrAp TmAp TmAp TmAp TpAp If_1 set Ap Ap In Empty Ap Power Empty H1 H2 TmAp Empty_In_Power Empty Lam x1 set Ap Ap In x1 Ap Ap UPair H1 H2 PrAp TmAp TmAp TmAp ReplI Ap Power Ap Power Empty Lam X set Ap Ap Ap TTpAp If set Ap Ap In Empty X H1 H2 Ap Power Empty TmAp Self_In_Power Ap Power Empty
+Thm UPairI2 : All y set All z set Ap Ap In z Ap Ap UPair y z
+ := TmLa H1 set TmLa H2 set PrAp TmAp PrAp TmAp TmAp TmAp TpAp If_0 set Ap Ap In Empty Empty H1 H2 TmAp EmptyE Empty Lam x1 set Ap Ap In x1 Ap Ap UPair H1 H2 PrAp TmAp TmAp TmAp ReplI Ap Power Ap Power Empty Lam X set Ap Ap Ap TTpAp If set Ap Ap In Empty X H1 H2 Empty TmAp Empty_In_Power Ap Power Empty
+Def Sing : TpArr set set
+ := Lam x set Ap Ap UPair x x
+Thm SingI : All x set Ap Ap In x Ap Sing x
+ := TmLa x set TmAp TmAp UPairI1 x x
+Thm SingE : All x set All y set Imp Ap Ap In y Ap Sing x Ap Ap TTpAp eq set y x
+ := TmLa x set TmLa y set PrLa H Ap Ap In y Ap Sing x PrAp PrAp TmAp PrAp TmAp TmAp TmAp UPairE y x x H Ap Ap TTpAp eq set y x PrLa H Ap Ap TTpAp eq set y x H PrLa H Ap Ap TTpAp eq set y x H
+Def binunion : TpArr set TpArr set set
+ := Lam X set Lam Y set Ap Union Ap Ap UPair X Y
+Thm binunionI1 : All X set All Y set All z set Imp Ap Ap In z X Ap Ap In z Ap Ap binunion X Y
+ := TmLa H1 set TmLa H2 set TmLa H3 set PrLa x1 Ap Ap In H3 H1 PrAp PrAp TmAp TmAp TmAp UnionI Ap Ap UPair H1 H2 H3 H1 x1 TmAp TmAp UPairI1 H1 H2
+Thm binunionI2 : All X set All Y set All z set Imp Ap Ap In z Y Ap Ap In z Ap Ap binunion X Y
+ := TmLa H1 set TmLa H2 set TmLa H3 set PrLa x1 Ap Ap In H3 H2 PrAp PrAp TmAp TmAp TmAp UnionI Ap Ap UPair H1 H2 H3 H2 x1 TmAp TmAp UPairI2 H1 H2
+Thm binunionE : All X set All Y set All z set Imp Ap Ap In z Ap Ap binunion X Y Ap Ap or Ap Ap In z X Ap Ap In z Y
+ := TmLa H1 set TmLa H2 set TmLa H3 set PrLa x1 Ap Ap In H3 Ap Ap binunion H1 H2 PrAp TmAp PrAp TmAp TmAp UnionE2 Ap Ap UPair H1 H2 H3 x1 Ap Ap or Ap Ap In H3 H1 Ap Ap In H3 H2 TmLa H4 set PrLa x2 Ap Ap In H3 H4 PrLa x3 Ap Ap In H4 Ap Ap UPair H1 H2 PrAp PrAp TmAp PrAp TmAp TmAp TmAp UPairE H4 H1 H2 x3 Ap Ap or Ap Ap In H3 H1 Ap Ap In H3 H2 PrLa x5 Ap Ap TTpAp eq set H4 H1 PrAp TmAp TmAp orIL Ap Ap In H3 H1 Ap Ap In H3 H2 PrAp TmAp x5 Lam x2 set Ap Ap In H3 x2 x2 PrLa x4 Ap Ap TTpAp eq set H4 H2 PrAp TmAp TmAp orIR Ap Ap In H3 H1 Ap Ap In H3 H2 PrAp TmAp x4 Lam x1 set Ap Ap In H3 x1 x2
+Def SetAdjoin : TpArr set TpArr set set
+ := Lam X set Lam y set Ap Ap binunion X Ap Sing y
+Def TransSet : TpArr set Prop
+ := Lam U set All X set Imp Ap Ap In X U Ap Ap Subq X U
+Def Union_closed : TpArr set Prop
+ := Lam U set All X set Imp Ap Ap In X U Ap Ap In Ap Union X U
+Def Power_closed : TpArr set Prop
+ := Lam U set All X set Imp Ap Ap In X U Ap Ap In Ap Power X U
+Def Repl_closed : TpArr set Prop
+ := Lam U set All X set Imp Ap Ap In X U All F TpArr set set Imp All x set Imp Ap Ap In x X Ap Ap In Ap F x U Ap Ap In Ap Ap Repl X Lam x set Ap F x U
+Def ZF_closed : TpArr set Prop
+ := Lam U set Ap Ap and Ap Ap and Ap Union_closed U Ap Power_closed U Ap Repl_closed U
+Thm ZF_closed_I : All U set Imp Ap Union_closed U Imp Ap Power_closed U Imp Ap Repl_closed U Ap ZF_closed U
+ := TmLa U set PrLa H1 Ap Union_closed U PrLa H2 Ap Power_closed U PrLa H3 Ap Repl_closed U PrAp PrAp PrAp TmAp TmAp TmAp and3I Ap Union_closed U Ap Power_closed U Ap Repl_closed U H1 H2 H3
+Thm ZF_closed_E : All U set Imp Ap ZF_closed U All p Prop Imp Imp Ap Union_closed U Imp Ap Power_closed U Imp Ap Repl_closed U p p
+ := TmLa U set PrLa C Ap ZF_closed U TmLa p Prop PrLa v Imp Ap Union_closed U Imp Ap Power_closed U Imp Ap Repl_closed U p PrAp TmAp C p PrLa C Ap Ap and Ap Union_closed U Ap Power_closed U PrLa H3 Ap Repl_closed U PrAp TmAp C p PrLa H1 Ap Union_closed U PrLa H2 Ap Power_closed U PrAp PrAp PrAp v H1 H2 H3
+Let UnivOf : TpArr set set
+ := Prim 6
+Known UnivOf_In : All N set Ap Ap In N Ap UnivOf N
+Known UnivOf_TransSet : All N set Ap TransSet Ap UnivOf N
+Known UnivOf_ZF_closed : All N set Ap ZF_closed Ap UnivOf N
+Known UnivOf_Min : All N set All U set Imp Ap Ap In N U Imp Ap TransSet U Imp Ap ZF_closed U Ap Ap Subq Ap UnivOf N U
+
+Nonce f12428bba4d8374e4e68ef879f32fb471d3e707d30ea1149e189fc07e612c383
+
+Publisher DcaPbtoeYoPostn2tz2A4ViMo9AzA1J2Hb
+
+NewOwner False DosfWPhS8UC2VCWiExKWxgBWKdqMHnJfNS
+NewRights False DosfWPhS8UC2VCWiExKWxgBWKdqMHnJfNS None
+NewOwner True Dm3eV1tEmKGAyEZ6bh7CQvCacyoW2426un
+NewOwner not DrVAARmYYytHoxFRTf2T5XdNMC1oreDzaB
+NewRights not DrVAARmYYytHoxFRTf2T5XdNMC1oreDzaB None
+NewOwner and DqSi6e31EEMnTdmLrhLGpA72JieQjwubhG
+NewRights and DqSi6e31EEMnTdmLrhLGpA72JieQjwubhG 1
+NewOwner or DgNrY2TR5Bem9vmg9bEigKFU8kwTa2VcCr
+NewRights or DgNrY2TR5Bem9vmg9bEigKFU8kwTa2VcCr 1
+NewOwner iff DY81B36W5b3Apxtjv1Acjfe9CYVU5pF9VT
+NewRights iff DY81B36W5b3Apxtjv1Acjfe9CYVU5pF9VT 0.1
+NewOwner eq DXQFEdLrvqN2FPKXgkvJrTEH67zDwRiqYk
+NewRights eq DXQFEdLrvqN2FPKXgkvJrTEH67zDwRiqYk 0.1
+NewOwner neq DXgUgaUCYPWWcdYH9ZNY34E2RHDs5LmPfJ
+NewRights neq DXgUgaUCYPWWcdYH9ZNY34E2RHDs5LmPfJ 1.5
+NewOwner ex DqfxQUbLBjwyo72tFy689CxJeuPxqQ7u3d
+NewRights ex DqfxQUbLBjwyo72tFy689CxJeuPxqQ7u3d 1.5
+NewOwner symmetric DgoHokQ3PmhF46LW7DeFeb2HnxTDnUJ7tp
+NewOwner transitive DrdgJYtZ7YSvjvveNpV86rDWLvie1HJdfx
+NewOwner per DX9cLNzJw4eWyUUtRHBJzRzjJ8Mpsx6hvZ
+NewOwner If DiXitihKkYWJAEZH2wAA1M7TvfyPudXDY8
+NewOwner canonical_elt DgNifPo9bJeTiHUDwo9F8JFEmToks5Vyf2
+NewOwner quotient DmH9M227gXXUHEy8ufbjJAzY9Y1WAKLoFJ
+NewOwner MetaFuncEquiv Dh8dDu8DmAWTA5sPbkMHfKbjXo7LuTrF7c
+NewOwner MetaFuncC DrWqF71tRLQvzUwiHmeysvXYTpZ3rWGv6T
+NewOwner MetaFuncQ DkS5tbgjoErqyj9SjfNjuGXvy7orQEvg6i
+NewOwner Subq DZTC1Fbb6kshuH6ycV9ZtC1HXun8vRuxqD
+NewOwner Sep DZWGDvbvxzVYbP9GQV87fDzPfLuMcuarCd
+NewOwner binintersect DXtVtxvRAfL8q7eryK3RxKWHA2QpMy1urZ
+NewOwner UPair Dgk2y9y9nWJNgFPvosGrXD1cSnVwGXAFuw
+NewOwner Sing DgtRyeSHMMcpcHeApuW1tDUt1BaAxxa2gK
+NewOwner binunion Dk2PFDnfTp42rvVwRc6WHkH7xkBefMpxc1
+NewOwner SetAdjoin DVBmadMexLnWDhjT2i1jfCsBMc1BtJxbEw
+NewOwner TransSet DXYhSdHmcFMPTXa6hqA28aaLZPgnhtcXW5
+NewOwner Union_closed DfUonKofiPqed36vS561WgLAfBicPb6kKR
+NewOwner Power_closed DhBQEugUsrPaEtCLrteCVnLX58NQo5wZ9x
+NewOwner Repl_closed DkZtPdvDcroZXh6BKFj9YNf3rf7ixHSpyy
+NewOwner ZF_closed DWuvuM3U6i2eWERLWqJp7uqd4VMwKaDmM1
+
+NewOwner FalseE DY77DH8vvBUGyzyGHfbLGNrBThKyNRj7ea
+NewRights FalseE DY77DH8vvBUGyzyGHfbLGNrBThKyNRj7ea None
+NewOwner TrueI DhYtSW4wjxrHM881nXtSSv1ybG5tDjS49P
+NewOwner notI Dq4qyvANwxNLnp8rEFJYjALAySWMHskpFz
+NewRights notI Dq4qyvANwxNLnp8rEFJYjALAySWMHskpFz None
+NewOwner notE DeQPZ9ikxX1epHBiw4AmtMxzhSfaYFqEgQ
+NewRights notE DeQPZ9ikxX1epHBiw4AmtMxzhSfaYFqEgQ None
+NewOwner andI DbSCuCyKWjCTmk6VPY7fdopZMTkzLiW5ug
+NewOwner andEL DjBDGnZWtM4Bzg9Pcm8xBkcnHoxsK1KKxF
+NewOwner andER DhKjh5kessDgASHSEzXuFUiXNt8XL7ApNW
+NewOwner orIL DjFJwFkNAXRcUKzTBX9ZsGuQW4EyYdJpdN
+NewOwner orIR DhZe9ysFzXq9C6ToJohcQazzs2oS7cVQMj
+NewOwner orE Dn4nFd6SyW8TgygasWZSDf1Qm1rHrNrE3x
+NewRights orE Dn4nFd6SyW8TgygasWZSDf1Qm1rHrNrE3x 0.5
+NewOwner iffEL Dnfr7voFuvRYEzdNCT8v4wVrPGdr8dooU5
+NewOwner iffER DiFAavjyM3FLCtxhn6m351L3tb4rw2SVVk
+NewOwner iffI DkuMb6LsUS83Ue7kHaHiXdC5XYdJuLTNMK
+NewOwner and3I DcYLciowTi4nJuxMtqqFdRyjPaNXUzrB1R
+NewOwner and3E Dj9nnGzqw5jn19fFscaFt2vips1s9Nuq1G
+NewOwner or3I1 Dk5n4kVhG1igxjtWA5gDysHSfwjwScAvNG
+NewOwner or3I2 DVrvvu3UcQdwjyn3PNHVKgHDAZBJ71aSVe
+NewOwner or3I3 Dkorn3EvTEBq4USLAVdd8YReXzxMKD4Zt7
+NewOwner or3E DXXaBnavfJZ2jFUXVEJnDcnzLHhFJbevxX
+NewOwner and4I DhtstZAcr4qECzvBmEFTCicecTxgRXsg86
+NewOwner and4E DVbFHqFeNaTTHX5j9rMSn7wafsJufT4veU
+NewOwner or4I1 DW56nzy1R4Pa3UL831pLxZgjFtieGD6REN
+NewOwner or4I2 Dc2nmHw8HPHDck1B1SiK7K6x1uavtVtPgD
+NewOwner or4I3 DX9PMfNUTk6Qar9tCN5bretnHpEhnknRMc
+NewOwner or4I4 DaEZUcAqPp2Y3bA8zcTtEttkGCq5atnsAD
+NewOwner or4E DfR3n1kDgJU65W5rnDby8gErkzEnjBzCF6
+NewOwner and5I Dpx3YqJUMN1sK7H91jG8s31hTDFResccpc
+NewOwner and5E DrsaSjZYu8y7ixmZc5Vx84KZZTT8Qj2EJ8
+NewOwner or5I1 DgVXZu5rWv77JLvdNFjiJ66mpLPv98dYUe
+NewOwner or5I2 DdiBBxW1Te9o3JoBCHezDGYGTiyVNmkb2x
+NewOwner or5I3 Dgm6JxJV9B1A4wBWYSMEVbz7KeSZCCX1yW
+NewOwner or5I4 DY8rWE8bKtBzMmWDaFaL7SEP6WHAy3W1bK
+NewOwner or5I5 DdVTamSq599QBagcie6Y9N4hfB9svEopRm
+NewOwner or5E DfucGgyCrpVKg4vNBEk48WohkcBzMp3XGK
+NewOwner eqE DpfiwP9LenYyrXLfvvuo79PHjfdjuihT69
+NewRights eqE DpfiwP9LenYyrXLfvvuo79PHjfdjuihT69 0.5
+NewOwner eqI DiYbZsGwSBbnxRu8UA9UjTfBLjctaukVKe
+NewOwner eq_sym DdffNPNo7pVBbtEteX9crwXZ2axiH8iHmv
+NewOwner eq_trans DpBfHtz739qcaRKkWdSFER6A2L4c6rtgvD
+NewOwner eq_symtrans1 DXBXJWouxbqeoPWLdAkyt8f64bxgR73kew
+NewOwner eq_symtrans2 DWJXzVTT6YT7MFZ7xkeuxam9Eobhh8xA6j
+NewOwner eq_trans3 DcZ7FciHHHFVLmHuqcmRWKjmDvYwN2WA3R
+NewOwner eq_trans4 DWoLohUtxRZ1bJZvNTqtAMcSQVsYJKyGwu
+NewOwner eq_trans5 DcGwwMz3N4PJLxJUBU7CCigZ6tXDoevXnY
+NewOwner f_equal DnKLSL3TZgEQEE8ZiwN2qCB38yHedabXfp
+NewOwner exE DnqMpYMcWuD4cNzpLu5aJfWiQ8CiY9GutR
+NewRights exE DnqMpYMcWuD4cNzpLu5aJfWiQ8CiY9GutR 0.5
+NewOwner exI DoUkwq8DTcz2reS1SkvRuHy8cnaVKQbbSt
+NewOwner exandI DfryejPk9c39cnipeeG19vaP6wDqnTkXBq
+NewOwner exandE DXpfLx6hCfUPSgSoFJ6FVFSGfM6GiE2gYM
+NewOwner prop_ext2 DZMvyjrHPpeMdEDWMWykuguSPoQWb42zkW
+NewOwner pred_ext DkoU1Cowbb4KhDmMokkCFW61kQZa15Z6pR
+NewOwner per_sym Dib2NVNrGcRBVaALRC2e4DurEJpU83HkNb
+NewOwner per_tra DYFRoVz4oXvnMkxWfiXyChtaWrVzYHqAEb
+NewOwner per_stra1 DcCYSZ4GmdpDyzouokz55tuGUw8Wd6fHZY
+NewOwner per_stra2 DXsPYQ7D1DhTqmhmfi4wvXaxKbgS4z3Afi
+NewOwner per_stra3 Da7acDFKsXtVnhPRxyYkAnCkwpAnjSop5i
+NewOwner per_ref1 DagP3RUSA33W5BUWfyKo5TYossmrKabj9s
+NewOwner per_ref2 Did6NJ9wht5vnVHBcha4bvyXkVcpnxb94L
+NewOwner EpsR2 Dkc6WDXapPZ7nL3HYGrWhp1tdKkfXMqgxu
+NewOwner classic DokVQk6rFEn9SmGtYkNx43PvhLZv71XgYt
+NewOwner NNPP DkEKth96eqQBHNZ4fHrcpH7UDKjKD5trep
+NewOwner If_correct DYReADgZXuDmSPe4heXWpJmdB7YA7WMytz
+NewOwner If_0 DbP4N1W2B8JduGTW5F6Wu2ekZ16BezdhqD
+NewOwner If_1 Dg3dfD6RuaijN9emZSt2KUbYk55htnU63X
+NewOwner If_or DWqaVyYcrEpPrTNrVF2CWnTZXVgUrGzePM
+NewOwner If_eta DYpNS9fswfDdfjFFF4rksFPm98bB5JWYGU
+NewOwner canonical_elt_rel Dq7d1ai2LHabC3tDoN2pDYg1U8jT7Tv6aK
+NewOwner canonical_elt_eq Dm8CxKmpUdywW7dmaqAtHrzZQfhCiySzHX
+NewOwner canonical_elt_idem DkENWoXsUeFxg5hBmpzCKZBRfumZqPKBrg
+NewOwner quotient_prop1 DYNrM27XAAmtPjKhCn6cebvhfyPaVY7U8y
+NewOwner quotient_prop2 DXiCYaUeKbDfkpyS1RW43zRM7ev6PaHMQz
+NewOwner MetaFuncEquiv_ref DWkiT5Muh9DUN2nzYxzZAjxUFebm5vXHTq
+NewOwner MetaFuncEquiv_sym DZAYdL1yMfvpDkzsfVnjLs4RxEz52bgywg
+NewOwner MetaFuncEquiv_tra DkLD1NfZtpBhnkQKqJRr7u4N4iB7EXXE2V
+NewOwner MetaFuncEquiv_per Dq6PTwzQbTtqs1hffTiTtpGxDJzvBKN65x
+NewOwner MetaFuncC_rel DhdjxAfv2CeWBxP9r667xJ8P4MjbkQnQGm
+NewOwner MetaFuncC_eq DgNzXQDo94fcgveNSJQeK6s6YUArgG5YwP
+NewOwner MetaFuncC_idem DhigABVBG36QhtBWasSff4q1g6XvrmdTfH
+NewOwner MetaFuncQ_prop2 DhcicA3tCeEWnoq36cS1tVregxUWLqWx89
+NewOwner Subq_ref DaWUVW37XCcUR5yySmXQu9uYVNAsQVjwfs
+NewOwner Subq_tra De9v9X7VcEyNbyoiJKgezUxpNjewZ9Dj6s
+NewOwner EmptyE DsiWW3dGB13ymcfXtmr2Nze8PJC57C32B2
+NewOwner Subq_Empty DnCkuuPZ4CQmwEVUkr7nbC5k7gDpRTmLxr
+NewOwner Empty_Subq_eq DqeNyiTggSKW3ooxnt6369RZ92Eayi5mHB
+NewOwner UnionE Dcn3nFBfjCpCppMMM5wJnuwt8icatZ2dGq
+NewOwner UnionE2 DnN4Fh5HgmvphfByfwpT7ws1AvDvDcPEKE
+NewOwner UnionI Dp1Mfcf3yaS6N9mTQpwDYPrwfk3jorwPvR
+NewOwner PowerE DfUdQfFnnhwwgYgJG9FCtFEw1jJtdaSwbt
+NewOwner PowerI De6vrhYHWsg3MYHubDYt6A3N7xpzt3ddiv
+NewOwner Empty_In_Power DVeXzDs5j74rLndHd2T3yiRGvSKnZ7HPQn
+NewOwner Self_In_Power Df1g3kA8ZdMM1psE37a1R13BLjeBRWsFPb
+NewOwner ReplE Dbkhubj9os3Rvvzzg8bUSdfa8tDpgYtarR
+NewOwner ReplE2 DphSA5ZfocLcQhAHUm2hv9zn8YVdeMHK58
+NewOwner ReplI DayPtftadfUdBBD1GmyooaV5BocjGG9h3k
+NewOwner SepI DZrVGcQHWFhhBZ2KiE13Y3TFSvEkN8xVRa
+NewOwner SepE DhxkxW87dos2HxM9NZEnCJ3b7BeU4eysDz
+NewOwner SepE1 DZWZ8vTj5D3NgRRNPjTggFbWioFr6BZJNs
+NewOwner SepE2 DgUAhZSxSY5prKeJNKPLzKw9AUkgxCQDhx
+NewOwner binintersectI DdBRMXvVQQdUH2GUnhLs6StWnHeKgfwSgs
+NewOwner binintersectE Ddnf4zCDANXgPjMfxrdZ4MDdCeyE51SLEn
+NewOwner binintersectE1 Dr5QKGdhayg3uRLducpaPfdCupAAonFs7h
+NewOwner binintersectE2 DdvCaHjHkgHfHMvMZFPWRm9Cxpip4YD4AJ
+NewOwner UPairE DeEVWks6NoJMhz5pbuEHB35n4fEYs1WWRB
+NewOwner UPairI1 DpjoZ8ZqTAcjKPYYgoryCWRs2TSDcrQj8J
+NewOwner UPairI2 DiTRuqUqEKTTpK7wgVXQRVuPCbZt3aHJNJ
+NewOwner SingI DrkfYfRGD3KmYjS8bGDA3BwKbZQQJcz9nN
+NewOwner SingE DazuN6viKFf9T5dYhebKf5RS2LYuEeyXCC
+NewOwner binunionI1 DVMbjxCoHLRxVRVwR5KqG82GbiZhY2PYoE
+NewOwner binunionI2 DpfpJ89i4K7F4CZrbzUSbHgJWzDaYAPLUV
+NewOwner binunionE DcbESF19Fi7r8D9CvBrqDMUroaRVagxdBp
+NewOwner ZF_closed_I DscZbvGou8sKFGq61DXJFv6wt5zmfN7Jw4
+NewOwner ZF_closed_E DVdbhMu9ZXkp9HGk3pNKdvNgmcUWZsEX4f

@@ -1,0 +1,124 @@
+Signature 82c7571f411491f3a88406467944703766cd46c98aeeeb6b17b2cc095f1954de
+Base set
+Def False : Prop
+ := All P Prop P
+Def True : Prop
+ := All P Prop Imp P P
+Known TrueI : True
+Def not : TpArr Prop Prop
+ := Lam A Prop Imp A False
+Def and : TpArr Prop TpArr Prop Prop
+ := Lam A Prop Lam B Prop All P Prop Imp Imp A Imp B P P
+Known andI : All A Prop All B Prop Imp A Imp B Ap Ap and A B
+Def or : TpArr Prop TpArr Prop Prop
+ := Lam A Prop Lam B Prop All P Prop Imp Imp A P Imp Imp B P P
+Known orIL : All A Prop All B Prop Imp A Ap Ap or A B
+Known orIR : All A Prop All B Prop Imp B Ap Ap or A B
+Def iff : TpArr Prop TpArr Prop Prop
+ := Lam A Prop Lam B Prop Ap Ap and Imp A B Imp B A
+Def eq : TpAll A TpArr A TpArr A Prop
+ := TTpLam A Lam x A Lam y A All Q TpArr A Prop Imp Ap Q x Ap Q y
+Known eqI : TTpAll A All x A Ap Ap TTpAp eq A x x
+Known eq_sym : TTpAll A All x A All y A Imp Ap Ap TTpAp eq A x y Ap Ap TTpAp eq A y x
+Known eq_trans : TTpAll A All x A All y A All z A Imp Ap Ap TTpAp eq A x y Imp Ap Ap TTpAp eq A y z Ap Ap TTpAp eq A x z
+Known f_equal : TTpAll A TTpAll B All x A All y A All f TpArr A B Imp Ap Ap TTpAp eq A x y Ap Ap TTpAp eq B Ap f x Ap f y
+Def ex : TpAll A TpArr TpArr A Prop Prop
+ := TTpLam A Lam Q TpArr A Prop All P Prop Imp All x A Imp Ap Q x P P
+Known exI : TTpAll A All P TpArr A Prop All x A Imp Ap P x Ap TTpAp ex A Lam x A Ap P x
+Known prop_ext2 : All A Prop All B Prop Imp Imp A B Imp Imp B A Ap Ap TTpAp eq Prop A B
+Known func_ext : TTpAll A TTpAll B All f TpArr A B All g TpArr A B Imp All x A Ap Ap TTpAp eq B Ap f x Ap g x Ap Ap TTpAp eq TpArr A B f g
+Def symmetric : TpAll A TpArr TpArr A TpArr A Prop Prop
+ := TTpLam A Lam R TpArr A TpArr A Prop All x A All y A Imp Ap Ap R x y Ap Ap R y x
+Def transitive : TpAll A TpArr TpArr A TpArr A Prop Prop
+ := TTpLam A Lam R TpArr A TpArr A Prop All x A All y A All z A Imp Ap Ap R x y Imp Ap Ap R y z Ap Ap R x z
+Def per : TpAll A TpArr TpArr A TpArr A Prop Prop
+ := TTpLam A Lam R TpArr A TpArr A Prop Ap Ap and Ap TTpAp symmetric A R Ap TTpAp transitive A R
+Known per_tra : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R Ap TTpAp transitive A R
+Known per_stra1 : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R All x A All y A All z A Imp Ap Ap R y x Imp Ap Ap R y z Ap Ap R x z
+Known per_ref1 : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R All x A All y A Imp Ap Ap R x y Ap Ap R x x
+Known per_ref2 : TTpAll A All R TpArr A TpArr A Prop Imp Ap TTpAp per A R All x A All y A Imp Ap Ap R x y Ap Ap R y y
+Let Eps : TpAll A TpArr TpArr A Prop A := Prim 0
+Known EpsR : TTpAll A All P TpArr A Prop All x A Imp Ap P x Ap P Ap TTpAp Eps A Lam x A Ap P x
+Known classic : All P Prop Ap Ap or P Ap not P
+Known NNPP : All p Prop Imp Ap not Ap not p p
+Param 3b77aee5210fc256802a1d8b8fe0782e99240b9de9d82216a6bb45fca0642a12 If : TpAll A TpArr Prop TpArr A TpArr A A
+Known If_0 : TTpAll A All p Prop All x A All y A Imp Ap not p Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A p x y y
+Known If_1 : TTpAll A All p Prop All x A All y A Imp p Ap Ap TTpAp eq A Ap Ap Ap TTpAp If A p x y x
+Def MetaFuncEquiv : TpAll A TpAll B TpArr TpArr A Prop TpArr TpArr A B TpArr TpArr A B Prop
+ := TTpLam A TTpLam B Lam P TpArr A Prop Lam f TpArr A B Lam g TpArr A B All x A Imp Ap P x Ap Ap TTpAp eq B Ap f x Ap g x
+Known MetaFuncEquiv_ref : TTpAll A TTpAll B All P TpArr A Prop All f TpArr A B Ap Ap Ap TTpAp TTpAp MetaFuncEquiv A B P f f
+Known MetaFuncEquiv_sym : TTpAll A TTpAll B All P TpArr A Prop Ap TTpAp symmetric TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P
+Known MetaFuncEquiv_tra : TTpAll A TTpAll B All P TpArr A Prop Ap TTpAp transitive TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P
+Known MetaFuncEquiv_per : TTpAll A TTpAll B All P TpArr A Prop Ap TTpAp per TpArr A B Ap TTpAp TTpAp MetaFuncEquiv A B P
+Param a18909d50552b83e53167b2f7dfb6eeefed5e175e767bd2c614dcf92b8ce45bb MetaFuncC : TpAll A TpAll B TpArr TpArr A Prop TpArr TpArr A B TpArr A B
+Known MetaFuncC_rel : TTpAll A TTpAll B All P TpArr A Prop All f TpArr A B Ap Ap Ap TTpAp TTpAp MetaFuncEquiv A B P f Ap Ap TTpAp TTpAp MetaFuncC A B P f
+Known MetaFuncC_eq : TTpAll A TTpAll B All P TpArr A Prop All f TpArr A B All g TpArr A B Imp Ap Ap Ap TTpAp TTpAp MetaFuncEquiv A B P f g Ap Ap TTpAp eq TpArr A B Ap Ap TTpAp TTpAp MetaFuncC A B P f Ap Ap TTpAp TTpAp MetaFuncC A B P g
+Known MetaFuncC_idem : TTpAll A TTpAll B All P TpArr A Prop All f TpArr A B Ap Ap TTpAp eq TpArr A B Ap Ap TTpAp TTpAp MetaFuncC A B P f Ap Ap TTpAp TTpAp MetaFuncC A B P Ap Ap TTpAp TTpAp MetaFuncC A B P f
+Param 55a466bf6df10afc431902d795c565a08a97edf4b1be312477b8753804267a7d MetaFuncQ : TpAll A TpAll B TpArr TpArr A Prop TpArr TpArr A B Prop
+Known MetaFuncQ_prop2 : TTpAll A TTpAll B All P TpArr A Prop All f TpArr A B All g TpArr A B Imp Ap Ap TTpAp TTpAp MetaFuncQ A B P f Imp Ap Ap TTpAp TTpAp MetaFuncQ A B P g Imp Ap Ap Ap TTpAp TTpAp MetaFuncEquiv A B P f g Ap Ap TTpAp eq TpArr A B f g
+Let In : TpArr set TpArr set Prop
+ := Prim 1
+Def Subq : TpArr set TpArr set Prop
+ := Lam X set Lam Y set All x set Imp Ap Ap In x X Ap Ap In x Y
+Known set_ext : All X set All Y set Imp Ap Ap Subq X Y Imp Ap Ap Subq Y X Ap Ap TTpAp eq set X Y
+Known In_ind : All P TpArr set Prop Imp All X set Imp All x set Imp Ap Ap In x X Ap P x Ap P X All X set Ap P X
+Let Empty : set
+ := Prim 2
+Known EmptyE : All x set Ap not Ap Ap In x Empty
+Let Union : TpArr set set
+ := Prim 3
+Known UnionE2 : All X set All x set Imp Ap Ap In x Ap Union X All p Prop Imp All Y set Imp Ap Ap In x Y Imp Ap Ap In Y X p p
+Known UnionI : All X set All x set All Y set Imp Ap Ap In x Y Imp Ap Ap In Y X Ap Ap In x Ap Union X
+Let Power : TpArr set set
+ := Prim 4
+Known PowerE : All X set All Y set Imp Ap Ap In Y Ap Power X Ap Ap Subq Y X
+Known PowerI : All X set All Y set Imp Ap Ap Subq Y X Ap Ap In Y Ap Power X
+Let Repl : TpArr set TpArr TpArr set set set
+ := Prim 5
+Known ReplE2 : All X set All F TpArr set set All y set Imp Ap Ap In y Ap Ap Repl X Lam x set Ap F x All p Prop Imp All x set Imp Ap Ap In x X Imp Ap Ap TTpAp eq set y Ap F x p p
+Known ReplI : All X set All F TpArr set set All x set Imp Ap Ap In x X Ap Ap In Ap F x Ap Ap Repl X Lam x set Ap F x
+Param 9edf73c4473f6586a201983ffa0b79838fee943466e05b699b6d912cadf97e73 Sep : TpArr set TpArr TpArr set Prop set
+Known SepI : All X set All P TpArr set Prop All x set Imp Ap Ap In x X Imp Ap P x Ap Ap In x Ap Ap Sep X Lam x set Ap P x
+Known SepE : All X set All P TpArr set Prop All x set Imp Ap Ap In x Ap Ap Sep X Lam x set Ap P x Ap Ap and Ap Ap In x X Ap P x
+Known SepE1 : All X set All P TpArr set Prop All x set Imp Ap Ap In x Ap Ap Sep X Lam x set Ap P x Ap Ap In x X
+Known SepE2 : All X set All P TpArr set Prop All x set Imp Ap Ap In x Ap Ap Sep X Lam x set Ap P x Ap P x
+Param 5608c8fce784bfd302a7f483bc49af40038c642b2dac60bc802f145c611ff38c binintersect : TpArr set TpArr set set
+Known binintersectI : All X set All Y set All z set Imp Ap Ap In z X Imp Ap Ap In z Y Ap Ap In z Ap Ap binintersect X Y
+Known binintersectE : All X set All Y set All z set Imp Ap Ap In z Ap Ap binintersect X Y Ap Ap and Ap Ap In z X Ap Ap In z Y
+Known binintersectE1 : All X set All Y set All z set Imp Ap Ap In z Ap Ap binintersect X Y Ap Ap In z X
+Known binintersectE2 : All X set All Y set All z set Imp Ap Ap In z Ap Ap binintersect X Y Ap Ap In z Y
+Param 0262cd1cd60164af6bc27794dcbfd1d6132932f6a33881ce55b291baf5bbf0e6 UPair : TpArr set TpArr set set
+Known UPairE : All x set All y set All z set Imp Ap Ap In x Ap Ap UPair y z Ap Ap or Ap Ap TTpAp eq set x y Ap Ap TTpAp eq set x z
+Known UPairI1 : All y set All z set Ap Ap In y Ap Ap UPair y z
+Known UPairI2 : All y set All z set Ap Ap In z Ap Ap UPair y z
+Param 8d5e17d25e9a6d3ab62b38e2c1704e56a159f7c66cf0c5485087f17e654725df Sing : TpArr set set
+Known SingI : All x set Ap Ap In x Ap Sing x
+Known SingE : All x set All y set Imp Ap Ap In y Ap Sing x Ap Ap TTpAp eq set y x
+Param 09766ef04b16a88692617be22a7cfeb93d12eeb756f64a1bbf12f5142d324aa8 binunion : TpArr set TpArr set set
+Known binunionI1 : All X set All Y set All z set Imp Ap Ap In z X Ap Ap In z Ap Ap binunion X Y
+Known binunionI2 : All X set All Y set All z set Imp Ap Ap In z Y Ap Ap In z Ap Ap binunion X Y
+Known binunionE : All X set All Y set All z set Imp Ap Ap In z Ap Ap binunion X Y Ap Ap or Ap Ap In z X Ap Ap In z Y
+Def SetAdjoin : TpArr set TpArr set set
+ := Lam X set Lam y set Ap Ap binunion X Ap Sing y
+Def TransSet : TpArr set Prop
+ := Lam U set All X set Imp Ap Ap In X U Ap Ap Subq X U
+Def Union_closed : TpArr set Prop
+ := Lam U set All X set Imp Ap Ap In X U Ap Ap In Ap Union X U
+Def Power_closed : TpArr set Prop
+ := Lam U set All X set Imp Ap Ap In X U Ap Ap In Ap Power X U
+Def Repl_closed : TpArr set Prop
+ := Lam U set All X set Imp Ap Ap In X U All F TpArr set set Imp All x set Imp Ap Ap In x X Ap Ap In Ap F x U Ap Ap In Ap Ap Repl X Lam x set Ap F x U
+Def ZF_closed : TpArr set Prop
+ := Lam U set Ap Ap and Ap Ap and Ap Union_closed U Ap Power_closed U Ap Repl_closed U
+Known ZF_closed_I : All U set Imp Ap Union_closed U Imp Ap Power_closed U Imp Ap Repl_closed U Ap ZF_closed U
+Known ZF_closed_E : All U set Imp Ap ZF_closed U All p Prop Imp Imp Ap Union_closed U Imp Ap Power_closed U Imp Ap Repl_closed U p p
+Let UnivOf : TpArr set set
+ := Prim 6
+Known UnivOf_In : All N set Ap Ap In N Ap UnivOf N
+Known UnivOf_TransSet : All N set Ap TransSet Ap UnivOf N
+Known UnivOf_ZF_closed : All N set Ap ZF_closed Ap UnivOf N
+Known UnivOf_Min : All N set All U set Imp Ap Ap In N U Imp Ap TransSet U Imp Ap ZF_closed U Ap Ap Subq Ap UnivOf N U
+
+Nonce ba4cffce80c0c434943592c5d1047964b349efed5cb6e3e10a94a57c2922603f
+
+Publisher DsKFFDHvRjmj7gEHZ3KwaTQ2fyPLLfFcoG
